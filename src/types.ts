@@ -66,10 +66,22 @@ export interface StoreSettings {
   bannerImageUrl: string;
   bannerTitle: string;
   bannerSubtitle: string;
+  dhamakaOfferTitle?: string;
+  dhamakaOfferText?: string;
+  dhamakaOfferEnabled?: boolean;
   customQrUrl: string;
   invoiceFooterNote: string;
   adminPassword: string;
   developerCredit: string;
+}
+
+export interface TrashRecord {
+  id: string;
+  type: 'product' | 'order' | 'expense';
+  title: string;
+  deletedAt: string;
+  summary: string;
+  data: any;
 }
 
 export interface BusinessStats {

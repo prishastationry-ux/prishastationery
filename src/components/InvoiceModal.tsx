@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import QRCode from 'qrcode';
-import { Printer, X, CheckCircle, Share2, Download, Phone, MapPin, Sparkles, ArrowRight } from 'lucide-react';
+import { Printer, X, CheckCircle, Share2, Download, Phone, MapPin, Sparkles, ArrowRight, FileDown, Loader2 } from 'lucide-react';
 import { OrderRecord, StoreSettings } from '../types';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface InvoiceModalProps {
   order: OrderRecord;
@@ -17,6 +19,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   isSuccessView = false
 }) => {
   const [qrCodeUrl, setQrCodeUrl] = useState<string>('');
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+  const billContentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Generate QR code for invoice payment verification
@@ -30,8 +34,129 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       .catch(err => console.error(err));
   }, [order, storeSettings]);
 
-  const handlePrint = () => {
-    window.print();
+  // 1. Direct PC Print using isolated iframe (works 100% reliably in PC, laptops and browsers)
+  const handleDirectPrint = () => {
+    const billElement = billContentRef.current;
+    if (!billElement) {
+      window.print();
+      return;
+    }
+
+    try {
+      const existingIframe = document.getElementById('prisha-print-iframe');
+      if (existingIframe) existingIframe.remove();
+
+      const printIframe = document.createElement('iframe');
+      printIframe.id = 'prisha-print-iframe';
+      printIframe.style.position = 'fixed';
+      printIframe.style.right = '0';
+      printIframe.style.bottom = '0';
+      printIframe.style.width = '0px';
+      printIframe.style.height = '0px';
+      printIframe.style.border = 'none';
+      document.body.appendChild(printIframe);
+
+      const iframeDoc = printIframe.contentDocument || printIframe.contentWindow?.document;
+      if (!iframeDoc) {
+        window.print();
+        return;
+      }
+
+      // Grab all computed styles or write clean print CSS
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Invoice_${order.invoiceNo}</title>
+          <style>
+            @page {
+              size: A4;
+              margin: 10mm;
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+              color: #000;
+              background: #fff;
+              margin: 0;
+              padding: 10px;
+              font-size: 12px;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            th, td {
+              border: 1px solid #333;
+              padding: 6px 8px;
+            }
+            th {
+              background-color: #f2f2f2;
+            }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .font-bold { font-weight: bold; }
+            .font-black { font-weight: 900; }
+          </style>
+        </head>
+        <body>
+          ${billElement.innerHTML}
+        </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      setTimeout(() => {
+        printIframe.contentWindow?.focus();
+        printIframe.contentWindow?.print();
+      }, 350);
+    } catch (e) {
+      console.error('Print iframe error, fallback to window.print', e);
+      window.print();
+    }
+  };
+
+  // 2. Direct PDF Download (.pdf file) using html2canvas & jsPDF
+  const handleDownloadPdf = async () => {
+    const billElement = billContentRef.current;
+    if (!billElement) return;
+
+    try {
+      setIsGeneratingPdf(true);
+
+      // Create high-res canvas of the bill
+      const canvas = await html2canvas(billElement, {
+        scale: 2.5, // Crisp rendering for Gujarati fonts and text
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.98);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const imgWidth = pdfWidth - 20; // 10mm padding on left & right
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      pdf.addImage(imgData, 'JPEG', 10, 10, imgWidth, Math.min(imgHeight, pdfHeight - 20));
+      pdf.save(`Prisha_Bill_${order.invoiceNo}.pdf`);
+    } catch (err) {
+      console.error('PDF Generation error:', err);
+      // Fallback: trigger print dialog to save as PDF
+      handleDirectPrint();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handleWhatsAppShare = () => {
@@ -66,14 +191,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-neutral-300 print:border-none print:shadow-none my-auto">
         
         {/* TOP STATUS BAR (NO-PRINT) */}
-        <div className="no-print bg-neutral-900 text-white p-3 sm:p-4 flex items-center justify-between">
+        <div className="no-print bg-[#0B1E48] text-white p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-blue-900">
           <div className="flex items-center gap-2">
             {isSuccessView ? (
-              <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black border border-emerald-500/30">
                 <CheckCircle className="w-5 h-5" />
               </div>
             ) : (
-              <div className="w-8 h-8 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center font-black">
+              <div className="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-black border border-orange-500/30">
                 <Printer className="w-5 h-5" />
               </div>
             )}
@@ -81,31 +206,58 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <h3 className="text-sm sm:text-base font-black text-white">
                 {isSuccessView ? '🎉 ઓર્ડર સફળતાપૂર્વક નોંધાઈ ગયો!' : '🧾 ટેક્સ ઇન્વોઇસ / બિલ'}
               </h3>
-              <p className="text-[11px] text-neutral-400 font-bold">
-                ઓર્ડર નં: {order.invoiceNo} | {order.date}
+              <p className="text-[11px] text-blue-200 font-bold">
+                ઓર્ડર નં: <span className="font-mono text-orange-400 font-black">{order.invoiceNo}</span> | {order.date}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          {/* Action Buttons in Header */}
+          <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto justify-end">
             <button
-              onClick={handlePrint}
-              className="bg-orange-500 hover:bg-orange-600 text-black px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs disabled:opacity-50"
+              title="PDF ફાઇલ ડાઉનલોડ કરો"
+            >
+              {isGeneratingPdf ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>PDF બને છે...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-3.5 h-3.5 text-red-200" />
+                  <span>PDF ડાઉનલોડ</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDirectPrint}
+              className="bg-orange-500 hover:bg-orange-600 text-black px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs"
+              title="કમ્પ્યુટરમાં ડાયરેક્ટ પ્રિન્ટ કાઢો"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>પ્રિન્ટ / PDF</span>
+              <span>પ્રિન્ટ (PC)</span>
             </button>
+
             <button
+              type="button"
               onClick={handleWhatsAppShare}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs"
               title="Share on WhatsApp"
             >
               <Share2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">WhatsApp</span>
+              <span>WhatsApp</span>
             </button>
+
             <button
+              type="button"
               onClick={onClose}
-              className="p-1.5 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+              className="p-1.5 text-neutral-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -113,7 +265,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         {/* PRINTABLE BILL CANVAS */}
-        <div id="printable-bill-area" className="p-4 sm:p-6 bg-white text-black text-xs font-sans space-y-4">
+        <div
+          ref={billContentRef}
+          id="printable-bill-area"
+          className="p-4 sm:p-6 bg-white text-black text-xs font-sans space-y-4"
+        >
           
           {/* STORE HEADER WITH LOGOS */}
           <div className="border-b-2 border-black pb-3 flex items-center justify-between gap-2">
@@ -167,7 +323,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
             <div className="text-right space-y-0.5">
               <p className="font-bold text-neutral-500">ઇન્વોઇસ વિગત:</p>
-              <p className="font-black text-xs text-neutral-900">બિલ નં: <span className="text-orange-700 font-mono">{order.invoiceNo}</span></p>
+              <p className="font-black text-xs text-neutral-900">
+                બિલ નં: <span className="text-orange-700 font-mono font-black">{order.invoiceNo}</span>
+              </p>
               <p className="text-neutral-700 font-bold">તારીખ: {order.date}</p>
               <p className="font-extrabold text-neutral-800">
                 પદ્ધતિ: <span className="text-blue-700 font-black">{order.paymentMode}</span>
@@ -251,21 +409,34 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         {/* BOTTOM ACTION BAR (NO-PRINT) */}
         <div className="no-print bg-neutral-100 p-3 sm:p-4 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-neutral-600 font-bold text-center sm:text-left">
-            💡 તમે આ બિલનો સ્ક્રીનશોટ લઈ શકો છો અથવા 'પ્રિન્ટ / PDF' પર ક્લિક કરી સાચવી શકો છો.
+            💡 કમ્પ્યુટર કે પ્રિન્ટર માટે 'ડાયરેક્ટ પ્રિન્ટ' અથવા સેવ કરવા 'PDF ડાઉનલોડ' કરો.
           </p>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-end">
             <button
-              onClick={handlePrint}
+              type="button"
+              onClick={handleDownloadPdf}
+              disabled={isGeneratingPdf}
+              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <FileDown className="w-4 h-4 text-white" />
+              <span>PDF ડાઉનલોડ કરો</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDirectPrint}
               className="flex-1 sm:flex-none bg-[#0B1E48] hover:bg-blue-900 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Printer className="w-4 h-4 text-orange-400" />
-              <span>પ્રિન્ટ / PDF ડાઉનલોડ</span>
+              <span>ડાયરેક્ટ પ્રિન્ટ (PC)</span>
             </button>
+
             <button
+              type="button"
               onClick={onClose}
               className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600 text-black px-4 py-2 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1 cursor-pointer"
             >
-              <span>નવી ખરીદી કરો</span>
+              <span>પૂર્ણ</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>

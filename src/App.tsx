@@ -45,13 +45,15 @@ import {
   Filter
 } from 'lucide-react';
 
-import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord } from './types';
+import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord } from './types';
 import { DEFAULT_STORE_SETTINGS, INITIAL_PRODUCTS, INITIAL_STATS, INITIAL_ORDERS } from './data';
 import { InvoiceModal } from './components/InvoiceModal';
 import { CartDrawer } from './components/CartDrawer';
 import { ImageCropModal } from './components/ImageCropModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
+import { TrashModal } from './components/TrashModal';
+import { DhamakaOfferModal } from './components/DhamakaOfferModal';
 
 export default function App() {
   // Navigation View: Default to 'customer' for all visitors
@@ -69,6 +71,19 @@ export default function App() {
   const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
   const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null);
   const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'online' | 'counter'>('all');
+
+  // Trash / Recycle Bin State
+  const [showTrashModal, setShowTrashModal] = useState<boolean>(false);
+  const [trashList, setTrashList] = useState<TrashRecord[]>(() => {
+    const saved = localStorage.getItem('prisha_trash_v4');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return [];
+  });
+
+  // Dhamaka Offer Edit Modal State
+  const [showDhamakaEditModal, setShowDhamakaEditModal] = useState<boolean>(false);
 
   // Store Settings (Full editable from Admin)
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
@@ -176,11 +191,27 @@ export default function App() {
   const [newProdCategory, setNewProdCategory] = useState<'books' | 'stationery' | 'service' | 'printing' | 'office' | 'bags' | 'other'>('stationery');
   const [newProdBadge, setNewProdBadge] = useState('');
 
-  // POS Direct Counter Billing Form
+  // POS Direct Counter Billing Form & In-Bill Item Selection
   const [posCustomerName, setPosCustomerName] = useState('');
   const [posCustomerMobile, setPosCustomerMobile] = useState('');
   const [posPaymentMode, setPosPaymentMode] = useState<'Cash' | 'UPI' | 'બાકી (Credit)' | 'Online'>('Cash');
   const [posDiscount, setPosDiscount] = useState<number>(0);
+
+  // Dedicated POS in-counter bill items list
+  const [posBillItems, setPosBillItems] = useState<{
+    id: string;
+    product?: ProductItem;
+    name: string;
+    qty: number;
+    price: number;
+    unit: string;
+  }[]>([]);
+  const [posSelectedProdId, setPosSelectedProdId] = useState<string>('');
+  const [posSelectedQty, setPosSelectedQty] = useState<number>(1);
+  const [showCustomPosInput, setShowCustomPosInput] = useState<boolean>(false);
+  const [customPosName, setCustomPosName] = useState<string>('');
+  const [customPosPrice, setCustomPosPrice] = useState<string>('50');
+  const [customPosQty, setCustomPosQty] = useState<string>('1');
 
   // Visitor Counter - increments realistically on each load / visit
   const [visitorCount, setVisitorCount] = useState<string>(() => {
@@ -203,6 +234,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('prisha_products_v4', JSON.stringify(posItems));
   }, [posItems]);
+
+  useEffect(() => {
+    localStorage.setItem('prisha_trash_v4', JSON.stringify(trashList));
+  }, [trashList]);
 
   useEffect(() => {
     localStorage.setItem('prisha_stats_v4', JSON.stringify(stats));
@@ -301,13 +336,29 @@ export default function App() {
     }
   };
 
-  // Delete an Item completely
+  // Delete an Item completely -> Moves to Trash Bin (Recycle Bin)
   const handleDeleteItem = (itemId: string, itemName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (window.confirm(`શું તમે ખરેખર "${itemName}" ને લિસ્ટમાંથી ડીલીટ કરવા માંગો છો?`)) {
+    const itemToDelete = posItems.find(p => p.id === itemId);
+    if (!itemToDelete) return;
+
+    if (window.confirm(`શું તમે "${itemName}" ને ડીલીટ કરવા માંગો છો?\n\n- આ આઇટમ ટ્રેશ બિન (Recycle Bin) માં સુરક્ષિત રહેશે.\n- તમે ગમે ત્યારે ટ્રેશ બિનમાંથી આને રીસ્ટોર (Restore) કરી શકો છો.`)) {
+      const now = new Date();
+      const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+      
+      const trashRec: TrashRecord = {
+        id: `trash-${Date.now()}`,
+        type: 'product',
+        title: itemToDelete.nameGu,
+        deletedAt: dateFormatted,
+        summary: `ભાવ: ₹${itemToDelete.price} | સ્ટોક: ${itemToDelete.stock} ${itemToDelete.unit} | કેટેગરી: ${itemToDelete.category}`,
+        data: itemToDelete
+      };
+
+      setTrashList(prev => [trashRec, ...prev]);
       setPosItems(prev => prev.filter(item => item.id !== itemId));
       if (editingItem?.id === itemId) setEditingItem(null);
-      showToast(`🗑️ "${itemName}" સફળતાપૂર્વક ડીલીટ થઈ ગઈ!`);
+      showToast(`🗑️ "${itemName}" ટ્રેશ બિનમાં ખસેડવામાં આવી!`);
     }
   };
 
@@ -445,7 +496,19 @@ export default function App() {
     showToast('🗑️ આઇટમ કાર્ટમાંથી દૂર કરી.');
   };
 
-  // CUSTOMER CONFIRM ORDER: Instant On-Screen Success & Invoice
+  // SEQUENTIAL ORDER INVOICE ID GENERATOR (Strictly sequential: prisha000001, prisha000002...)
+  const getNextOrderNumber = (): string => {
+    const seqKey = 'prisha_order_seq_v4';
+    let currentSeq = Number(localStorage.getItem(seqKey));
+    if (!currentSeq || isNaN(currentSeq) || currentSeq < 1) {
+      currentSeq = Math.max(orders.length + 1, 1);
+    }
+    const nextSeq = currentSeq + 1;
+    localStorage.setItem(seqKey, String(nextSeq));
+    return `prisha${String(currentSeq).padStart(6, '0')}`;
+  };
+
+  // CUSTOMER CONFIRM ORDER: Instant On-Screen Success & Sequential Invoice
   const handleCustomerConfirmOrder = (orderDetails: {
     customerName: string;
     mobile: string;
@@ -453,7 +516,7 @@ export default function App() {
     paymentMode: 'UPI' | 'Cash';
     paymentScreenshot?: string;
   }) => {
-    const orderId = `PRISHA-${Math.floor(1000 + Math.random() * 9000)}`;
+    const orderId = getNextOrderNumber();
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const totalAmount = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
@@ -511,16 +574,16 @@ export default function App() {
     // Open Instant Order Success & Printable Bill Modal on Customer Screen!
     setActiveInvoiceOrder(newOrder);
     setIsSuccessModal(true);
-    showToast('🎉 ઓર્ડર કન્ફર્મ થઈ ગયો! નીચેથી બિલ પ્રિન્ટ કે સેવ કરો.');
+    showToast(`🎉 ઓર્ડર #${orderId} કન્ફર્મ થઈ ગયો! નીચેથી બિલ પ્રિન્ટ કે સેવ કરો.`);
   };
 
-  // DELETE BILL / ORDER WITH AUTO-RESTOCK TO INVENTORY
+  // DELETE BILL / ORDER WITH AUTO-RESTOCK TO INVENTORY & TRASH BIN RECORD
   const handleDeleteOrder = (orderId: string) => {
     const orderToDelete = orders.find(o => o.id === orderId);
     if (!orderToDelete) return;
 
     const confirmDelete = window.confirm(
-      `શું તમે બિલ #${orderToDelete.invoiceNo} (${orderToDelete.customerName}) ડિલીટ કરવા માંગો છો?\n\nઆ બિલની તમામ આઇટમ્સ આપમેળે ફરીથી સ્ટોકમાં જમા થઈ જશે.`
+      `શું તમે બિલ #${orderToDelete.invoiceNo} (${orderToDelete.customerName}) ડિલીટ કરવા માંગો છો?\n\n- આ બિલનો માલ આપમેળે ફરીથી સ્ટોકમાં જમા થશે.\n- આ બિલ ટ્રેશ બિન (Recycle Bin) માં જશે જેથી તમે ગમે ત્યારે પાછું લાવી શકો.`
     );
     if (!confirmDelete) return;
 
@@ -548,8 +611,76 @@ export default function App() {
       )
     }));
 
+    const now = new Date();
+    const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    const trashRec: TrashRecord = {
+      id: `trash-${Date.now()}`,
+      type: 'order',
+      title: `બિલ #${orderToDelete.invoiceNo} - ${orderToDelete.customerName}`,
+      deletedAt: dateFormatted,
+      summary: `રકમ: ₹${orderToDelete.total} | તારીખ: ${orderToDelete.date} | આઇટમ્સ: ${orderToDelete.items.length} | પેમેન્ટ: ${orderToDelete.paymentMode}`,
+      data: orderToDelete
+    };
+
+    setTrashList(prev => [trashRec, ...prev]);
     setOrders(prev => prev.filter(o => o.id !== orderId));
-    showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થયું અને આઇટમ્સ સ્ટોકમાં પરત જમા થઈ ગઈ!`);
+    showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થઈ ટ્રેશ બિનમાં ગયું અને સ્ટોક જમા થયો!`);
+  };
+
+  // RESTORE ITEMS FROM TRASH BIN
+  const handleRestoreTrashRecord = (record: TrashRecord) => {
+    if (record.type === 'product') {
+      const prod: ProductItem = record.data;
+      setPosItems(prev => [prod, ...prev.filter(p => p.id !== prod.id)]);
+      setTrashList(prev => prev.filter(t => t.id !== record.id));
+      showToast(`🔄 પ્રોડક્ટ "${prod.nameGu}" સ્ટોકમાં પાછી ઉમેરાઈ ગઈ!`);
+    } else if (record.type === 'order') {
+      const ord: OrderRecord = record.data;
+      setOrders(prev => [ord, ...prev.filter(o => o.id !== ord.id)]);
+      
+      // Re-deduct stock for the restored order
+      setPosItems(prev =>
+        prev.map(p => {
+          const matched = ord.items.find(i => i.name === p.nameGu || i.name === p.nameEn);
+          if (matched && typeof p.stock === 'number') {
+            return { ...p, stock: Math.max(0, p.stock - matched.qty) };
+          }
+          return p;
+        })
+      );
+
+      setStats(s => ({
+        ...s,
+        dailySales: Number((s.dailySales + ord.total).toFixed(2)),
+        totalBills: s.totalBills + 1,
+        itemsSold: s.itemsSold + ord.items.reduce((acc, curr) => acc + curr.qty, 0)
+      }));
+
+      setTrashList(prev => prev.filter(t => t.id !== record.id));
+      showToast(`🔄 બિલ #${ord.invoiceNo} ઓર્ડર લિસ્ટમાં પાછું આવી ગયું!`);
+    } else if (record.type === 'expense') {
+      const exp: ExpenseRecord = record.data;
+      setExpenses(prev => [exp, ...prev.filter(e => e.id !== exp.id)]);
+      setTrashList(prev => prev.filter(t => t.id !== record.id));
+      showToast(`🔄 ખર્ચ રેકોર્ડ પાછો ઉમેરાઈ ગયો!`);
+    }
+  };
+
+  // PERMANENT DELETE FROM TRASH
+  const handlePermanentDeleteTrash = (record: TrashRecord) => {
+    if (window.confirm(`શું તમે "${record.title}" ને કાયમી ધોરણે ડીલીટ કરવા માંગો છો? આ પછી પાછું નહિ લાવી શકાય.`)) {
+      setTrashList(prev => prev.filter(t => t.id !== record.id));
+      showToast(`❌ "${record.title}" કાયમી ડીલીટ થઈ ગઈ.`);
+    }
+  };
+
+  // EMPTY ENTIRE TRASH BIN
+  const handleEmptyAllTrash = () => {
+    if (window.confirm('શું તમે ખરેખર ટ્રેશ બિનની તમામ વસ્તુઓ કાયમી ધોરણે ડીલીટ કરવા માંગો છો?')) {
+      setTrashList([]);
+      showToast('🧹 ટ્રેશ બિન આખું ખાલી થઈ ગયું!');
+    }
   };
 
   // UPDATE ORDER STATUS (e.g. placed -> confirmed -> packed -> out_for_delivery -> delivered)
@@ -563,7 +694,8 @@ export default function App() {
           return {
             ...o,
             orderStatus: newStatus,
-            statusUpdatedAt: timeFormatted
+            statusUpdatedAt: timeFormatted,
+            ...(newStatus === 'confirmed' ? { paymentStatus: 'Paid' } : {})
           };
         }
         return o;
@@ -595,25 +727,132 @@ export default function App() {
     showToast(`✅ બિલ #${updatedOrder.invoiceNo} અપડેટ થઈ ગયું!`);
   };
 
-  // POS DIRECT BILL GENERATOR (Admin)
+  // POS IN-BILL ITEM OPERATIONS
+  const handlePosAddProduct = () => {
+    if (!posSelectedProdId) {
+      showToast('⚠️ કૃપા કરીને લિસ્ટમાંથી પ્રોડક્ટ પસંદ કરો!');
+      return;
+    }
+    const prod = posItems.find(p => p.id === posSelectedProdId);
+    if (!prod) return;
+
+    const qty = Math.max(1, posSelectedQty || 1);
+    setPosBillItems(prev => {
+      const existing = prev.find(item => item.product?.id === prod.id);
+      if (existing) {
+        return prev.map(item =>
+          item.product?.id === prod.id
+            ? { ...item, qty: item.qty + qty }
+            : item
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: `pos-${Date.now()}-${Math.random()}`,
+          product: prod,
+          name: prod.nameGu,
+          qty,
+          price: prod.price,
+          unit: prod.unit
+        }
+      ];
+    });
+
+    setPosSelectedQty(1);
+    showToast(`➕ "${prod.nameGu}" (${qty} ${prod.unit}) બિલમાં ઉમેરાઈ!`);
+  };
+
+  const handlePosAddCustomItem = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customPosName.trim()) {
+      showToast('⚠️ કૃપા કરીને વસ્તુનું નામ લખો!');
+      return;
+    }
+    const price = Number(customPosPrice) || 0;
+    const qty = Number(customPosQty) || 1;
+
+    setPosBillItems(prev => [
+      ...prev,
+      {
+        id: `pos-custom-${Date.now()}`,
+        name: customPosName.trim(),
+        qty,
+        price,
+        unit: 'નંગ'
+      }
+    ]);
+
+    setCustomPosName('');
+    setCustomPosPrice('50');
+    setCustomPosQty('1');
+    setShowCustomPosInput(false);
+    showToast(`➕ કસ્ટમ આઇટમ બિલમાં ઉમેરાઈ!`);
+  };
+
+  const handlePosUpdateItemQty = (index: number, delta: number) => {
+    setPosBillItems(prev =>
+      prev
+        .map((item, idx) => {
+          if (idx === index) {
+            const nextQ = item.qty + delta;
+            return nextQ > 0 ? { ...item, qty: nextQ } : null;
+          }
+          return item;
+        })
+        .filter(Boolean) as typeof prev
+    );
+  };
+
+  const handlePosRemoveItem = (index: number) => {
+    setPosBillItems(prev => prev.filter((_, idx) => idx !== index));
+    showToast('🗑️ આઇટમ બિલમાંથી કાઢી નાખી.');
+  };
+
+  const handlePosClearBill = () => {
+    setPosBillItems([]);
+    setPosCustomerName('');
+    setPosCustomerMobile('');
+    setPosDiscount(0);
+    showToast('🧹 બિલ ક્લિયર થઈ ગયું.');
+  };
+
+  // POS DIRECT BILL GENERATOR (Admin) - Supports sequential order ID
   const handleGeneratePOSBill = () => {
-    if (cart.length === 0) {
-      showToast('⚠️ કૃપા કરીને કાર્ટમાં વસ્તુઓ ઉમેરો!');
+    // Collect items either from posBillItems or fallback to cart
+    const billItems = posBillItems.length > 0
+      ? posBillItems.map(b => ({
+          name: b.name,
+          qty: b.qty,
+          price: b.price,
+          unit: b.unit,
+          productId: b.product?.id
+        }))
+      : cart.map(c => ({
+          name: c.product.nameGu,
+          qty: c.quantity,
+          price: c.product.price,
+          unit: c.product.unit,
+          productId: c.product.id
+        }));
+
+    if (billItems.length === 0) {
+      showToast('⚠️ કૃપા કરીને બિલમાં વસ્તુઓ ઉમેરો!');
       return;
     }
 
-    const orderId = `BILL-${Math.floor(1000 + Math.random() * 9000)}`;
+    const orderId = getNextOrderNumber();
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-    const finalTotal = Math.max(0, cartTotal - posDiscount);
+    const billSubtotal = billItems.reduce((sum, item) => sum + item.price * item.qty, 0);
+    const finalTotal = Math.max(0, billSubtotal - posDiscount);
 
-    // Deduct stock
+    // Deduct stock for inventory products
     setPosItems(prev =>
       prev.map(p => {
-        const inC = cart.find(c => c.product.id === p.id);
-        if (inC && typeof p.stock === 'number') {
-          return { ...p, stock: Math.max(0, p.stock - inC.quantity) };
+        const inB = billItems.find(b => b.productId === p.id || b.name === p.nameGu || b.name === p.nameEn);
+        if (inB && typeof p.stock === 'number') {
+          return { ...p, stock: Math.max(0, p.stock - inB.qty) };
         }
         return p;
       })
@@ -626,13 +865,16 @@ export default function App() {
       customerName: posCustomerName || 'Walk-in Customer (કાઉન્ટર)',
       mobile: posCustomerMobile || storeSettings.phone,
       address: 'દુકાન કાઉન્ટર - થરાદ',
-      items: cart.map(c => ({ name: c.product.nameGu, qty: c.quantity, price: c.product.price, unit: c.product.unit })),
-      subtotal: cartTotal,
+      items: billItems.map(b => ({ name: b.name, qty: b.qty, price: b.price, unit: b.unit })),
+      subtotal: billSubtotal,
       discount: posDiscount,
       tax: 0,
       total: finalTotal,
       paymentMode: posPaymentMode,
-      paymentStatus: posPaymentMode === 'બાકી (Credit)' ? 'બાકી' : 'Paid'
+      paymentStatus: posPaymentMode === 'બાકી (Credit)' ? 'બાકી' : 'Paid',
+      orderType: 'counter',
+      orderStatus: 'delivered',
+      statusUpdatedAt: dateFormatted
     };
 
     setOrders(prev => [inv, ...prev]);
@@ -642,10 +884,11 @@ export default function App() {
     setStats(s => ({
       ...s,
       dailySales: Number((s.dailySales + finalTotal).toFixed(2)),
-      itemsSold: s.itemsSold + cart.reduce((acc, curr) => acc + curr.quantity, 0),
+      itemsSold: s.itemsSold + billItems.reduce((acc, curr) => acc + curr.qty, 0),
       totalBills: s.totalBills + 1
     }));
 
+    setPosBillItems([]);
     setCart([]);
     setPosCustomerName('');
     setPosCustomerMobile('');
@@ -994,6 +1237,43 @@ export default function App() {
       {activeTab === 'customer' ? (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
+          {/* DHAMAKA OFFER TICKER / BANNER (Editable by Admin) */}
+          {(storeSettings.dhamakaOfferEnabled || isAdminUnlocked) && (
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 text-black p-3.5 sm:p-4 shadow-md border-2 border-amber-300 animate-fade-in">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 relative z-10">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-black text-amber-400 flex items-center justify-center font-black shrink-0 text-xl shadow-md animate-bounce">
+                    🔥
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-black text-amber-300 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
+                        સ્પેશિયલ ઓફર
+                      </span>
+                      <h3 className="text-sm sm:text-base font-black text-neutral-950">
+                        {storeSettings.dhamakaOfferTitle || 'ધમાકા ઓફર!'}
+                      </h3>
+                    </div>
+                    <p className="text-xs sm:text-sm font-bold text-neutral-900 mt-0.5">
+                      {storeSettings.dhamakaOfferText || 'બધી સ્કૂલ અને ઓફિસ સ્ટેશનરી પર જબરદસ્ત ડિસ્કાઉન્ટ!'}
+                    </p>
+                  </div>
+                </div>
+
+                {isAdminUnlocked && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDhamakaEditModal(true)}
+                    className="bg-black hover:bg-neutral-900 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-black shadow flex items-center gap-1.5 cursor-pointer shrink-0 border border-amber-400"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>ઓફર એડિટ કરો</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* PROMO HERO BANNER WITH ADMIN UPLOAD OPTION */}
           <div className="relative rounded-2xl bg-gradient-to-r from-[#0B1E48] via-[#1E3A8A] to-[#0B1E48] text-white p-5 sm:p-7 shadow-md overflow-hidden border border-blue-900">
             {storeSettings.bannerImageUrl ? (
@@ -1301,6 +1581,7 @@ export default function App() {
 
             <div className="flex items-center gap-2 flex-wrap">
               <button
+                type="button"
                 onClick={() => setIsAddingNewItem(true)}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
@@ -1309,6 +1590,26 @@ export default function App() {
               </button>
 
               <button
+                type="button"
+                onClick={() => setShowDhamakaEditModal(true)}
+                className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-black px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer border border-amber-300"
+                title="ધમાકા ઓફર માહિતી એડિટ કરો"
+              >
+                <span>🔥 ધમાકા ઓફર</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowTrashModal(true)}
+                className="bg-rose-700 hover:bg-rose-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="ડીલીટ કરેલ ડેટા / રિસાયકલ બિન"
+              >
+                <Trash2 className="w-4 h-4 text-rose-200" />
+                <span>ટ્રેશ બિન ({trashList.length})</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={handleExportExcel}
                 className="bg-green-800 hover:bg-green-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
@@ -1317,6 +1618,7 @@ export default function App() {
               </button>
 
               <button
+                type="button"
                 onClick={() => setShowChangePasswordModal(true)}
                 className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
                 title="એડમિન પાસવર્ડ બદલો"
@@ -1326,6 +1628,7 @@ export default function App() {
               </button>
 
               <button
+                type="button"
                 onClick={() => setShowSettingsModal(true)}
                 className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
               >
@@ -1383,19 +1686,179 @@ export default function App() {
           {/* POS COUNTER BILLING & INVENTORY TABLE */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             
-            {/* POS COUNTER BILLING BOX */}
+            {/* POS COUNTER BILLING BOX (WITH DIRECT IN-BILL ITEM SELECTION & LIST) */}
             <div className="bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs space-y-3">
               <div className="flex items-center justify-between border-b pb-2">
-                <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5">
                   <Receipt className="w-4 h-4 text-orange-600" />
-                  <span>કાઉન્ટર બિલિંગ (Instant POS)</span>
-                </h3>
-                <span className="text-xs font-black text-orange-700">
-                  કાર્ટ: {cart.length} વસ્તુ (₹{cartTotalAmount})
-                </span>
+                  <h3 className="text-sm font-black text-neutral-900">
+                    કાઉન્ટર બિલિંગ (POS)
+                  </h3>
+                </div>
+                {posBillItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handlePosClearBill}
+                    className="text-[11px] font-bold text-red-600 hover:text-red-800"
+                  >
+                    બિલ ખાલી કરો
+                  </button>
+                )}
               </div>
 
-              <div className="space-y-2">
+              {/* 1. Add Item into Bill Section */}
+              <div className="bg-orange-50/70 p-2.5 rounded-xl border border-orange-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-neutral-900 flex items-center gap-1">
+                    <span>➕ બિલમાં વસ્તુ ઉમેરો</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomPosInput(!showCustomPosInput)}
+                    className="text-[11px] font-black text-blue-700 hover:underline"
+                  >
+                    {showCustomPosInput ? 'લિસ્ટેડ આઇટમ' : '+ કસ્ટમ આઇટમ'}
+                  </button>
+                </div>
+
+                {!showCustomPosInput ? (
+                  /* Standard Product Dropdown Selector */
+                  <div className="space-y-1.5">
+                    <select
+                      value={posSelectedProdId}
+                      onChange={e => setPosSelectedProdId(e.target.value)}
+                      className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-orange-500"
+                    >
+                      <option value="">-- લિસ્ટમાંથી વસ્તુ પસંદ કરો --</option>
+                      {posItems.map(prod => (
+                        <option key={prod.id} value={prod.id}>
+                          {prod.nameGu} ({prod.nameEn}) - ₹{prod.price} (હાજર સ્ટોક: {prod.stock})
+                        </option>
+                      ))}
+                    </select>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs font-bold text-neutral-600">જથ્થો:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          value={posSelectedQty}
+                          onChange={e => setPosSelectedQty(Math.max(1, Number(e.target.value) || 1))}
+                          className="w-16 text-xs font-black p-1.5 bg-white border border-neutral-300 rounded-lg text-center outline-none"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handlePosAddProduct}
+                        className="flex-1 bg-orange-500 hover:bg-orange-600 text-black text-xs font-black py-1.5 px-3 rounded-lg shadow-2xs flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>બિલમાં ઉમેરો</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Custom Item Name & Price Input */
+                  <form onSubmit={handlePosAddCustomItem} className="space-y-1.5">
+                    <input
+                      type="text"
+                      placeholder="વસ્તુનું નામ (દા.ત. પાસપોર્ટ સાઈઝ ફોટો)"
+                      value={customPosName}
+                      onChange={e => setCustomPosName(e.target.value)}
+                      className="w-full text-xs font-bold p-1.5 bg-white border border-neutral-300 rounded-lg outline-none"
+                    />
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        placeholder="ભાવ ₹"
+                        value={customPosPrice}
+                        onChange={e => setCustomPosPrice(e.target.value)}
+                        className="w-20 text-xs font-bold p-1.5 bg-white border border-neutral-300 rounded-lg outline-none"
+                      />
+                      <input
+                        type="number"
+                        placeholder="જથ્થો"
+                        value={customPosQty}
+                        onChange={e => setCustomPosQty(e.target.value)}
+                        className="w-16 text-xs font-bold p-1.5 bg-white border border-neutral-300 rounded-lg outline-none"
+                      />
+                      <button
+                        type="submit"
+                        className="flex-1 bg-blue-800 hover:bg-blue-900 text-white text-xs font-black py-1.5 rounded-lg cursor-pointer"
+                      >
+                        + ઉમેરો
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              {/* 2. In-Bill Live Items Table */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-bold text-neutral-500 px-1">
+                  <span>બિલ આઇટમ્સ ({posBillItems.length})</span>
+                  <span>
+                    કુલ: ₹
+                    {posBillItems.reduce((sum, item) => sum + item.price * item.qty, 0)}
+                  </span>
+                </div>
+
+                <div className="max-h-44 overflow-y-auto border border-neutral-200 rounded-xl divide-y divide-neutral-100 bg-neutral-50/50">
+                  {posBillItems.length === 0 ? (
+                    <p className="text-center text-xs text-neutral-400 py-4 font-bold">
+                      ઉપરથી વસ્તુ પસંદ કરી બિલમાં ઉમેરો
+                    </p>
+                  ) : (
+                    posBillItems.map((item, idx) => (
+                      <div key={item.id} className="p-2 flex items-center justify-between gap-1 text-xs">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-black text-neutral-900 truncate">{item.name}</p>
+                          <p className="text-[10px] text-neutral-500">₹{item.price} / {item.unit}</p>
+                        </div>
+
+                        {/* Qty Stepper */}
+                        <div className="flex items-center gap-1 bg-white rounded border border-neutral-300 p-0.5">
+                          <button
+                            type="button"
+                            onClick={() => handlePosUpdateItemQty(idx, -1)}
+                            className="w-4 h-4 bg-neutral-100 hover:bg-neutral-200 rounded text-[10px] font-black flex items-center justify-center cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="text-[11px] font-black px-1 text-neutral-800">
+                            {item.qty}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handlePosUpdateItemQty(idx, 1)}
+                            className="w-4 h-4 bg-orange-400 hover:bg-orange-500 text-black rounded text-[10px] font-black flex items-center justify-center cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <span className="font-black text-orange-700 w-14 text-right">
+                          ₹{item.price * item.qty}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => handlePosRemoveItem(idx)}
+                          className="text-red-500 hover:text-red-700 p-1 cursor-pointer"
+                          title="કાઢી નાખો"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* 3. Customer Info, Payment Mode, Discount, & Print Button */}
+              <div className="space-y-2 pt-1 border-t">
                 <input
                   type="text"
                   placeholder="ગ્રાહકનું નામ (Customer Name)"
@@ -1417,7 +1880,7 @@ export default function App() {
                       key={mode}
                       type="button"
                       onClick={() => setPosPaymentMode(mode)}
-                      className={`p-1.5 rounded-lg text-xs font-black border transition-all ${
+                      className={`p-1.5 rounded-lg text-xs font-black border transition-all cursor-pointer ${
                         posPaymentMode === mode
                           ? 'bg-[#0B1E48] text-white border-blue-900'
                           : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100'
@@ -1439,12 +1902,19 @@ export default function App() {
                   />
                 </div>
 
-                <div className="border-t pt-2 flex items-center justify-between font-black text-sm">
-                  <span>ચૂકવવાપાત્ર:</span>
-                  <span className="text-base text-orange-700">
-                    ₹{Math.max(0, cartTotalAmount - posDiscount)}/-
-                  </span>
-                </div>
+                {(() => {
+                  const billSub = posBillItems.length > 0
+                    ? posBillItems.reduce((s, i) => s + i.price * i.qty, 0)
+                    : cartTotalAmount;
+                  return (
+                    <div className="border-t pt-2 flex items-center justify-between font-black text-sm">
+                      <span>ચૂકવવાપાત્ર:</span>
+                      <span className="text-base text-orange-700">
+                        ₹{Math.max(0, billSub - posDiscount)}/-
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 <button
                   type="button"
@@ -2324,7 +2794,39 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 15. PAYMENT SCREENSHOT FULLSCREEN VIEWER MODAL */}
+      {/* 15. TRASH / RECYCLE BIN MODAL */}
+      {/* ========================================================================= */}
+      {showTrashModal && (
+        <TrashModal
+          isOpen={showTrashModal}
+          onClose={() => setShowTrashModal(false)}
+          trashList={trashList}
+          onRestore={handleRestoreTrashRecord}
+          onPermanentDelete={handlePermanentDeleteTrash}
+          onEmptyTrash={handleEmptyAllTrash}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 16. DHAMAKA OFFER SETTINGS MODAL */}
+      {/* ========================================================================= */}
+      {showDhamakaEditModal && (
+        <DhamakaOfferModal
+          isOpen={showDhamakaEditModal}
+          onClose={() => setShowDhamakaEditModal(false)}
+          settings={storeSettings}
+          onSave={updatedSettings => {
+            setStoreSettings(prev => ({
+              ...prev,
+              ...updatedSettings
+            }));
+            showToast('🎉 ધમાકા ઓફર વિગતો સફળતાપૂર્વક અપડેટ થઈ ગઈ!');
+          }}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 17. PAYMENT SCREENSHOT FULLSCREEN VIEWER MODAL */}
       {/* ========================================================================= */}
       {viewingScreenshot && (
         <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-3 animate-fade-in no-print">
@@ -2351,14 +2853,19 @@ export default function App() {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-1 border-t">
-              <button
-                type="button"
-                onClick={() => setViewingScreenshot(null)}
-                className="px-4 py-2 bg-neutral-900 hover:bg-black text-white text-xs font-black rounded-xl cursor-pointer"
-              >
-                બંધ કરો (Close)
-              </button>
+            <div className="flex justify-between items-center gap-2 pt-1 border-t">
+              <span className="text-[11px] text-neutral-500 font-bold">
+                પેમેન્ટ ચેક કરી ઓર્ડર કન્ફર્મ કરો
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setViewingScreenshot(null)}
+                  className="px-4 py-2 bg-neutral-900 hover:bg-black text-white text-xs font-black rounded-xl cursor-pointer"
+                >
+                  બંધ કરો (Close)
+                </button>
+              </div>
             </div>
           </div>
         </div>

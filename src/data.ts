@@ -18,6 +18,9 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   bannerImageUrl: '',
   bannerTitle: 'ઓનલાઇન સરકારી સેવાઓ અને સ્ટેશનરી સામાન હવે તમારા હાથમાં!',
   bannerSubtitle: 'નોટબુક, પેન, ઓફિસ ફાઇલ્સ, આધાર-પાન કાર્ડ, ઝેરોક્ષ પ્રિન્ટિંગ સરળતાથી ઓર્ડર કરો અને રસીદ મેળવો.',
+  dhamakaOfferTitle: '💥 મહા ધમાકા ઓફર: સ્કૂલ સ્ટેશનરી અને નોટબુક્સ પર 20% સુધી ડિસ્કાઉન્ટ!',
+  dhamakaOfferText: 'તમામ નોટબુક્સ, બોલપેન સેટ્સ અને ઓનલાઇન ફોર્મ અરજીઓ પર સ્પેશિયલ ડિસ્કાઉન્ટ ઉપલબ્ધ છે. આજે જ ઓર્ડર કરો!',
+  dhamakaOfferEnabled: true,
   customQrUrl: '',
   invoiceFooterNote: 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર! માલ પરત લેવામાં આવશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે.',
   adminPassword: 'Bharat@1994',
@@ -254,7 +257,7 @@ export const INITIAL_STATS: BusinessStats = {
 export const INITIAL_ORDERS: OrderRecord[] = [
   {
     id: 'ord-101',
-    invoiceNo: 'INV-2026-001',
+    invoiceNo: 'prisha000001',
     date: '12/09/2026 10:30 AM',
     customerName: 'રમેશભાઈ પટેલ',
     mobile: '9825012345',
@@ -268,6 +271,9 @@ export const INITIAL_ORDERS: OrderRecord[] = [
     tax: 0,
     total: 180,
     paymentMode: 'UPI',
-    paymentStatus: 'Paid'
+    paymentStatus: 'Paid',
+    orderType: 'online',
+    orderStatus: 'delivered',
+    statusUpdatedAt: '12/09/2026 11:15 AM'
   }
 ];
