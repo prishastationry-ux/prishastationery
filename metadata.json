@@ -1,0 +1,6 @@
+{
+  "name": "PRISHA STATIONERY & ONLINE SERVICES",
+  "description": "Complete stationery shopping catalog with UPI payment gateway, inventory management, instant sell counter, and reporting system for Prisha Stationery & Online Services in Tharad.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
