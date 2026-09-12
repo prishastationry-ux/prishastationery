@@ -122,3 +122,41 @@ export interface PurchaseRecord {
   itemsCount: number;
   paymentStatus: 'Paid' | 'Pending';
 }
+
+export interface PrintJobFile {
+  id: string;
+  fileName: string;
+  fileSize: number;
+  fileType: string;
+  fileDataUrl?: string; // base64 or blob URL
+  copies: number;
+  colorMode: 'black_white' | 'color' | 'pvc_card';
+  sideOption: 'single_side' | 'double_side';
+  paperSize: 'A4' | 'A5' | 'Legal' | '4x6 Photo' | 'PVC Card';
+  lamination: boolean;
+  notes?: string;
+  pricePerUnit?: number;
+  totalPrice?: number;
+}
+
+export interface PrintJobRecord {
+  id: string;
+  jobNo: string;
+  customerName: string;
+  mobile: string;
+  address?: string;
+  deliveryType: 'pickup' | 'home_delivery';
+  files: PrintJobFile[];
+  createdAt: string;
+  status: 'received' | 'in_progress' | 'printed' | 'ready' | 'completed' | 'cancelled';
+  subtotal: number;
+  extraCharges: number;
+  extraChargesNote?: string;
+  discount: number;
+  totalAmount: number;
+  paymentStatus: 'Pending' | 'Paid' | 'બાકી';
+  paymentMode?: 'UPI' | 'Cash' | 'Online' | 'બાકી';
+  adminNotes?: string;
+  invoiceGenerated?: boolean;
+  invoiceNo?: string;
+}

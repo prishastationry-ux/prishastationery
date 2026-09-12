@@ -45,8 +45,8 @@ import {
   Filter
 } from 'lucide-react';
 
-import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord } from './types';
-import { DEFAULT_STORE_SETTINGS, INITIAL_PRODUCTS, INITIAL_STATS, INITIAL_ORDERS } from './data';
+import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
+import { DEFAULT_STORE_SETTINGS, INITIAL_PRODUCTS, INITIAL_STATS, INITIAL_ORDERS, INITIAL_PRINT_JOBS } from './data';
 import { InvoiceModal } from './components/InvoiceModal';
 import { CartDrawer } from './components/CartDrawer';
 import { ImageCropModal } from './components/ImageCropModal';
@@ -56,6 +56,8 @@ import { TrashModal } from './components/TrashModal';
 import { DhamakaOfferModal } from './components/DhamakaOfferModal';
 import { BillSettingsModal } from './components/BillSettingsModal';
 import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDeleteModal';
+import { OnlinePrintModal } from './components/OnlinePrintModal';
+import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
 
 export default function App() {
   // Navigation View: Default to 'customer' for all visitors
@@ -67,6 +69,17 @@ export default function App() {
   const [enteredPassword, setEnteredPassword] = useState<string>('');
   const [showPasswordText, setShowPasswordText] = useState<boolean>(false);
   const [passwordError, setPasswordError] = useState<string>('');
+
+  // Online Print Customer & Admin Print Job States
+  const [showOnlinePrintModal, setShowOnlinePrintModal] = useState<boolean>(false);
+  const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
+  const [printJobs, setPrintJobs] = useState<PrintJobRecord[]>(() => {
+    const saved = localStorage.getItem('prisha_print_jobs_v1');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+    }
+    return INITIAL_PRINT_JOBS as any;
+  });
 
   // Order Tracking & Admin Order Management States
   const [showTrackingModal, setShowTrackingModal] = useState(false);
@@ -262,6 +275,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('prisha_purchases_v4', JSON.stringify(purchases));
   }, [purchases]);
+
+  useEffect(() => {
+    localStorage.setItem('prisha_print_jobs_v1', JSON.stringify(printJobs));
+  }, [printJobs]);
 
   // Recalculate out of stock / low stock count
   useEffect(() => {
@@ -572,6 +589,75 @@ export default function App() {
     setActiveInvoiceOrder(newOrder);
     setIsSuccessModal(true);
     showToast(`🎉 ઓર્ડર #${orderId} કન્ફર્મ થઈ ગયો! નીચેથી બિલ પ્રિન્ટ કે સેવ કરો.`);
+  };
+
+  // =========================================================================
+  // ONLINE PRINT JOBS HANDLERS
+  // =========================================================================
+  const handleSubmitPrintJob = (newJob: PrintJobRecord) => {
+    setPrintJobs(prev => [newJob, ...prev]);
+    showToast(`🎉 પ્રિન્ટ જોબ #${newJob.jobNo} સફળતાપૂર્વક અપલોડ થઈ ગયું!`);
+  };
+
+  const handleUpdatePrintJob = (jobId: string, updates: Partial<PrintJobRecord>) => {
+    setPrintJobs(prev => prev.map(j => (j.id === jobId ? { ...j, ...updates } : j)));
+    showToast('✅ પ્રિન્ટ જોબ વિગત અપડેટ થઈ ગઈ!');
+  };
+
+  const handleDeletePrintJob = (jobId: string) => {
+    setPrintJobs(prev => prev.filter(j => j.id !== jobId));
+    showToast('🗑️ પ્રિન્ટ જોબ ડિલીટ થઈ ગયો.');
+  };
+
+  const handleConvertPrintJobToInvoice = (job: PrintJobRecord, billItems: BillItem[], finalTotal: number) => {
+    const orderId = getNextOrderNumber();
+    const now = new Date();
+    const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    const newInvoice: OrderRecord = {
+      id: `ord-prn-${Date.now()}`,
+      invoiceNo: orderId,
+      date: dateFormatted,
+      customerName: job.customerName || 'Customer',
+      mobile: job.mobile || storeSettings.phone,
+      address: job.deliveryType === 'home_delivery' ? (job.address || 'Home Delivery') : 'દુકાન પિકઅપ (Tharad)',
+      items: billItems,
+      subtotal: finalTotal,
+      discount: job.discount || 0,
+      tax: 0,
+      total: finalTotal,
+      paymentMode: job.paymentMode || 'UPI',
+      paymentStatus: 'Paid',
+      orderType: 'online',
+      orderStatus: 'delivered',
+      statusUpdatedAt: dateFormatted,
+      notes: `ઓનલાઇન પ્રિન્ટ જોબ #${job.jobNo}`
+    };
+
+    setOrders(prev => [newInvoice, ...prev]);
+    
+    // Update the job status
+    handleUpdatePrintJob(job.id, {
+      invoiceGenerated: true,
+      invoiceNo: orderId,
+      status: 'completed',
+      paymentStatus: 'Paid'
+    });
+
+    // Update Daily Business Stats
+    setStats(s => ({
+      ...s,
+      dailySales: Number((s.dailySales + finalTotal).toFixed(2)),
+      itemsSold: s.itemsSold + billItems.reduce((acc, curr) => acc + curr.qty, 0),
+      totalBills: s.totalBills + 1
+    }));
+
+    // Open 1-page Official Invoice Modal
+    setActiveInvoiceOrder(newInvoice);
+    setIsSuccessModal(false);
+    setShowAdminPrintJobsModal(false);
+
+    showToast(`🧾 સત્તાવાર ૧ પેજ બિલ #${orderId} સફળતાપૂર્વક બની ગયું!`);
   };
 
   // DELETE BILL / ORDER - Opens In-App Modal -> Auto-restocks and Moves to Trash Bin
@@ -1180,6 +1266,16 @@ export default function App() {
               Home
             </button>
 
+            {/* DIRECT ONLINE PRINT ACTION BUTTON */}
+            <button
+              onClick={() => setShowOnlinePrintModal(true)}
+              className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1.5 transition-transform active:scale-95 animate-pulse"
+              title="ફોટા, PDF, Word કે Excel ફાઇલ અપલોડ કરીને પ્રિન્ટ કરાવો"
+            >
+              <Printer className="w-3.5 h-3.5 text-black" />
+              <span>🖨️ ઓનલાઇન પ્રિન્ટ કરાવો</span>
+            </button>
+
             {/* CUSTOMER LIVE ORDER TRACKING BUTTON */}
             <button
               onClick={() => setShowTrackingModal(true)}
@@ -1423,16 +1519,27 @@ export default function App() {
               </div>
             </div>
 
-            {/* Category Filter Chips */}
+            {/* Category Filter Chips with Online Print as the VERY FIRST OPTION */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-black">
+              {/* 1. FIRST EXCLUSIVE OPTION: ONLINE PRINT MODAL TRIGGER */}
+              <button
+                type="button"
+                onClick={() => setShowOnlinePrintModal(true)}
+                className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500 hover:from-amber-600 hover:to-orange-600 text-black px-3.5 py-1.5 rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border-2 border-black font-black shadow-xs animate-pulse"
+                title="ફોટો, PDF, Excel, Word અપલોડ કરીને પ્રિન્ટ કરાવો"
+              >
+                <Printer className="w-4 h-4 text-black" />
+                <span>🖨️ ૧. ઓનલાઇન પ્રિન્ટ (Upload & Print)</span>
+              </button>
+
               {[
-                { id: 'all', label: 'બધી પ્રોડક્ટ્સ', icon: '🛍️' },
-                { id: 'books', label: 'નોટબુક / ચોપડા', icon: '📖' },
-                { id: 'stationery', label: 'પેન & સ્ટેશનરી', icon: '✒️' },
-                { id: 'service', label: 'ઓનલાઇન CSC સેવાઓ', icon: '📄' },
-                { id: 'printing', label: 'ઝેરોક્ષ & પ્રિન્ટિંગ', icon: '🖨️' },
-                { id: 'office', label: 'ઓફિસ ફાઇલ & સાધનો', icon: '📁' },
-                { id: 'bags', label: 'સ્કૂલ બેગ', icon: '🎒' }
+                { id: 'books', label: '૨. નોટબુક / ચોપડા', icon: '📖' },
+                { id: 'stationery', label: '૩. પેન & પેન્સિલ', icon: '✒️' },
+                { id: 'office', label: '૪. સ્ટેશનરી & ફાઇલ્સ', icon: '📁' },
+                { id: 'service', label: '૫. ઓનલાઇન CSC સેવાઓ', icon: '📄' },
+                { id: 'printing', label: '૬. ઝેરોક્ષ & સેવાઓ', icon: '🖨️' },
+                { id: 'bags', label: '૭. સ્કૂલ બેગ', icon: '🎒' },
+                { id: 'all', label: 'બધી પ્રોડક્ટ્સ', icon: '🛍️' }
               ].map(cat => (
                 <button
                   key={cat.id}
@@ -1453,6 +1560,40 @@ export default function App() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* DEDICATED ONLINE PRINT INTERACTIVE HERO CARD */}
+          <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100 border-2 border-orange-300 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="space-y-1.5 max-w-2xl">
+              <div className="flex items-center gap-2">
+                <span className="bg-orange-600 text-white text-[10px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider">
+                  નવી સુવિધા • NEW
+                </span>
+                <h3 className="text-base sm:text-lg font-black text-neutral-900 flex items-center gap-1.5">
+                  <Printer className="w-5 h-5 text-orange-600" />
+                  <span>🖨️ ઓનલાઇન ડોક્યુમેન્ટ, ફોટો & PVC કાર્ડ પ્રિન્ટિંગ</span>
+                </h3>
+              </div>
+              <p className="text-xs sm:text-sm font-bold text-neutral-700 leading-relaxed">
+                તમારા મોબાઈલ કે કમ્પ્યુટરમાંથી PDF, Word, Excel, JPG ફોટા કે ID કાર્ડ અહીં ૧-ક્લિકમાં અપલોડ કરો. કલર, B&W, સિંગલ/ડબલ સાઇડ, A4/Legal/4×6 સાઇઝ, PVC સ્માર્ટ કાર્ડ અને લેમિનેશન ઓપ્શન સાથે તરત પ્રિન્ટ કરાવો!
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] font-bold text-neutral-800">
+                <span className="bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs">📑 PDF, Word, Excel, JPG</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs">🌈 કલર / ⚪⚫ B&W</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs">🪪 PVC સ્માર્ટ કાર્ડ</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs">📄 A4, A5, Legal, 4×6</span>
+                <span className="bg-white px-2 py-0.5 rounded-md border border-orange-200 shadow-2xs">✨ લેમિનેશન ટીક માર્ક</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowOnlinePrintModal(true)}
+              className="w-full md:w-auto bg-orange-600 hover:bg-orange-700 text-white px-5 py-3 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95 shrink-0"
+            >
+              <Upload className="w-4 h-4 text-white" />
+              <span>📤 ફાઇલ અપલોડ & પ્રિન્ટ ઓર્ડર કરો</span>
+            </button>
           </div>
 
           {/* ========================================================================= */}
@@ -1639,6 +1780,17 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* ONLINE PRINT JOBS ADMIN BUTTON */}
+              <button
+                type="button"
+                onClick={() => setShowAdminPrintJobsModal(true)}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-black px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border-2 border-black animate-pulse"
+                title="ગ્રાહકોએ અપલોડ કરેલ PDF, Word, Excel, ફોટા ડાઉનલોડ & પ્રિન્ટ બિલ બનાવો"
+              >
+                <Printer className="w-4 h-4 text-black" />
+                <span>🖨️ પ્રિન્ટ ઓર્ડર્સ ({printJobs.filter(j => j.status === 'received').length ? `${printJobs.filter(j => j.status === 'received').length} નવા` : printJobs.length})</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsAddingNewItem(true)}
@@ -3108,6 +3260,33 @@ export default function App() {
           target={deleteConfirmTarget}
           onClose={() => setDeleteConfirmTarget(null)}
           onConfirm={handleExecuteConfirmedDelete}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 20. CUSTOMER ONLINE PRINT UPLOAD & OPTIONS MODAL */}
+      {/* ========================================================================= */}
+      {showOnlinePrintModal && (
+        <OnlinePrintModal
+          isOpen={showOnlinePrintModal}
+          onClose={() => setShowOnlinePrintModal(false)}
+          storeSettings={storeSettings}
+          onSubmitJob={handleSubmitPrintJob}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 21. ADMIN ONLINE PRINT JOBS, DIRECT DOWNLOAD & BILL CREATOR MODAL */}
+      {/* ========================================================================= */}
+      {showAdminPrintJobsModal && (
+        <AdminPrintJobsModal
+          isOpen={showAdminPrintJobsModal}
+          onClose={() => setShowAdminPrintJobsModal(false)}
+          storeSettings={storeSettings}
+          printJobs={printJobs}
+          onUpdateJob={handleUpdatePrintJob}
+          onDeleteJob={handleDeletePrintJob}
+          onConvertToInvoice={handleConvertPrintJobToInvoice}
         />
       )}
 

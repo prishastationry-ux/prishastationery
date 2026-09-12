@@ -245,51 +245,31 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </div>
 
           {/* Action Buttons in Header */}
-          <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={isGeneratingPdf}
-              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs disabled:opacity-50"
-              title="૧ પેજમાં PDF ફાઇલ ડાઉનલોડ કરો"
-            >
-              {isGeneratingPdf ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>PDF બને છે...</span>
-                </>
-              ) : (
-                <>
-                  <FileDown className="w-3.5 h-3.5 text-red-200" />
-                  <span>PDF ડાઉનલોડ</span>
-                </>
-              )}
-            </button>
-
+          <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
             <button
               type="button"
               onClick={handleDirectPrint}
-              className="bg-orange-500 hover:bg-orange-600 text-black px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs"
-              title="કમ્પ્યુટરમાં ૧ પેજમાં ડાયરેક્ટ પ્રિન્ટ કાઢો"
+              className="bg-orange-500 hover:bg-orange-600 text-black px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
+              title="૧ પેજમાં બિલ પ્રિન્ટ / PDF સેવ કરો"
             >
-              <Printer className="w-3.5 h-3.5" />
-              <span>પ્રિન્ટ (PC)</span>
+              <Printer className="w-4 h-4" />
+              <span>🖨️ પ્રિન્ટ</span>
             </button>
 
             <button
               type="button"
               onClick={handleWhatsAppShare}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
               title="Share on WhatsApp"
             >
-              <Share2 className="w-3.5 h-3.5" />
+              <Share2 className="w-4 h-4" />
               <span>WhatsApp</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 text-neutral-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+              className="p-2 text-neutral-300 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -469,35 +449,25 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         {/* BOTTOM ACTION BAR (NO-PRINT) */}
         <div className="no-print bg-neutral-100 p-3 sm:p-4 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-neutral-600 font-bold text-center sm:text-left">
-            💡 કમ્પ્યુટરમાં ૧ પેજમાં પ્રિન્ટ કરવા 'ડાયરેક્ટ પ્રિન્ટ' અથવા સેવ કરવા 'PDF ડાઉનલોડ' કરો.
+            💡 ૧ પેજમાં કમ્પ્યુટરમાં પ્રિન્ટ કાઢવા અથવા PDF સેવ કરવા 'પ્રિન્ટ' પર ક્લિક કરો.
           </p>
           <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-end">
             <button
               type="button"
-              onClick={handleDownloadPdf}
-              disabled={isGeneratingPdf}
-              className="flex-1 sm:flex-none bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-            >
-              <FileDown className="w-4 h-4 text-white" />
-              <span>૧ પેજ PDF ડાઉનલોડ</span>
-            </button>
-
-            <button
-              type="button"
               onClick={handleDirectPrint}
-              className="flex-1 sm:flex-none bg-[#0B1E48] hover:bg-blue-900 text-white px-4 py-2 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+              className="flex-1 sm:flex-none bg-[#0B1E48] hover:bg-blue-900 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-2 cursor-pointer"
             >
               <Printer className="w-4 h-4 text-orange-400" />
-              <span>૧ પેજ પ્રિન્ટ (PC)</span>
+              <span>🖨️ પ્રિન્ટ</span>
             </button>
 
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600 text-black px-4 py-2 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1 cursor-pointer"
+              className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600 text-black px-5 py-2.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <span>પૂર્ણ</span>
-              <ArrowRight className="w-3.5 h-3.5" />
+              <ArrowRight className="w-4 h-4" />
             </button>
           </div>
         </div>

@@ -285,3 +285,53 @@ export const INITIAL_ORDERS: OrderRecord[] = [
     statusUpdatedAt: '12/09/2026 11:15 AM'
   }
 ];
+
+export const INITIAL_PRINT_JOBS = [
+  {
+    id: 'prn-demo-1',
+    jobNo: 'PRN-8821',
+    customerName: 'દિનેશભાઈ ચૌધરી',
+    mobile: '9876543210',
+    address: 'ગામ: નાગલા, તા. થરાદ',
+    deliveryType: 'pickup' as const,
+    files: [
+      {
+        id: 'file-demo-1',
+        fileName: 'Aadhaar_Card_Update.pdf',
+        fileSize: 1048576,
+        fileType: 'application/pdf',
+        fileDataUrl: 'data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        copies: 2,
+        colorMode: 'color' as const,
+        sideOption: 'single_side' as const,
+        paperSize: 'A4' as const,
+        lamination: true,
+        notes: 'ગ્લોસી કાગળ પર પ્રિન્ટ અને લેમિનેશન કરવું',
+        pricePerUnit: 30
+      },
+      {
+        id: 'file-demo-2',
+        fileName: '7_12_Utaro_Land_Doc.pdf',
+        fileSize: 524288,
+        fileType: 'application/pdf',
+        fileDataUrl: 'data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        copies: 3,
+        colorMode: 'black_white' as const,
+        sideOption: 'double_side' as const,
+        paperSize: 'Legal' as const,
+        lamination: false,
+        notes: 'લીગલ પેપર પર ૨ સાઇડ',
+        pricePerUnit: 15
+      }
+    ],
+    createdAt: '12/09/2026 11:20 AM',
+    status: 'received' as const,
+    subtotal: 45,
+    extraCharges: 10,
+    extraChargesNote: 'ફાઇલ કવર',
+    discount: 0,
+    totalAmount: 55,
+    paymentStatus: 'Pending' as const,
+    paymentMode: 'UPI' as const
+  }
+];
