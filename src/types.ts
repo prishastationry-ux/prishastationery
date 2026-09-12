@@ -73,6 +73,15 @@ export interface StoreSettings {
   invoiceFooterNote: string;
   adminPassword: string;
   developerCredit: string;
+  // Bill / Invoice Customization & Security Fields
+  billFraudWarning?: string;
+  billSpecialOffer?: string;
+  billShowGst?: boolean;
+  billShowQr?: boolean;
+  billShowLogos?: boolean;
+  billShowFraudWarning?: boolean;
+  billShowSpecialOffer?: boolean;
+  billTermsNote?: string;
 }
 
 export interface TrashRecord {

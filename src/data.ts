@@ -24,7 +24,15 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   customQrUrl: '',
   invoiceFooterNote: 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર! માલ પરત લેવામાં આવશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે.',
   adminPassword: 'Bharat@1994',
-  developerCredit: 'Bharat Chaudhary'
+  developerCredit: 'Bharat Chaudhary',
+  billFraudWarning: '⚠️ સાવચેતી: કોઈપણ ઓનલાઇન છેતરપિંડીથી બચવા ફક્ત આ જ સત્તાવાર UPI QR / પ્રિષા સ્ટેશનરી પર પેમેન્ટ કરવું.',
+  billSpecialOffer: '🎉 આ બિલ પર આગામી ખરીદીમાં વિશેષ ૫% ડિસ્કાઉન્ટ મેળવો!',
+  billShowGst: true,
+  billShowQr: true,
+  billShowLogos: true,
+  billShowFraudWarning: true,
+  billShowSpecialOffer: true,
+  billTermsNote: 'કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ. ખરીદેલ માલ પરત લેવાશે નહિ.'
 };
 
 export const INITIAL_PRODUCTS: ProductItem[] = [

@@ -54,6 +54,8 @@ import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { TrashModal } from './components/TrashModal';
 import { DhamakaOfferModal } from './components/DhamakaOfferModal';
+import { BillSettingsModal } from './components/BillSettingsModal';
+import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDeleteModal';
 
 export default function App() {
   // Navigation View: Default to 'customer' for all visitors
@@ -84,6 +86,12 @@ export default function App() {
 
   // Dhamaka Offer Edit Modal State
   const [showDhamakaEditModal, setShowDhamakaEditModal] = useState<boolean>(false);
+
+  // Bill Settings & Customization Modal State
+  const [showBillSettingsModal, setShowBillSettingsModal] = useState<boolean>(false);
+
+  // In-App Confirm Delete Modal State (Works 100% reliably in all browsers/iframes)
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<DeleteTargetInfo | null>(null);
 
   // Store Settings (Full editable from Admin)
   const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
@@ -336,30 +344,19 @@ export default function App() {
     }
   };
 
-  // Delete an Item completely -> Moves to Trash Bin (Recycle Bin)
+  // Delete an Item completely -> Opens In-App Confirm Modal -> Moves to Trash Bin (Recycle Bin)
   const handleDeleteItem = (itemId: string, itemName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     const itemToDelete = posItems.find(p => p.id === itemId);
     if (!itemToDelete) return;
 
-    if (window.confirm(`શું તમે "${itemName}" ને ડીલીટ કરવા માંગો છો?\n\n- આ આઇટમ ટ્રેશ બિન (Recycle Bin) માં સુરક્ષિત રહેશે.\n- તમે ગમે ત્યારે ટ્રેશ બિનમાંથી આને રીસ્ટોર (Restore) કરી શકો છો.`)) {
-      const now = new Date();
-      const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-      
-      const trashRec: TrashRecord = {
-        id: `trash-${Date.now()}`,
-        type: 'product',
-        title: itemToDelete.nameGu,
-        deletedAt: dateFormatted,
-        summary: `ભાવ: ₹${itemToDelete.price} | સ્ટોક: ${itemToDelete.stock} ${itemToDelete.unit} | કેટેગરી: ${itemToDelete.category}`,
-        data: itemToDelete
-      };
-
-      setTrashList(prev => [trashRec, ...prev]);
-      setPosItems(prev => prev.filter(item => item.id !== itemId));
-      if (editingItem?.id === itemId) setEditingItem(null);
-      showToast(`🗑️ "${itemName}" ટ્રેશ બિનમાં ખસેડવામાં આવી!`);
-    }
+    setDeleteConfirmTarget({
+      type: 'product',
+      id: itemId,
+      title: itemToDelete.nameGu,
+      subtitle: `ભાવ: ₹${itemToDelete.price} | સ્ટોક: ${itemToDelete.stock} ${itemToDelete.unit} | કેટેગરી: ${itemToDelete.category}`,
+      data: itemToDelete
+    });
   };
 
   // Fast Add Product Form Handler
@@ -577,55 +574,18 @@ export default function App() {
     showToast(`🎉 ઓર્ડર #${orderId} કન્ફર્મ થઈ ગયો! નીચેથી બિલ પ્રિન્ટ કે સેવ કરો.`);
   };
 
-  // DELETE BILL / ORDER WITH AUTO-RESTOCK TO INVENTORY & TRASH BIN RECORD
+  // DELETE BILL / ORDER - Opens In-App Modal -> Auto-restocks and Moves to Trash Bin
   const handleDeleteOrder = (orderId: string) => {
     const orderToDelete = orders.find(o => o.id === orderId);
     if (!orderToDelete) return;
 
-    const confirmDelete = window.confirm(
-      `શું તમે બિલ #${orderToDelete.invoiceNo} (${orderToDelete.customerName}) ડિલીટ કરવા માંગો છો?\n\n- આ બિલનો માલ આપમેળે ફરીથી સ્ટોકમાં જમા થશે.\n- આ બિલ ટ્રેશ બિન (Recycle Bin) માં જશે જેથી તમે ગમે ત્યારે પાછું લાવી શકો.`
-    );
-    if (!confirmDelete) return;
-
-    // Restore inventory stock for all items in the deleted order
-    setPosItems(prev =>
-      prev.map(p => {
-        const matchedItem = orderToDelete.items.find(
-          it => it.name === p.nameGu || it.name === p.nameEn
-        );
-        if (matchedItem && typeof p.stock === 'number') {
-          return { ...p, stock: p.stock + matchedItem.qty };
-        }
-        return p;
-      })
-    );
-
-    // Deduct from business stats
-    setStats(s => ({
-      ...s,
-      dailySales: Math.max(0, Number((s.dailySales - orderToDelete.total).toFixed(2))),
-      totalBills: Math.max(0, s.totalBills - 1),
-      itemsSold: Math.max(
-        0,
-        s.itemsSold - orderToDelete.items.reduce((acc, curr) => acc + curr.qty, 0)
-      )
-    }));
-
-    const now = new Date();
-    const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-
-    const trashRec: TrashRecord = {
-      id: `trash-${Date.now()}`,
+    setDeleteConfirmTarget({
       type: 'order',
+      id: orderId,
       title: `બિલ #${orderToDelete.invoiceNo} - ${orderToDelete.customerName}`,
-      deletedAt: dateFormatted,
-      summary: `રકમ: ₹${orderToDelete.total} | તારીખ: ${orderToDelete.date} | આઇટમ્સ: ${orderToDelete.items.length} | પેમેન્ટ: ${orderToDelete.paymentMode}`,
+      subtitle: `કુલ રકમ: ₹${orderToDelete.total} | ${orderToDelete.items.length} આઇટમ્સ | ${orderToDelete.paymentMode}`,
       data: orderToDelete
-    };
-
-    setTrashList(prev => [trashRec, ...prev]);
-    setOrders(prev => prev.filter(o => o.id !== orderId));
-    showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થઈ ટ્રેશ બિનમાં ગયું અને સ્ટોક જમા થયો!`);
+    });
   };
 
   // RESTORE ITEMS FROM TRASH BIN
@@ -667,20 +627,119 @@ export default function App() {
     }
   };
 
-  // PERMANENT DELETE FROM TRASH
+  // PERMANENT DELETE FROM TRASH - Opens In-App Modal
   const handlePermanentDeleteTrash = (record: TrashRecord) => {
-    if (window.confirm(`શું તમે "${record.title}" ને કાયમી ધોરણે ડીલીટ કરવા માંગો છો? આ પછી પાછું નહિ લાવી શકાય.`)) {
-      setTrashList(prev => prev.filter(t => t.id !== record.id));
-      showToast(`❌ "${record.title}" કાયમી ડીલીટ થઈ ગઈ.`);
-    }
+    setDeleteConfirmTarget({
+      type: 'trash_item',
+      id: record.id,
+      title: record.title,
+      subtitle: record.summary,
+      data: record
+    });
   };
 
-  // EMPTY ENTIRE TRASH BIN
+  // EMPTY ENTIRE TRASH BIN - Opens In-App Modal
   const handleEmptyAllTrash = () => {
-    if (window.confirm('શું તમે ખરેખર ટ્રેશ બિનની તમામ વસ્તુઓ કાયમી ધોરણે ડીલીટ કરવા માંગો છો?')) {
+    if (trashList.length === 0) {
+      showToast('ℹ️ ટ્રેશ બિન પહેલેથી જ ખાલી છે.');
+      return;
+    }
+    setDeleteConfirmTarget({
+      type: 'all_trash',
+      id: 'all',
+      title: 'ટ્રેશ બિનની તમામ વસ્તુઓ',
+      subtitle: `કુલ ${trashList.length} આઇટમ્સ કાયમી ડિલીટ થશે`
+    });
+  };
+
+  // CENTRAL EXECUTION HANDLER FOR CONFIRMED DELETIONS (Works 100% reliably in all browsers/iframes)
+  const handleExecuteConfirmedDelete = () => {
+    if (!deleteConfirmTarget) return;
+
+    const { type, id, data } = deleteConfirmTarget;
+    const now = new Date();
+    const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    if (type === 'product') {
+      const itemToDelete: ProductItem = data || posItems.find(p => p.id === id);
+      if (itemToDelete) {
+        const trashRec: TrashRecord = {
+          id: `trash-${Date.now()}`,
+          type: 'product',
+          title: itemToDelete.nameGu,
+          deletedAt: dateFormatted,
+          summary: `ભાવ: ₹${itemToDelete.price} | સ્ટોક: ${itemToDelete.stock} ${itemToDelete.unit} | કેટેગરી: ${itemToDelete.category}`,
+          data: itemToDelete
+        };
+        setTrashList(prev => [trashRec, ...prev]);
+        setPosItems(prev => prev.filter(item => item.id !== id));
+        if (editingItem?.id === id) setEditingItem(null);
+        showToast(`🗑️ "${itemToDelete.nameGu}" ડિલીટ થઈ ટ્રેશ બિનમાં ખસેડવામાં આવી!`);
+      }
+    } else if (type === 'order') {
+      const orderToDelete: OrderRecord = data || orders.find(o => o.id === id);
+      if (orderToDelete) {
+        // Restore inventory stock for all items in the deleted order
+        setPosItems(prev =>
+          prev.map(p => {
+            const matchedItem = orderToDelete.items.find(
+              it => it.name === p.nameGu || it.name === p.nameEn
+            );
+            if (matchedItem && typeof p.stock === 'number') {
+              return { ...p, stock: p.stock + matchedItem.qty };
+            }
+            return p;
+          })
+        );
+
+        // Deduct from business stats
+        setStats(s => ({
+          ...s,
+          dailySales: Math.max(0, Number((s.dailySales - orderToDelete.total).toFixed(2))),
+          totalBills: Math.max(0, s.totalBills - 1),
+          itemsSold: Math.max(
+            0,
+            s.itemsSold - orderToDelete.items.reduce((acc, curr) => acc + curr.qty, 0)
+          )
+        }));
+
+        const trashRec: TrashRecord = {
+          id: `trash-${Date.now()}`,
+          type: 'order',
+          title: `બિલ #${orderToDelete.invoiceNo} - ${orderToDelete.customerName}`,
+          deletedAt: dateFormatted,
+          summary: `રકમ: ₹${orderToDelete.total} | તારીખ: ${orderToDelete.date} | આઇટમ્સ: ${orderToDelete.items.length} | પેમેન્ટ: ${orderToDelete.paymentMode}`,
+          data: orderToDelete
+        };
+
+        setTrashList(prev => [trashRec, ...prev]);
+        setOrders(prev => prev.filter(o => o.id !== id));
+        showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થયું અને માલ સ્ટોકમાં જમા થયો!`);
+      }
+    } else if (type === 'expense') {
+      const expToDelete: ExpenseRecord = data || expenses.find(e => e.id === id);
+      if (expToDelete) {
+        const trashRec: TrashRecord = {
+          id: `trash-${Date.now()}`,
+          type: 'expense',
+          title: expToDelete.title,
+          deletedAt: dateFormatted,
+          summary: `રકમ: ₹${expToDelete.amount} | કેટેગરી: ${expToDelete.category} | તારીખ: ${expToDelete.date}`,
+          data: expToDelete
+        };
+        setTrashList(prev => [trashRec, ...prev]);
+        setExpenses(prev => prev.filter(e => e.id !== id));
+        showToast(`🗑️ ખર્ચ એન્ટ્રી ટ્રેશ બિનમાં ખસેડાઈ!`);
+      }
+    } else if (type === 'trash_item') {
+      setTrashList(prev => prev.filter(t => t.id !== id));
+      showToast(`❌ આઇટમ કાયમી ધોરણે ડિલીટ થઈ ગઈ.`);
+    } else if (type === 'all_trash') {
       setTrashList([]);
       showToast('🧹 ટ્રેશ બિન આખું ખાલી થઈ ગયું!');
     }
+
+    setDeleteConfirmTarget(null);
   };
 
   // UPDATE ORDER STATUS (e.g. placed -> confirmed -> packed -> out_for_delivery -> delivered)
@@ -1587,6 +1646,16 @@ export default function App() {
               >
                 <Plus className="w-4 h-4" />
                 <span>+ નવો સ્ટોક ઉમેરો</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowBillSettingsModal(true)}
+                className="bg-purple-700 hover:bg-purple-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer border border-purple-400"
+                title="બિલ વિગત, GST, લોગો, ઓફર અને ફ્રોડ એલર્ટ એડિટ કરો"
+              >
+                <FileText className="w-4 h-4 text-purple-200" />
+                <span>🧾 બિલ એડિટ & સેટિંગ્સ</span>
               </button>
 
               <button
@@ -3009,6 +3078,37 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 18. BILL / INVOICE DESIGN & CUSTOMIZATION MODAL (Admin Bill Editor) */}
+      {/* ========================================================================= */}
+      {showBillSettingsModal && (
+        <BillSettingsModal
+          isOpen={showBillSettingsModal}
+          onClose={() => setShowBillSettingsModal(false)}
+          settings={storeSettings}
+          onSave={updatedSettings => {
+            setStoreSettings(prev => ({
+              ...prev,
+              ...updatedSettings
+            }));
+            showToast('✅ બિલ સેટિંગ્સ & કસ્ટમાઇઝેશન સાચવાઈ ગયું!');
+          }}
+          onUploadLogo={handleImageFileUpload}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 19. RELIABLE IN-APP DELETE CONFIRMATION MODAL */}
+      {/* ========================================================================= */}
+      {deleteConfirmTarget && (
+        <ConfirmDeleteModal
+          isOpen={!!deleteConfirmTarget}
+          target={deleteConfirmTarget}
+          onClose={() => setDeleteConfirmTarget(null)}
+          onConfirm={handleExecuteConfirmedDelete}
+        />
       )}
 
       {/* ========================================================================= */}
