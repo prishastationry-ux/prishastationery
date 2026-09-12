@@ -1,0 +1,273 @@
+import { ProductItem, StoreSettings, BusinessStats, OrderRecord } from './types';
+
+export const DEFAULT_STORE_SETTINGS: StoreSettings = {
+  storeNameEn: 'PRISHA STATIONERY & ONLINE SERVICES',
+  storeNameGu: 'પ્રિષા સ્ટેશનરી અને ઓનલાઇન સર્વિસીસ',
+  tagline: 'CSC ડિજિટલ સેવા કેન્દ્ર & સ્ટેશનરી માર્ટ',
+  subTagline: '• પ્રિષા સ્ટેશનરી અને ઓનલાઇન સર્વિસીસ • થરાદ',
+  ownerName: 'BHARAT CHAUDHARY',
+  phone: '8140430395',
+  phoneDisplay: '+91 81404 30395',
+  upiId: '8140430395@apl',
+  payeeName: 'PRISHA STATIONERY',
+  gstNumber: '24AAAAA0000A1Z5',
+  address: '106, 107 Prince Arcade, Taluka Panchayat Same, Tharad, Dist: Vav-Tharad, Gujarat - 385565',
+  marqueeText: '💥 ધમાકા ઓફર: સ્કૂલ સ્ટેશનરી, નોટબુક હોલસેલ ભાવે, આધાર-પાન કાર્ડ, ઝેરોક્ષ અને લેમિનેશન પર વિશેષ છૂટ ઉપલબ્ધ! ★ પ્રિષા સ્ટેશનરી થરાદ ★ 81404 30395',
+  leftLogoUrl: '',
+  rightLogoUrl: '',
+  bannerImageUrl: '',
+  bannerTitle: 'ઓનલાઇન સરકારી સેવાઓ અને સ્ટેશનરી સામાન હવે તમારા હાથમાં!',
+  bannerSubtitle: 'નોટબુક, પેન, ઓફિસ ફાઇલ્સ, આધાર-પાન કાર્ડ, ઝેરોક્ષ પ્રિન્ટિંગ સરળતાથી ઓર્ડર કરો અને રસીદ મેળવો.',
+  customQrUrl: '',
+  invoiceFooterNote: 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર! માલ પરત લેવામાં આવશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે.',
+  adminPassword: 'Bharat@1994',
+  developerCredit: 'Bharat Chaudhary'
+};
+
+export const INITIAL_PRODUCTS: ProductItem[] = [
+  {
+    id: 'prod-1',
+    nameGu: 'નોટબુક (Classmate / Deluxe 172 Pg)',
+    nameEn: 'Classmate Long Notebook 172 Pages',
+    category: 'books',
+    price: 50,
+    costPrice: 35,
+    stock: 120,
+    unit: 'નંગ',
+    icon: '📖',
+    badge: 'બેસ્ટ સેલર',
+    description: 'ઉચ્ચ ગુણવત્તાવાળા સફેદ કાગળ સાથે સ્મૂથ રાઇટિંગ નોટબુક.'
+  },
+  {
+    id: 'prod-2',
+    nameGu: 'પ્રીમિયમ બોલપેન સેટ (10 નંગ)',
+    nameEn: 'Smooth Gel & Ball Pen Set (Pack of 10)',
+    category: 'stationery',
+    price: 80,
+    costPrice: 50,
+    stock: 95,
+    unit: 'પેકેટ',
+    icon: '✒️',
+    badge: 'પોપ્યુલર',
+    description: 'સ્મૂથ રાઇટિંગ અને લાંબા સમય સુધી ચાલતી બ્લુ/બ્લેક પેન.'
+  },
+  {
+    id: 'prod-3',
+    nameGu: 'ઓનલાઇન સરકારી ફોર્મ અરજી',
+    nameEn: 'Govt Online Application / Job Forms',
+    category: 'service',
+    price: 100,
+    costPrice: 20,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'અરજી',
+    icon: '📄',
+    badge: 'CSC સેવા',
+    description: 'તમામ પ્રકારની સરકારી ભરતી અને યોજનાઓના ઓનલાઇન ફોર્મ.'
+  },
+  {
+    id: 'prod-4',
+    nameGu: 'આધાર કાર્ડ પ્રિન્ટ & અપડેટ સેવા',
+    nameEn: 'Aadhaar PVC Print & Correction',
+    category: 'service',
+    price: 50,
+    costPrice: 15,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'કાર્ડ',
+    icon: '🪪',
+    badge: 'ઈન્સ્ટન્ટ',
+    description: 'ઓરિજિનલ આધાર PVC સ્માર્ટ કાર્ડ પ્રિન્ટિંગ.'
+  },
+  {
+    id: 'prod-5',
+    nameGu: 'પાન કાર્ડ (નવું / સુધારો)',
+    nameEn: 'PAN Card Apply & Name Correction',
+    category: 'service',
+    price: 180,
+    costPrice: 70,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'અરજી',
+    icon: '💳',
+    badge: 'CSC સેવા',
+    description: 'નવું પાન કાર્ડ અને જૂના કાર્ડમાં નામ/તારીખ સુધારો.'
+  },
+  {
+    id: 'prod-6',
+    nameGu: 'ઝેરોક્ષ / કલર પ્રિન્ટ આઉટ',
+    nameEn: 'High Speed B&W / Color Xerox & Print',
+    category: 'printing',
+    price: 3,
+    costPrice: 1,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'પેજ',
+    icon: '🖨️',
+    badge: 'સસ્તો ભાવ',
+    description: 'A4/FS સાઇઝ ઝેરોક્ષ અને હાઇ ક્વોલિટી કલર પ્રિન્ટ.'
+  },
+  {
+    id: 'prod-7',
+    nameGu: 'રેશન કાર્ડ / આવકનો દાખલો',
+    nameEn: 'Ration Card & Income Certificate Form',
+    category: 'service',
+    price: 80,
+    costPrice: 20,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'અરજી',
+    icon: '📦',
+    description: 'ડિજિટલ ગુજરાત પોર્ટલ પરથી તમામ પ્રમાણપત્ર અરજી.'
+  },
+  {
+    id: 'prod-8',
+    nameGu: 'ડ્રોઇંગ કલર સેટ & આર્ટ કિટ',
+    nameEn: 'Doms / Camlin Color Art Kit',
+    category: 'stationery',
+    price: 110,
+    costPrice: 75,
+    stock: 45,
+    unit: 'સેટ',
+    icon: '🎨',
+    badge: 'બાળકો માટે',
+    description: 'વોટર કલર, પેન્સિલ કલર, અને સ્કેચ બુક સેટ.'
+  },
+  {
+    id: 'prod-9',
+    nameGu: 'ઓફિસ કોબ્રા ફાઇલ & ફોલ્ડર',
+    nameEn: 'Heavy Office Cobra Document File',
+    category: 'office',
+    price: 35,
+    costPrice: 20,
+    stock: 150,
+    unit: 'નંગ',
+    icon: '📁',
+    description: 'દસ્તાવેજો સાચવવા માટે હેવી ક્વોલિટી કોબ્રા ફાઇલ.'
+  },
+  {
+    id: 'prod-10',
+    nameGu: 'સ્કૂલ & કોલેજ બેગ (વોટરપ્રૂફ)',
+    nameEn: 'Waterproof School & College Backpack',
+    category: 'bags',
+    price: 450,
+    costPrice: 320,
+    stock: 25,
+    unit: 'નંગ',
+    icon: '🎒',
+    badge: 'સ્પેશિયલ ડિસ્કાઉન્ટ',
+    description: 'મજબૂત ચેઇન અને વોટરપ્રૂફ મટીરીયલવાળી સ્કૂલ બેગ.'
+  },
+  {
+    id: 'prod-11',
+    nameGu: 'સાયન્ટિફિક & કોમર્સ કેલ્ક્યુલેટર',
+    nameEn: 'Citizen / Casio 12 Digit Calculator',
+    category: 'stationery',
+    price: 260,
+    costPrice: 190,
+    stock: 18,
+    unit: 'નંગ',
+    icon: '🔢',
+    description: '12 ડિજિટ ચેક & કરેક્ટ બિઝનેસ કેલ્ક્યુલેટર.'
+  },
+  {
+    id: 'prod-12',
+    nameGu: 'દસ્તાવેજ સ્કેનિંગ & PDF સેવા',
+    nameEn: 'HD Document Scan & Email / PDF',
+    category: 'service',
+    price: 20,
+    costPrice: 5,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'ડોક્યુમેન્ટ',
+    icon: '📤',
+    isSpecial: true,
+    description: 'હાઇ-ડેફિનેશન સ્કેનિંગ અને ઈમેઇલ સેન્ડિંગ.'
+  },
+  {
+    id: 'prod-13',
+    nameGu: 'આયુષ્માન ભારત કાર્ડ (PMJAY)',
+    nameEn: 'Ayushman Card Download & Print',
+    category: 'service',
+    price: 50,
+    costPrice: 15,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'કાર્ડ',
+    icon: '🛡️',
+    badge: 'PMJAY',
+    description: '૫ લાખ સુધીની મફત સારવાર માટેનું આયુષ્માન કાર્ડ.'
+  },
+  {
+    id: 'prod-14',
+    nameGu: 'ચૂંટણી કાર્ડ ઓનલાઇન (Voter ID)',
+    nameEn: 'Voter ID Card Online Apply / Download',
+    category: 'service',
+    price: 70,
+    costPrice: 20,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'કાર્ડ',
+    icon: '🗳️',
+    description: 'નવું ચૂંટણી કાર્ડ અને સરનામું ફેરબદલ કરવા માટે.'
+  },
+  {
+    id: 'prod-15',
+    nameGu: 'લેમિનેશન (PVC Lamination)',
+    nameEn: 'Heavy Glossy Lamination (ID / A4 / FS)',
+    category: 'printing',
+    price: 20,
+    costPrice: 5,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'નંગ',
+    icon: '📑',
+    badge: 'વોટરપ્રૂફ',
+    description: 'દસ્તાવેજોને સુરક્ષિત રાખવા માટે 125 માઇક્રોન લેમિનેશન.'
+  },
+  {
+    id: 'prod-16',
+    nameGu: 'સ્પાઇરલ & બુક બાઇન્ડિંગ',
+    nameEn: 'Spiral & Hard Book Binding',
+    category: 'printing',
+    price: 40,
+    costPrice: 12,
+    stock: 'સેવા',
+    isService: true,
+    unit: 'બુક',
+    icon: '📚',
+    description: 'પ્રોજેક્ટ રિપોર્ટ અને મટીરીયલ માટે સ્પાઇરલ બાઇન્ડિંગ.'
+  }
+];
+
+export const INITIAL_STATS: BusinessStats = {
+  dailySales: 180.00,
+  dailyPurchase: 7750.00,
+  netProfit: 0.00,
+  totalLoss: 845.00,
+  outOfStock: 0,
+  lowStock: 0,
+  itemsSold: 13,
+  totalBills: 3
+};
+
+export const INITIAL_ORDERS: OrderRecord[] = [
+  {
+    id: 'ord-101',
+    invoiceNo: 'INV-2026-001',
+    date: '12/09/2026 10:30 AM',
+    customerName: 'રમેશભાઈ પટેલ',
+    mobile: '9825012345',
+    address: 'ગામ: વાવ, થરાદ',
+    items: [
+      { name: 'નોટબુક (Classmate)', qty: 2, price: 50, unit: 'નંગ' },
+      { name: 'પ્રીમિયમ બોલપેન સેટ', qty: 1, price: 80, unit: 'પેકેટ' }
+    ],
+    subtotal: 180,
+    discount: 0,
+    tax: 0,
+    total: 180,
+    paymentMode: 'UPI',
+    paymentStatus: 'Paid'
+  }
+];

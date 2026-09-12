@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import QRCode from 'qrcode';
 import * as XLSX from 'xlsx';
 import {
   ShoppingCart,
   Trash2,
-  CheckCircle,
   Phone,
   Lock,
   Unlock,
@@ -20,345 +18,97 @@ import {
   Eye,
   EyeOff,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  Package,
+  Layers,
+  MapPin,
+  Clock,
+  User,
+  Plus,
+  Minus,
+  Check,
+  Zap,
+  ArrowRight,
+  TrendingUp,
+  Tag,
+  Store,
+  ChevronRight,
+  Camera,
+  Upload,
+  BarChart3,
+  Download,
+  Receipt,
+  Truck,
+  AlertCircle,
+  CheckCircle2,
+  ExternalLink,
+  Filter
 } from 'lucide-react';
 
-// Product Interface with support for custom image uploads or emojis
-interface ProductItem {
-  id: string;
-  nameGu: string;
-  nameEn: string;
-  category: string;
-  price: number;
-  costPrice: number;
-  stock: number | string; // 'સેવા' or number
-  isService?: boolean;
-  unit: string;
-  icon?: string;
-  imageUrl?: string;
-  badge?: string;
-  isSpecial?: boolean;
-}
-
-interface CartItem {
-  product: ProductItem;
-  quantity: number;
-}
-
-interface BillItem {
-  name: string;
-  qty: number;
-  price: number;
-  unit?: string;
-}
-
-interface OrderRecord {
-  id: string;
-  invoiceNo: string;
-  date: string;
-  customerName: string;
-  mobile: string;
-  address: string;
-  items: BillItem[];
-  subtotal: number;
-  discount: number;
-  tax: number;
-  total: number;
-  paymentMode: 'Cash' | 'UPI' | 'બાકી (Credit)' | 'Online';
-  paymentStatus: 'Paid' | 'Pending' | 'બાકી';
-  paymentScreenshot?: string;
-  notes?: string;
-}
-
-interface ExpenseRecord {
-  id: string;
-  title: string;
-  amount: number;
-  category: string;
-  date: string;
-  notes?: string;
-}
-
-interface PurchaseRecord {
-  id: string;
-  supplierName: string;
-  billNo: string;
-  date: string;
-  totalAmount: number;
-  itemsCount: number;
-  paymentStatus: 'Paid' | 'Pending';
-}
-
-// Initial Seed Products
-const INITIAL_POS_ITEMS: ProductItem[] = [
-  {
-    id: 'pos-1',
-    nameGu: 'નોટબુક',
-    nameEn: 'Notebook / Register',
-    category: 'books',
-    price: 50,
-    costPrice: 35,
-    stock: 105,
-    unit: 'નંગ',
-    icon: '📖'
-  },
-  {
-    id: 'pos-2',
-    nameGu: 'પેન-પેન્સિલ',
-    nameEn: 'Pen & Pencil Set',
-    category: 'stationery',
-    price: 10,
-    costPrice: 6,
-    stock: 299,
-    unit: 'નંગ',
-    icon: '✒️'
-  },
-  {
-    id: 'pos-3',
-    nameGu: 'ઓનલાઇન ફોર્મ',
-    nameEn: 'Online Form Application',
-    category: 'service',
-    price: 100,
-    costPrice: 20,
-    stock: 'સેવા',
-    isService: true,
-    unit: 'અરજી',
-    icon: '📄'
-  },
-  {
-    id: 'pos-4',
-    nameGu: 'આધાર સેવાઓ',
-    nameEn: 'Aadhaar Services',
-    category: 'service',
-    price: 50,
-    costPrice: 15,
-    stock: 'સેવા',
-    isService: true,
-    unit: 'કાર્ડ',
-    icon: '🪪'
-  },
-  {
-    id: 'pos-5',
-    nameGu: 'પાન કાર્ડ',
-    nameEn: 'PAN Card New & Correction',
-    category: 'service',
-    price: 200,
-    costPrice: 70,
-    stock: 'સેવા',
-    isService: true,
-    unit: 'અરજી',
-    icon: '💳'
-  },
-  {
-    id: 'pos-6',
-    nameGu: 'પ્રિન્ટ / ઝેરોક્ષ',
-    nameEn: 'Print & Xerox Service',
-    category: 'service',
-    price: 3,
-    costPrice: 1,
-    stock: 'સેવા',
-    isService: true,
-    unit: 'પેજ',
-    icon: '🖨️'
-  },
-  {
-    id: 'pos-7',
-    nameGu: 'રેશન કાર્ડ',
-    nameEn: 'Ration Card Services',
-    category: 'service',
-    price: 80,
-    costPrice: 20,
-    stock: 'સેવા',
-    isService: true,
-    unit: 'અરજી',
-    icon: '📦'
-  },
-  {
-    id: 'pos-8',
-    nameGu: 'ડ્રોઇંગ સામાન',
-    nameEn: 'Drawing & Art Kit',
-    category: 'stationery',
-    price: 110,
-    costPrice: 75,
-    stock: 65,
-    unit: 'સેટ',
-    icon: '🎨'
-  },
-  {
-    id: 'pos-9',
-    nameGu: 'ઓફિસ ફાઇલ',
-    nameEn: 'Office Cobra File & Folder',
-    category: 'stationery',
-    price: 35,
-    costPrice: 20,
-    stock: 114,
-    unit: 'નંગ',
-    icon: '📁'
-  },
-  {
-    id: 'pos-10',
-    nameGu: 'સ્કૂલ બેગ',
-    nameEn: 'School & College Bag',
-    category: 'stationery',
-    price: 450,
-    costPrice: 320,
-    stock: 22,
-    unit: 'નંગ',
-    icon: '🎒'
-  },
-  {
-    id: 'pos-11',
-    nameGu: 'કેલ્ક્યુલેટર',
-    nameEn: 'Commercial Calculator',
-    category: 'stationery',
-    price: 250,
-    costPrice: 180,
-    stock: 14,
-    unit: 'નંગ',
-    icon: '🔢'
-  },
-  {
-    id: 'pos-12',
-    nameGu: 'દસ્તાવેજ અપલોડ',
-    nameEn: 'Document Scan & Upload',
-    category: 'service',
-    price: 40,
-    costPrice: 10,
-    stock: 'નવું',
-    isService: true,
-    unit: 'સેટ',
-    icon: '📤',
-    isSpecial: true,
-    badge: 'નવું'
-  },
-  {
-    id: 'pos-13',
-    nameGu: 'આયુષ્માન કાર્ડ',
-    nameEn: 'PMJAY Ayushman Card',
-    category: 'service',
-    price: 50,
-    costPrice: 15,
-    stock: 'સેવા',
-    isService: true,
-    unit: 'કાર્ડ',
-    icon: '🛡️'
-  },
-  {
-    id: 'pos-14',
-    nameGu: 'ચૂંટણી કાર્ડ',
-    nameEn: 'Voter ID Card Online',
-    category: 'service',
-    price: 70,
-    costPrice: 20,
-    stock: 'સેવા',
-    isService: true,
-    unit: 'કાર્ડ',
-    icon: '🗳️'
-  }
-];
+import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord } from './types';
+import { DEFAULT_STORE_SETTINGS, INITIAL_PRODUCTS, INITIAL_STATS, INITIAL_ORDERS } from './data';
+import { InvoiceModal } from './components/InvoiceModal';
+import { CartDrawer } from './components/CartDrawer';
+import { ImageCropModal } from './components/ImageCropModal';
+import { ChangePasswordModal } from './components/ChangePasswordModal';
+import { OrderTrackingModal } from './components/OrderTrackingModal';
 
 export default function App() {
-  // Navigation View: ALWAYS DEFAULT TO 'customer' SO LINK SHARING OPENS CUSTOMER SHOP BY DEFAULT
-  const [activeTab, setActiveTab] = useState<'admin' | 'customer' | 'gst_bill' | 'purchase' | 'expenses' | 'settings'>('customer');
+  // Navigation View: Default to 'customer' for all visitors
+  const [activeTab, setActiveTab] = useState<'customer' | 'admin' | 'gst_bill' | 'purchase' | 'expenses' | 'settings'>('customer');
   
-  // Admin Password & Lock State (Bharat@1994)
+  // Admin Password & Lock State (Default: Bharat@1994)
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(false);
   const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
   const [enteredPassword, setEnteredPassword] = useState<string>('');
   const [showPasswordText, setShowPasswordText] = useState<boolean>(false);
   const [passwordError, setPasswordError] = useState<string>('');
 
-  // UI Zoom state
-  const [zoomLevel, setZoomLevel] = useState<number>(100);
+  // Order Tracking & Admin Order Management States
+  const [showTrackingModal, setShowTrackingModal] = useState(false);
+  const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
+  const [viewingScreenshot, setViewingScreenshot] = useState<string | null>(null);
+  const [adminOrderFilter, setAdminOrderFilter] = useState<'all' | 'online' | 'counter'>('all');
 
   // Store Settings (Full editable from Admin)
-  const [storeSettings, setStoreSettings] = useState(() => {
-    const saved = localStorage.getItem('prisha_store_settings');
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
+    const saved = localStorage.getItem('prisha_store_settings_v4');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
-    return {
-      storeNameEn: 'PRISHA STATIONERY & ONLINE SERVICES',
-      storeNameGu: 'પ્રિશા સ્ટેશનરી અને ઓનલાઇન સર્વિસીસ',
-      tagline: '(CSC ડિજિટલ સેવા કેન્દ્ર)',
-      subTagline: '• પ્રિશા સ્ટેશનરી અને ઓનલાઇન સર્વિસીસ',
-      ownerName: 'BHARAT CHAUDHARY',
-      phone: '8140430395',
-      phoneDisplay: '+૯૧ ૮૧૪૦૪ ૩૦૩૯૫',
-      upiId: '8140430395@apl',
-      payeeName: 'PRISHA STATIONERY',
-      gstNumber: '24AAAAA0000A1Z5',
-      address: 'ADD : 106,107 prince arced taluka panchayt same tharad dist vav.tharad ujarat pin 385565',
-      marqueeText: '💥 ધમાકા ઓફર: સ્કૂલ સ્ટેશનરી, નોટબુક હોલસેલ ભાવે, આધાર-પાન કાર્ડ, ઝેરોક્ષ અને લેમિનેશન પર વિશેષ છૂટ ઉપલબ્ધ! ★ CSC ડિજિટલ સેવા કેન્દ્ર ★ 81404 30395',
-      leftLogoUrl: '',
-      rightLogoUrl: '',
-      bannerImageUrl: '',
-      bannerText: '🖼️ જાહેરાત બેનર\n(Click to edit banner & photo)',
-      adminProfileImageUrl: '',
-      developerCredit: 'Bharat Chaudhary',
-      lastUpdate: '12/09/2026',
-      adminPassword: 'Bharat@1994'
-    };
+    return DEFAULT_STORE_SETTINGS;
   });
 
   // Products & Inventory state
   const [posItems, setPosItems] = useState<ProductItem[]>(() => {
-    const saved = localStorage.getItem('prisha_exact_items_v2');
+    const saved = localStorage.getItem('prisha_products_v4');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
-    return INITIAL_POS_ITEMS;
+    return INITIAL_PRODUCTS;
   });
 
-  // Business Statistics State (On-click editable)
-  const [stats, setStats] = useState(() => {
-    const saved = localStorage.getItem('prisha_exact_stats_v2');
+  // Business Statistics State
+  const [stats, setStats] = useState<BusinessStats>(() => {
+    const saved = localStorage.getItem('prisha_stats_v4');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
-    return {
-      dailySales: 180.00,
-      dailyPurchase: 7750.00,
-      netProfit: 0.00,
-      totalLoss: 845.00,
-      outOfStock: 1,
-      lowStock: 0,
-      itemsSold: 13,
-      totalBills: 3
-    };
+    return INITIAL_STATS;
   });
 
-  // Order Logs & Invoices State
+  // Orders & Invoices State
   const [orders, setOrders] = useState<OrderRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_order_records');
+    const saved = localStorage.getItem('prisha_orders_v4');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
-    return [
-      {
-        id: 'ord-101',
-        invoiceNo: 'INV-2026-001',
-        date: '12/09/2026 10:30 AM',
-        customerName: 'રમેશભાઈ પટેલ',
-        mobile: '9825012345',
-        address: 'ગામ: વાવ, થરાદ',
-        items: [
-          { name: 'નોટબુક (Notebook)', qty: 2, price: 50 },
-          { name: 'પેન-પેન્સિલ (Pen Set)', qty: 3, price: 10 }
-        ],
-        subtotal: 130,
-        discount: 0,
-        tax: 0,
-        total: 130,
-        paymentMode: 'Cash',
-        paymentStatus: 'Paid'
-      }
-    ];
+    return INITIAL_ORDERS;
   });
 
   // Expenses & Purchases
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_expenses');
+    const saved = localStorage.getItem('prisha_expenses_v4');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
@@ -369,7 +119,7 @@ export default function App() {
   });
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_purchases');
+    const saved = localStorage.getItem('prisha_purchases_v4');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) { console.error(e); }
     }
@@ -378,10 +128,17 @@ export default function App() {
     ];
   });
 
-  // Search filter
+  // Search & Filter Category
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  // Modals and interactive editing state
+  // Customer Shopping Cart & UI State
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [isCartDrawerOpen, setIsCartDrawerOpen] = useState<boolean>(false);
+  const [activeInvoiceOrder, setActiveInvoiceOrder] = useState<OrderRecord | null>(null);
+  const [isSuccessModal, setIsSuccessModal] = useState<boolean>(false);
+
+  // Modals and interactive editing state for Admin
   const [editingItem, setEditingItem] = useState<ProductItem | null>(null);
   const [isAddingNewItem, setIsAddingNewItem] = useState(false);
   const [editStatKey, setEditStatKey] = useState<string | null>(null);
@@ -389,8 +146,23 @@ export default function App() {
   const [editStatValue, setEditStatValue] = useState<string>('');
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showBannerEditModal, setShowBannerEditModal] = useState(false);
-  const [activePrintInvoice, setActivePrintInvoice] = useState<OrderRecord | null>(null);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string>('');
+
+  // Image Cropper & Zoom state
+  const [cropModalData, setCropModalData] = useState<{
+    isOpen: boolean;
+    imageSrc: string;
+    title: string;
+    aspectPreset: 'square' | 'banner' | 'standard' | 'free';
+    target: 'leftLogo' | 'rightLogo' | 'bannerImage' | 'customQr' | 'editingProduct' | 'newProduct' | null;
+  }>({
+    isOpen: false,
+    imageSrc: '',
+    title: '',
+    aspectPreset: 'square',
+    target: null
+  });
 
   // Fast new product form state
   const [newProdName, setNewProdName] = useState('');
@@ -401,59 +173,51 @@ export default function App() {
   const [newProdIcon, setNewProdIcon] = useState('📦');
   const [newProdImage, setNewProdImage] = useState<string>('');
   const [newProdUnit, setNewProdUnit] = useState('નંગ');
-  const [newProdCategory, setNewProdCategory] = useState('stationery');
+  const [newProdCategory, setNewProdCategory] = useState<'books' | 'stationery' | 'service' | 'printing' | 'office' | 'bags' | 'other'>('stationery');
+  const [newProdBadge, setNewProdBadge] = useState('');
 
-  // Customer Shopping & Paywall
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [customerName, setCustomerName] = useState('');
-  const [customerMobile, setCustomerMobile] = useState('');
-  const [customerAddress, setCustomerAddress] = useState('');
-  const [paymentProofFile, setPaymentProofFile] = useState<File | null>(null);
-  const [paymentProofPreview, setPaymentProofPreview] = useState<string>('');
-  const [upiQrCodeUrl, setUpiQrCodeUrl] = useState<string>('');
-  const [billPaymentMode, setBillPaymentMode] = useState<'Cash' | 'UPI' | 'બાકી (Credit)' | 'Online'>('UPI');
-
-  // POS Direct Billing Form
+  // POS Direct Counter Billing Form
   const [posCustomerName, setPosCustomerName] = useState('');
   const [posCustomerMobile, setPosCustomerMobile] = useState('');
   const [posPaymentMode, setPosPaymentMode] = useState<'Cash' | 'UPI' | 'બાકી (Credit)' | 'Online'>('Cash');
   const [posDiscount, setPosDiscount] = useState<number>(0);
 
-  // Visitor Counter
+  // Visitor Counter - increments realistically on each load / visit
   const [visitorCount, setVisitorCount] = useState<string>(() => {
-    const saved = localStorage.getItem('prisha_visitor_count');
+    const saved = localStorage.getItem('prisha_visitor_count_v4');
     if (!saved) {
-      localStorage.setItem('prisha_visitor_count', '1000000001');
-      return '1000000001';
+      const initial = '1000000156';
+      localStorage.setItem('prisha_visitor_count_v4', initial);
+      return initial;
     }
     const nextVal = (BigInt(saved) + BigInt(1)).toString();
-    localStorage.setItem('prisha_visitor_count', nextVal);
+    localStorage.setItem('prisha_visitor_count_v4', nextVal);
     return nextVal;
   });
 
   // Local Storage synchronization
   useEffect(() => {
-    localStorage.setItem('prisha_store_settings', JSON.stringify(storeSettings));
+    localStorage.setItem('prisha_store_settings_v4', JSON.stringify(storeSettings));
   }, [storeSettings]);
 
   useEffect(() => {
-    localStorage.setItem('prisha_exact_items_v2', JSON.stringify(posItems));
+    localStorage.setItem('prisha_products_v4', JSON.stringify(posItems));
   }, [posItems]);
 
   useEffect(() => {
-    localStorage.setItem('prisha_exact_stats_v2', JSON.stringify(stats));
+    localStorage.setItem('prisha_stats_v4', JSON.stringify(stats));
   }, [stats]);
 
   useEffect(() => {
-    localStorage.setItem('prisha_order_records', JSON.stringify(orders));
+    localStorage.setItem('prisha_orders_v4', JSON.stringify(orders));
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem('prisha_expenses', JSON.stringify(expenses));
+    localStorage.setItem('prisha_expenses_v4', JSON.stringify(expenses));
   }, [expenses]);
 
   useEffect(() => {
-    localStorage.setItem('prisha_purchases', JSON.stringify(purchases));
+    localStorage.setItem('prisha_purchases_v4', JSON.stringify(purchases));
   }, [purchases]);
 
   // Recalculate out of stock / low stock count
@@ -467,26 +231,9 @@ export default function App() {
     }));
   }, [posItems]);
 
-  // Generate Dynamic QR Code for Cart Total using the store's current UPI ID
-  const cartTotal = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
-
-  useEffect(() => {
-    if (cartTotal > 0 || activeTab === 'gst_bill') {
-      const amount = cartTotal > 0 ? cartTotal : 100;
-      const upiUrl = `upi://pay?pa=${encodeURIComponent(storeSettings.upiId)}&pn=${encodeURIComponent(storeSettings.payeeName)}&am=${amount}&cu=INR&tn=PrishaStationeryBill`;
-      QRCode.toDataURL(upiUrl, {
-        width: 240,
-        margin: 1,
-        color: { dark: '#000000', light: '#ffffff' }
-      })
-        .then(url => setUpiQrCodeUrl(url))
-        .catch(err => console.error(err));
-    }
-  }, [cartTotal, storeSettings.upiId, storeSettings.payeeName, activeTab]);
-
   const showToast = (msg: string) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 3500);
+    setTimeout(() => setToastMessage(''), 3000);
   };
 
   // Convert File to Base64
@@ -499,22 +246,7 @@ export default function App() {
     });
   };
 
-  // Admin Access Request Handler (checks if unlocked, otherwise requests Bharat@1994)
-  const handleRequestAdminAccess = (targetTab: 'admin' | 'gst_bill' | 'purchase' | 'expenses' | 'settings' = 'admin') => {
-    if (isAdminUnlocked) {
-      if (targetTab === 'settings') {
-        setShowSettingsModal(true);
-      } else {
-        setActiveTab(targetTab);
-      }
-    } else {
-      setEnteredPassword('');
-      setPasswordError('');
-      setShowPasswordModal(true);
-    }
-  };
-
-  // Handle Submit Password
+  // Handle Login Password Verification
   const handleVerifyPassword = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const correctPass = storeSettings.adminPassword || 'Bharat@1994';
@@ -523,7 +255,7 @@ export default function App() {
       setShowPasswordModal(false);
       setPasswordError('');
       setActiveTab('admin');
-      showToast('🔓 એડમિન પેનલ સફળતાપૂર્વક અનલૉક થઈ! સ્વાગત છે ભરતભાઈ.');
+      showToast('🔓 સ્વાગત છે ભરતભાઈ! એડમિન પેનલ અનલૉક થઈ ગઈ.');
     } else {
       setPasswordError('❌ ખોટો પાસવર્ડ! કૃપા કરીને સાચો પાસવર્ડ દાખલ કરો.');
     }
@@ -534,10 +266,10 @@ export default function App() {
     setIsAdminUnlocked(false);
     setActiveTab('customer');
     setShowSettingsModal(false);
-    showToast('🔒 એડમિન પેનલ લૉક થઈ ગઈ! (ગ્રાહક પેજ ચાલુ છે)');
+    showToast('🔒 લૉગઆઉટ સફળ! (ગ્રાહક મોડ ચાલુ છે)');
   };
 
-  // Increment / Decrement Stock on POS Click
+  // Stock modification by Admin
   const modifyStock = (itemId: string, delta: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setPosItems(prev =>
@@ -569,10 +301,10 @@ export default function App() {
     }
   };
 
-  // Delete an Item completely with confirmation
+  // Delete an Item completely
   const handleDeleteItem = (itemId: string, itemName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    if (window.confirm(`શું તમે ખરેખર "${itemName}" ને લિસ્ટમાંથી ડીલીટ (Delete) કરવા માંગો છો?`)) {
+    if (window.confirm(`શું તમે ખરેખર "${itemName}" ને લિસ્ટમાંથી ડીલીટ કરવા માંગો છો?`)) {
       setPosItems(prev => prev.filter(item => item.id !== itemId));
       if (editingItem?.id === itemId) setEditingItem(null);
       showToast(`🗑️ "${itemName}" સફળતાપૂર્વક ડીલીટ થઈ ગઈ!`);
@@ -588,7 +320,7 @@ export default function App() {
     }
 
     const newItem: ProductItem = {
-      id: `pos-${Date.now()}`,
+      id: `prod-${Date.now()}`,
       nameGu: newProdName,
       nameEn: newProdEnName || newProdName,
       category: newProdCategory,
@@ -598,13 +330,15 @@ export default function App() {
       isService: newProdCategory === 'service',
       unit: newProdUnit || 'નંગ',
       icon: newProdIcon || '📦',
-      imageUrl: newProdImage || undefined
+      imageUrl: newProdImage || undefined,
+      badge: newProdBadge || undefined
     };
 
     setPosItems(prev => [newItem, ...prev]);
     setNewProdName('');
     setNewProdEnName('');
     setNewProdImage('');
+    setNewProdBadge('');
     setIsAddingNewItem(false);
     showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu}`);
   };
@@ -618,77 +352,68 @@ export default function App() {
     }
   };
 
-  // On-Click Stat Override Trigger
-  const handleStatClick = (key: string, label: string, currentVal: number) => {
-    setEditStatKey(key);
-    setEditStatLabel(label);
-    setEditStatValue(currentVal.toString());
-  };
-
-  const handleSaveStat = () => {
-    if (editStatKey) {
-      setStats(prev => ({
-        ...prev,
-        [editStatKey]: Number(editStatValue) || 0
-      }));
-      showToast(`✏️ ${editStatLabel} બદલાઈને ₹${editStatValue} થયું!`);
-      setEditStatKey(null);
-    }
-  };
-
-  // Master Reset Stats to Zero
-  const handleMasterResetStats = () => {
-    if (window.confirm('શું તમે ખરેખર બધા સ્ટેટ્સ રીસેટ કરીને 0 (Zero) કરવા માંગો છો?')) {
-      setStats({
-        dailySales: 0,
-        dailyPurchase: 0,
-        netProfit: 0,
-        totalLoss: 0,
-        outOfStock: 0,
-        lowStock: 0,
-        itemsSold: 0,
-        totalBills: 0
-      });
-      showToast('🔄 બધા સ્ટેટ્સ 0 (Zero) થઈ ગયા!');
-    }
-  };
-
-  // Handle Logo Upload (Left, Right, or Admin profile)
+  // Handle Image Uploads with Interactive Crop & Zoom Modal for Admin
   const handleImageFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    target: 'leftLogo' | 'rightLogo' | 'bannerImage' | 'adminProfile' | 'editingProduct' | 'newProduct'
+    target: 'leftLogo' | 'rightLogo' | 'bannerImage' | 'customQr' | 'editingProduct' | 'newProduct'
   ) => {
     const file = e.target.files?.[0];
     if (file) {
       try {
         const base64 = await fileToBase64(file);
-        if (target === 'leftLogo') {
-          setStoreSettings(prev => ({ ...prev, leftLogoUrl: base64 }));
-          showToast('✅ ડાબો લોગો ફોટો અપલોડ થયો!');
-        } else if (target === 'rightLogo') {
-          setStoreSettings(prev => ({ ...prev, rightLogoUrl: base64 }));
-          showToast('✅ જમણો લોગો ફોટો અપલોડ થયો!');
-        } else if (target === 'bannerImage') {
-          setStoreSettings(prev => ({ ...prev, bannerImageUrl: base64 }));
-          showToast('✅ જાહેરાત બેનર ફોટો અપલોડ થયો!');
-        } else if (target === 'adminProfile') {
-          setStoreSettings(prev => ({ ...prev, adminProfileImageUrl: base64 }));
-          showToast('✅ એડમિન પ્રોફાઇલ ફોટો અપલોડ થયો!');
-        } else if (target === 'editingProduct' && editingItem) {
-          setEditingItem({ ...editingItem, imageUrl: base64 });
-          showToast('✅ આઇટમ ફોટો અપલોડ થયો!');
-        } else if (target === 'newProduct') {
-          setNewProdImage(base64);
-          showToast('✅ નવી પ્રોડક્ટ ફોટો અપલોડ થયો!');
-        }
+        const titleMap = {
+          leftLogo: 'ડાબો લોગો ફોટો ક્રોપ અને ઝૂમ કરો (Left Logo)',
+          rightLogo: 'જમણો લોગો ફોટો ક્રોપ અને ઝૂમ કરો (Right Logo)',
+          bannerImage: 'દુકાન પ્રોમો બેનર ક્રોપ અને ઝૂમ કરો (Banner)',
+          customQr: 'કસ્ટમ QR કોડ ફોટો ક્રોપ કરો (UPI QR)',
+          editingProduct: 'પ્રોડક્ટ ફોટો ક્રોપ અને ઝૂમ કરો',
+          newProduct: 'નવી પ્રોડક્ટ ફોટો ક્રોપ અને ઝૂમ કરો'
+        };
+
+        setCropModalData({
+          isOpen: true,
+          imageSrc: base64,
+          title: titleMap[target] || 'ફોટો ક્રોપ અને ઝૂમ કરો',
+          aspectPreset: target === 'bannerImage' ? 'banner' : 'square',
+          target
+        });
+        e.target.value = '';
       } catch (err) {
         console.error(err);
-        showToast('❌ ફોટો અપલોડ કરવામાં ભૂલ આવી.');
+        showToast('❌ ફોટો વાંચવામાં ભૂલ આવી.');
       }
     }
   };
 
-  // Cart operations
+  // Handle final cropped image save
+  const handleCropComplete = (croppedBase64: string) => {
+    const target = cropModalData.target;
+    if (!target) return;
+
+    if (target === 'leftLogo') {
+      setStoreSettings(prev => ({ ...prev, leftLogoUrl: croppedBase64 }));
+      showToast('✅ ડાબો લોગો ફોટો અપડેટ થયો!');
+    } else if (target === 'rightLogo') {
+      setStoreSettings(prev => ({ ...prev, rightLogoUrl: croppedBase64 }));
+      showToast('✅ જમણો લોગો ફોટો અપડેટ થયો!');
+    } else if (target === 'bannerImage') {
+      setStoreSettings(prev => ({ ...prev, bannerImageUrl: croppedBase64 }));
+      showToast('✅ જાહેરાત બેનર ફોટો અપડેટ થયો!');
+    } else if (target === 'customQr') {
+      setStoreSettings(prev => ({ ...prev, customQrUrl: croppedBase64 }));
+      showToast('✅ કસ્ટમ QR કોડ અપડેટ થયો!');
+    } else if (target === 'editingProduct' && editingItem) {
+      setEditingItem({ ...editingItem, imageUrl: croppedBase64 });
+      showToast('✅ પ્રોડક્ટ ફોટો ક્રોપ અને અપલોડ થયો!');
+    } else if (target === 'newProduct') {
+      setNewProdImage(croppedBase64);
+      showToast('✅ નવી પ્રોડક્ટ ફોટો ક્રોપ અને અપલોડ થયો!');
+    }
+
+    setCropModalData(prev => ({ ...prev, isOpen: false }));
+  };
+
+  // Customer Cart Operations
   const addToCart = (product: ProductItem) => {
     setCart(prev => {
       const exist = prev.find(i => i.product.id === product.id);
@@ -697,7 +422,8 @@ export default function App() {
       }
       return [...prev, { product, quantity: 1 }];
     });
-    showToast(`🛒 ${product.nameGu} કાર્ટમાં ઉમેરાયું!`);
+    // Friendly feedback without obstructing screen
+    showToast(`🛒 "${product.nameGu}" કાર્ટમાં ઉમેરાયું!`);
   };
 
   const updateCartQty = (productId: string, delta: number) => {
@@ -714,44 +440,23 @@ export default function App() {
     );
   };
 
-  // Customer Order Trigger with Payment Screenshot Lock
-  const handleCustomerWhatsAppOrder = () => {
-    if (!customerName.trim() || !customerMobile.trim() || !customerAddress.trim()) {
-      showToast('⚠️ કૃપા કરીને તમારું નામ, મોબાઇલ નંબર અને સરનામું ભરો!');
-      return;
-    }
-    if (!paymentProofFile && !paymentProofPreview) {
-      showToast('⚠️ પેમેન્ટ રસીદ / સ્ક્રીનશોટ અપલોડ કરવો ફરજિયાત છે!');
-      return;
-    }
+  const removeCartItem = (productId: string) => {
+    setCart(prev => prev.filter(i => i.product.id !== productId));
+    showToast('🗑️ આઇટમ કાર્ટમાંથી દૂર કરી.');
+  };
 
+  // CUSTOMER CONFIRM ORDER: Instant On-Screen Success & Invoice
+  const handleCustomerConfirmOrder = (orderDetails: {
+    customerName: string;
+    mobile: string;
+    address: string;
+    paymentMode: 'UPI' | 'Cash';
+    paymentScreenshot?: string;
+  }) => {
     const orderId = `PRISHA-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-
-    let itemsStr = '';
-    cart.forEach((i, idx) => {
-      itemsStr += `${idx + 1}. *${i.product.nameGu}* (${i.product.nameEn}) x ${i.quantity} = ₹${i.product.price * i.quantity}\n`;
-    });
-
-    const msg =
-      `🧾 *નવો ઓર્ડર - ${storeSettings.storeNameGu}*\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🆔 *ઓર્ડર નં:* ${orderId}\n` +
-      `📅 *તારીખ:* ${dateFormatted}\n` +
-      `👤 *ગ્રાહકનું નામ:* ${customerName}\n` +
-      `📞 *મોબાઇલ:* +91 ${customerMobile}\n` +
-      `📍 *સરનામું:* ${customerAddress}\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🛒 *આઇટમ્સની યાદી:*\n${itemsStr}` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `💰 *કુલ રકમ:* ₹${cartTotal}/-\n` +
-      `💳 *ચુકવણી પદ્ધતિ:* ${billPaymentMode} (UPI ID: ${storeSettings.upiId})\n` +
-      `📸 *પેમેન્ટ સ્ક્રીનશોટ:* ઓર્ડર સાથે જોડેલ છે ✅\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `📍 *દુકાન:* ${storeSettings.address}\n` +
-      `📞 *મોબાઇલ:* +91 ${storeSettings.phone}\n\n` +
-      `નમસ્તે ${storeSettings.ownerName}, મારો ઓર્ડર કન્ફર્મ કરવા વિનંતી છે.`;
+    const totalAmount = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
 
     // Deduct stock
     setPosItems(prev =>
@@ -764,45 +469,133 @@ export default function App() {
       })
     );
 
-    // Record order
-    const inv: OrderRecord = {
+    const newOrder: OrderRecord = {
       id: `ord-${Date.now()}`,
       invoiceNo: orderId,
       date: dateFormatted,
-      customerName,
-      mobile: customerMobile,
-      address: customerAddress,
-      items: cart.map(c => ({ name: c.product.nameGu, qty: c.quantity, price: c.product.price, unit: c.product.unit })),
-      subtotal: cartTotal,
+      customerName: orderDetails.customerName,
+      mobile: orderDetails.mobile,
+      address: orderDetails.address,
+      items: cart.map(c => ({
+        name: c.product.nameGu,
+        qty: c.quantity,
+        price: c.product.price,
+        unit: c.product.unit
+      })),
+      subtotal: totalAmount,
       discount: 0,
       tax: 0,
-      total: cartTotal,
-      paymentMode: billPaymentMode,
-      paymentStatus: billPaymentMode === 'બાકી (Credit)' ? 'બાકી' : 'Paid',
-      paymentScreenshot: paymentProofPreview
+      total: totalAmount,
+      paymentMode: orderDetails.paymentMode,
+      paymentStatus: 'Paid',
+      orderType: 'online',
+      orderStatus: 'placed',
+      paymentScreenshot: orderDetails.paymentScreenshot,
+      statusUpdatedAt: dateFormatted
     };
 
-    setOrders(prev => [inv, ...prev]);
-    setActivePrintInvoice(inv);
+    setOrders(prev => [newOrder, ...prev]);
 
-    // Update stats
+    // Update Stats
     setStats(s => ({
       ...s,
-      dailySales: Number((s.dailySales + cartTotal).toFixed(2)),
+      dailySales: Number((s.dailySales + totalAmount).toFixed(2)),
       itemsSold: s.itemsSold + cart.reduce((acc, curr) => acc + curr.quantity, 0),
       totalBills: s.totalBills + 1
     }));
 
-    // WhatsApp Redirect
-    window.open(`https://wa.me/91${storeSettings.phone}?text=${encodeURIComponent(msg)}`, '_blank');
-
+    // Clear Cart and Close Drawer
     setCart([]);
-    setPaymentProofFile(null);
-    setPaymentProofPreview('');
-    showToast('🎉 ઓર્ડર સફળતાપૂર્વક કન્ફર્મ થઈ ગયો!');
+    setIsCartDrawerOpen(false);
+
+    // Open Instant Order Success & Printable Bill Modal on Customer Screen!
+    setActiveInvoiceOrder(newOrder);
+    setIsSuccessModal(true);
+    showToast('🎉 ઓર્ડર કન્ફર્મ થઈ ગયો! નીચેથી બિલ પ્રિન્ટ કે સેવ કરો.');
   };
 
-  // POS Generate Custom Bill
+  // DELETE BILL / ORDER WITH AUTO-RESTOCK TO INVENTORY
+  const handleDeleteOrder = (orderId: string) => {
+    const orderToDelete = orders.find(o => o.id === orderId);
+    if (!orderToDelete) return;
+
+    const confirmDelete = window.confirm(
+      `શું તમે બિલ #${orderToDelete.invoiceNo} (${orderToDelete.customerName}) ડિલીટ કરવા માંગો છો?\n\nઆ બિલની તમામ આઇટમ્સ આપમેળે ફરીથી સ્ટોકમાં જમા થઈ જશે.`
+    );
+    if (!confirmDelete) return;
+
+    // Restore inventory stock for all items in the deleted order
+    setPosItems(prev =>
+      prev.map(p => {
+        const matchedItem = orderToDelete.items.find(
+          it => it.name === p.nameGu || it.name === p.nameEn
+        );
+        if (matchedItem && typeof p.stock === 'number') {
+          return { ...p, stock: p.stock + matchedItem.qty };
+        }
+        return p;
+      })
+    );
+
+    // Deduct from business stats
+    setStats(s => ({
+      ...s,
+      dailySales: Math.max(0, Number((s.dailySales - orderToDelete.total).toFixed(2))),
+      totalBills: Math.max(0, s.totalBills - 1),
+      itemsSold: Math.max(
+        0,
+        s.itemsSold - orderToDelete.items.reduce((acc, curr) => acc + curr.qty, 0)
+      )
+    }));
+
+    setOrders(prev => prev.filter(o => o.id !== orderId));
+    showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થયું અને આઇટમ્સ સ્ટોકમાં પરત જમા થઈ ગઈ!`);
+  };
+
+  // UPDATE ORDER STATUS (e.g. placed -> confirmed -> packed -> out_for_delivery -> delivered)
+  const handleUpdateOrderStatus = (orderId: string, newStatus: OrderRecord['orderStatus']) => {
+    const now = new Date();
+    const timeFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+
+    setOrders(prev =>
+      prev.map(o => {
+        if (o.id === orderId) {
+          return {
+            ...o,
+            orderStatus: newStatus,
+            statusUpdatedAt: timeFormatted
+          };
+        }
+        return o;
+      })
+    );
+    showToast(`✅ ઓર્ડર સ્ટેટસ અપડેટ થઈ ગયું!`);
+  };
+
+  // DIRECT INVENTORY STOCK NUMBER UPDATE (e.g. typing 100 directly)
+  const handleDirectStockUpdate = (productId: string, newStockVal: string) => {
+    const parsed = Number(newStockVal);
+    setPosItems(prev =>
+      prev.map(p => {
+        if (p.id === productId) {
+          return {
+            ...p,
+            stock: isNaN(parsed) ? p.stock : Math.max(0, parsed)
+          };
+        }
+        return p;
+      })
+    );
+  };
+
+  // SAVE EDITED ORDER
+  const handleSaveOrderEdit = (updatedOrder: OrderRecord) => {
+    setOrders(prev => prev.map(o => (o.id === updatedOrder.id ? updatedOrder : o)));
+    setEditingOrder(null);
+    showToast(`✅ બિલ #${updatedOrder.invoiceNo} અપડેટ થઈ ગયું!`);
+  };
+
+  // POS DIRECT BILL GENERATOR (Admin)
   const handleGeneratePOSBill = () => {
     if (cart.length === 0) {
       showToast('⚠️ કૃપા કરીને કાર્ટમાં વસ્તુઓ ઉમેરો!');
@@ -812,6 +605,7 @@ export default function App() {
     const orderId = `BILL-${Math.floor(1000 + Math.random() * 9000)}`;
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
     const finalTotal = Math.max(0, cartTotal - posDiscount);
 
     // Deduct stock
@@ -842,7 +636,8 @@ export default function App() {
     };
 
     setOrders(prev => [inv, ...prev]);
-    setActivePrintInvoice(inv);
+    setActiveInvoiceOrder(inv);
+    setIsSuccessModal(false);
 
     setStats(s => ({
       ...s,
@@ -895,181 +690,204 @@ export default function App() {
     }
   };
 
-  // Filtered Items for POS Grid
-  const filteredItems = posItems.filter(
-    item =>
+  // Filtered Items for Catalog & POS Grid
+  const filteredItems = posItems.filter(item => {
+    const matchesSearch =
       item.nameGu.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.nameEn.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+      item.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
+    return matchesSearch && matchesCat;
+  });
+
+  const cartTotalAmount = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
+  const totalCartCount = cart.reduce((sum, i) => sum + i.quantity, 0);
 
   return (
-    <div
-      style={{ zoom: `${zoomLevel}%` }}
-      className="min-h-screen bg-white text-black font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white"
-    >
+    <div className="min-h-screen bg-slate-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white">
+      
       {/* ========================================================================= */}
-      {/* 1. TOP HEADER - CLEAN & DYNAMIC */}
+      {/* 1. PROFESSIONAL AMAZON / FLIPKART STYLE TOP HEADER */}
       {/* ========================================================================= */}
-      <header className="bg-white border-b border-neutral-300 no-print">
-        <div className="max-w-[1550px] mx-auto px-4 py-2 flex items-center justify-between">
+      <header className="bg-white border-b border-neutral-300 shadow-xs no-print sticky top-0 z-40">
+        <div className="max-w-[1550px] mx-auto px-3 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
           
-          {/* LEFT PRISHA LOGO */}
-          <div className="flex items-center gap-2 group relative">
+          {/* LEFT LOGO (Admin Upload Triggerable - Enriched Size) */}
+          <div className="flex items-center gap-2 shrink-0">
             {isAdminUnlocked ? (
-              <label className="cursor-pointer">
+              <label className="cursor-pointer relative group" title="ડાબો લોગો બદલવા / ક્રોપ કરવા ક્લિક કરો">
                 <input
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={e => handleImageFileUpload(e, 'leftLogo')}
                 />
-                <div
-                  className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm hover:border-orange-500 transition-all overflow-hidden relative"
-                  title="Click to Upload Left Logo Photo"
-                >
+                <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-orange-50 border-2 border-orange-500 flex flex-col items-center justify-center p-1 shadow-sm group-hover:scale-105 transition-transform overflow-hidden relative">
                   {storeSettings.leftLogoUrl ? (
-                    <img src={storeSettings.leftLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    <img src={storeSettings.leftLogoUrl} alt="Left Logo" className="w-full h-full object-contain" />
                   ) : (
                     <>
-                      <span className="text-[10px] font-black text-orange-600 leading-none">PRISHA</span>
-                      <span className="text-sm">🪪</span>
+                      <span className="text-[10px] sm:text-xs font-black text-orange-600 leading-none">PRISHA</span>
+                      <span className="text-sm sm:text-lg">🪪</span>
                     </>
                   )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
                     બદલો
                   </div>
                 </div>
               </label>
             ) : (
-              <div className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm overflow-hidden">
+              <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-orange-50 border-2 border-orange-500 flex flex-col items-center justify-center p-1 shadow-2xs overflow-hidden">
                 {storeSettings.leftLogoUrl ? (
-                  <img src={storeSettings.leftLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                  <img src={storeSettings.leftLogoUrl} alt="Left Logo" className="w-full h-full object-contain" />
                 ) : (
                   <>
-                    <span className="text-[10px] font-black text-orange-600 leading-none">PRISHA</span>
-                    <span className="text-sm">🪪</span>
+                    <span className="text-[10px] sm:text-xs font-black text-orange-600 leading-none">PRISHA</span>
+                    <span className="text-sm sm:text-lg">🪪</span>
                   </>
                 )}
               </div>
             )}
           </div>
 
-          {/* CENTER MAIN STORE BRANDING */}
-          <div className="text-center flex flex-col items-center">
-            <div className="flex items-center gap-2 flex-wrap justify-center">
-              <span className="text-3xl sm:text-4xl font-black text-[#EA580C] tracking-tight uppercase">
+          {/* CENTER STORE TITLE (LARGER, HIGH CONTRAST TYPOGRAPHY) */}
+          <div className="text-center flex flex-col items-center flex-1 min-w-0 px-1">
+            <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap justify-center">
+              <span className="text-xl sm:text-3xl md:text-4xl font-black text-[#EA580C] tracking-tight uppercase drop-shadow-xs">
                 {storeSettings.storeNameEn.split(' ')[0] || 'PRISHA'}
               </span>
-              <span className="text-2xl sm:text-3xl font-black text-[#1E40AF] tracking-tight uppercase">
+              <span className="text-lg sm:text-2xl md:text-3xl font-black text-[#1E40AF] tracking-tight uppercase truncate drop-shadow-xs">
                 {storeSettings.storeNameEn.substring(storeSettings.storeNameEn.indexOf(' ') + 1) || 'STATIONERY & ONLINE SERVICES'}
               </span>
             </div>
-            <div className="flex items-center gap-2 mt-0.5 text-xs font-bold text-neutral-800">
-              <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 font-extrabold">
+            
+            {/* Gujarati Subtitle & Badges */}
+            <div className="flex items-center gap-1.5 sm:gap-2.5 mt-0.5 text-xs sm:text-sm font-bold text-neutral-800">
+              <span className="text-orange-900 bg-orange-100/90 px-2.5 py-0.5 rounded-md border border-orange-300 font-black text-xs sm:text-sm">
+                {storeSettings.storeNameGu}
+              </span>
+              <span className="hidden sm:inline text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 text-xs font-black">
                 {storeSettings.tagline}
               </span>
-              <span className="text-neutral-700 font-bold">{storeSettings.subTagline}</span>
             </div>
           </div>
 
-          {/* RIGHT CONTROLS & TWIN LOGO */}
-          <div className="flex items-center gap-3">
-            {/* TWIN RIGHT LOGO */}
-            <div className="flex items-center gap-2 group relative">
-              {isAdminUnlocked ? (
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => handleImageFileUpload(e, 'rightLogo')}
-                  />
-                  <div
-                    className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm hover:border-orange-500 transition-all overflow-hidden relative"
-                    title="Click to Upload Right Logo Photo"
-                  >
-                    {storeSettings.rightLogoUrl ? (
-                      <img src={storeSettings.rightLogoUrl} alt="Logo" className="w-full h-full object-contain" />
-                    ) : (
-                      <>
-                        <span className="text-[10px] font-black text-orange-600 leading-none">PRISHA</span>
-                        <span className="text-sm">📚</span>
-                      </>
-                    )}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
-                      બદલો
-                    </div>
-                  </div>
-                </label>
-              ) : (
-                <div className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm overflow-hidden">
+          {/* RIGHT SIDE: RIGHT LOGO + CART + LOGIN/LOGOUT */}
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            
+            {/* RIGHT LOGO (Admin Upload Triggerable - Enriched Size) */}
+            {isAdminUnlocked ? (
+              <label className="cursor-pointer relative group" title="જમણો લોગો બદલવા / ક્રોપ કરવા ક્લિક કરો">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => handleImageFileUpload(e, 'rightLogo')}
+                />
+                <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-blue-50 border-2 border-blue-600 flex flex-col items-center justify-center p-1 shadow-sm group-hover:scale-105 transition-transform overflow-hidden relative">
                   {storeSettings.rightLogoUrl ? (
-                    <img src={storeSettings.rightLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    <img src={storeSettings.rightLogoUrl} alt="Right Logo" className="w-full h-full object-contain" />
                   ) : (
                     <>
-                      <span className="text-[10px] font-black text-orange-600 leading-none">PRISHA</span>
-                      <span className="text-sm">📚</span>
+                      <span className="text-[10px] sm:text-xs font-black text-blue-700 leading-none">CSC</span>
+                      <span className="text-sm sm:text-lg">🏪</span>
                     </>
                   )}
+                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
+                    બદલો
+                  </div>
                 </div>
-              )}
-            </div>
+              </label>
+            ) : (
+              <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-blue-50 border-2 border-blue-600 flex flex-col items-center justify-center p-1 shadow-2xs overflow-hidden">
+                {storeSettings.rightLogoUrl ? (
+                  <img src={storeSettings.rightLogoUrl} alt="Right Logo" className="w-full h-full object-contain" />
+                ) : (
+                  <>
+                    <span className="text-[10px] sm:text-xs font-black text-blue-700 leading-none">CSC</span>
+                    <span className="text-sm sm:text-lg">🏪</span>
+                  </>
+                )}
+              </div>
+            )}
 
-            {/* ZOOM / SCALE CONTROLS */}
-            <div className="hidden sm:flex items-center border border-neutral-400 rounded-full px-2 py-1 bg-white shadow-xs text-xs font-bold gap-1.5">
-              <span className="px-1 text-neutral-700">{zoomLevel}%</span>
-              <button
-                onClick={() => setZoomLevel(prev => Math.max(60, prev - 10))}
-                className="w-5 h-5 flex items-center justify-center hover:bg-neutral-100 rounded-full text-neutral-700 font-black cursor-pointer"
-                title="Zoom Out"
-              >
-                -
-              </button>
-              <button
-                onClick={() => setZoomLevel(prev => Math.min(130, prev + 10))}
-                className="w-5 h-5 flex items-center justify-center hover:bg-neutral-100 rounded-full text-neutral-700 font-black cursor-pointer"
-                title="Zoom In"
-              >
-                +
-              </button>
-              <button
-                onClick={() => setZoomLevel(100)}
-                className="px-2 py-0.5 bg-neutral-100 hover:bg-neutral-200 rounded-full text-[11px] text-blue-700 font-bold border border-neutral-300 cursor-pointer"
-              >
-                Reset
-              </button>
-            </div>
-
-            {/* SETTINGS GEAR (PROTECTED BY PASSWORD) */}
+            {/* CART BUTTON WITH LIVE BADGE */}
             <button
-              onClick={() => handleRequestAdminAccess('settings')}
-              className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 p-2 rounded-full border border-neutral-300 shadow-xs transition-transform active:scale-95 cursor-pointer"
-              title="વેબસાઇટ & દુકાન સેટિંગ્સ (Admin Password Required)"
+              onClick={() => setIsCartDrawerOpen(true)}
+              className="relative bg-orange-500 hover:bg-orange-600 text-black px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
             >
-              <Settings className="w-4 h-4 text-neutral-700" />
+              <ShoppingCart className="w-4 h-4 text-black" />
+              <span className="hidden sm:inline">કાર્ટ</span>
+              {totalCartCount > 0 && (
+                <span className="bg-neutral-900 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-5 text-center">
+                  {totalCartCount}
+                </span>
+              )}
             </button>
+
+            {/* SINGLE CLEAN LOGIN BUTTON / ADMIN LOGOUT */}
+            {!isAdminUnlocked ? (
+              <button
+                onClick={() => {
+                  setEnteredPassword('');
+                  setPasswordError('');
+                  setShowPasswordModal(true);
+                }}
+                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 shadow-xs cursor-pointer transition-transform active:scale-95"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-orange-400" />
+                <span>Login</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setActiveTab(activeTab === 'customer' ? 'admin' : 'customer')}
+                  className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1 border shadow-2xs transition-all ${
+                    activeTab === 'customer'
+                      ? 'bg-orange-500 text-black border-orange-600'
+                      : 'bg-[#1E40AF] text-white border-blue-900'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">{activeTab === 'customer' ? 'Admin Panel' : 'Customer View'}</span>
+                </button>
+
+                <button
+                  onClick={handleLockAdmin}
+                  className="bg-red-700 hover:bg-red-800 text-white px-2.5 py-2 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer"
+                  title="લૉગઆઉટ"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Logout</span>
+                </button>
+              </div>
+            )}
+
           </div>
         </div>
 
-        {/* 2. FULL WIDTH DEEP BLUE HORIZONTAL BAR (SUB-HEADER) */}
-        <div className="bg-[#0B1E48] text-white px-2 py-1.5 flex items-center justify-between text-xs font-bold">
-          {/* Home Page Tab */}
-          <div className="flex items-center">
+        {/* SUB RUNNING INFO STRIP WITH CLEAN "HOME" & "TRACK ORDER" BUTTONS */}
+        <div className="bg-[#0B1E48] text-white px-3 sm:px-5 py-1.5 flex items-center justify-between text-xs font-bold border-t border-blue-900">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* CLEAN SINGLE "HOME" BUTTON */}
             <button
-              onClick={() => {
-                if (isAdminUnlocked) {
-                  setActiveTab('admin');
-                } else {
-                  setActiveTab('customer');
-                }
-              }}
-              className="bg-[#002244] hover:bg-[#003366] text-white px-4 py-1 rounded text-xs font-black border border-blue-900 flex items-center gap-1.5 cursor-pointer"
+              onClick={() => setActiveTab('customer')}
+              className={`px-3 py-1 rounded-lg text-xs font-black cursor-pointer transition-all ${
+                activeTab === 'customer' ? 'bg-orange-500 text-black shadow-xs' : 'bg-blue-950 text-white hover:bg-blue-900'
+              }`}
             >
-              <span>Home Page</span>
+              Home
+            </button>
+
+            {/* CUSTOMER LIVE ORDER TRACKING BUTTON */}
+            <button
+              onClick={() => setShowTrackingModal(true)}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+            >
+              <Truck className="w-3.5 h-3.5 text-white" />
+              <span>ઓર્ડર ટ્રેક કરો (Track)</span>
             </button>
           </div>
 
-          {/* Running Text Marquee */}
           <div className="flex-1 overflow-hidden mx-3 text-[11px] sm:text-xs">
             <div className="animate-marquee font-extrabold text-white flex items-center gap-4">
               <span>
@@ -1079,40 +897,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Mode Switchers & Admin Lock Control */}
-          <div className="flex items-center gap-2">
-            {isAdminUnlocked ? (
-              <>
-                <button
-                  onClick={() => setActiveTab(activeTab === 'customer' ? 'admin' : 'customer')}
-                  className={`px-3 py-1 rounded text-[11px] font-black flex items-center gap-1 border transition-all cursor-pointer ${
-                    activeTab === 'customer'
-                      ? 'bg-orange-500 text-black border-white'
-                      : 'bg-[#1E40AF] hover:bg-blue-700 text-white border-blue-400'
-                  }`}
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span>{activeTab === 'customer' ? '⚙️ એડમિન પેનલ' : '🌐 ગ્રાહક વ્યૂ (Live Shop)'}</span>
-                </button>
-
-                <button
-                  onClick={handleLockAdmin}
-                  className="bg-[#B91C1C] hover:bg-red-700 text-white px-2.5 py-1 rounded text-[11px] font-black flex items-center gap-1 cursor-pointer shadow-xs"
-                  title="એડમિન લૉક કરો અને ગ્રાહક પેજ પર જાઓ"
-                >
-                  <Lock className="w-3.5 h-3.5" />
-                  <span>લૉક / લૉગઆઉટ</span>
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => handleRequestAdminAccess('admin')}
-                className="bg-orange-500 hover:bg-orange-600 text-black px-3 py-1 rounded text-[11px] font-black flex items-center gap-1.5 shadow-sm cursor-pointer transition-transform active:scale-95"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>🔐 સંચાલક લૉગિન (Admin Login)</span>
-              </button>
-            )}
+          <div className="hidden sm:flex items-center gap-2 text-[10px] text-neutral-300">
+            <span>📍 થરાદ સેન્ટર</span>
           </div>
         </div>
       </header>
@@ -1126,7 +912,7 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 2. ADMIN PASSWORD VERIFICATION MODAL (BHARAT@1994) */}
+      {/* 2. ADMIN PASSWORD LOGIN MODAL */}
       {/* ========================================================================= */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
@@ -1137,7 +923,7 @@ export default function App() {
                   <Lock className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-black text-sm text-black">સંચાલક સુરક્ષા લૉગિન</h3>
+                  <h3 className="font-black text-sm text-black">સંચાલક લૉગિન</h3>
                   <p className="text-[10px] text-neutral-500 font-bold">Bharat Chaudhary Private Access</p>
                 </div>
               </div>
@@ -1152,7 +938,7 @@ export default function App() {
             <form onSubmit={handleVerifyPassword} className="space-y-3">
               <div>
                 <label className="text-xs font-black block mb-1 text-neutral-800">
-                  🔑 એડમિન પાસવર્ડ દાખલ કરો:
+                  🔑 પાસવર્ડ દાખલ કરો:
                 </label>
                 <div className="relative">
                   <input
@@ -1194,7 +980,7 @@ export default function App() {
                   className="px-5 py-2 bg-[#0B1E48] hover:bg-blue-900 text-white rounded-xl text-xs font-black shadow flex items-center gap-1.5"
                 >
                   <Unlock className="w-3.5 h-3.5 text-orange-400" />
-                  <span>અનલૉક કરો</span>
+                  <span>લૉગિન કરો</span>
                 </button>
               </div>
             </form>
@@ -1203,1189 +989,1006 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 3. MAIN BODY: CUSTOMER VIEW (DEFAULT) OR ADMIN DASHBOARD (IF UNLOCKED) */}
+      {/* 3. MAIN BODY: CUSTOMER E-COMMERCE VIEW (DEFAULT) */}
       {/* ========================================================================= */}
-      {activeTab !== 'customer' && isAdminUnlocked ? (
-        <main className="max-w-[1550px] mx-auto w-full px-2 sm:px-3 py-3 grid grid-cols-1 md:grid-cols-12 gap-3 flex-1 no-print">
+      {activeTab === 'customer' ? (
+        <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
-          {/* ========================================== */}
-          {/* LEFT SIDEBAR MENU (Admin Controls) */}
-          {/* ========================================== */}
-          <aside className="md:col-span-2 space-y-1 text-xs">
-            <div className="bg-neutral-100 border border-neutral-300 rounded-t p-1.5 flex items-center justify-between font-black text-neutral-800">
-              <div className="flex items-center gap-1.5">
-                <span className="text-orange-600">⚙️</span>
-                <span>Admin Controls</span>
+          {/* PROMO HERO BANNER WITH ADMIN UPLOAD OPTION */}
+          <div className="relative rounded-2xl bg-gradient-to-r from-[#0B1E48] via-[#1E3A8A] to-[#0B1E48] text-white p-5 sm:p-7 shadow-md overflow-hidden border border-blue-900">
+            {storeSettings.bannerImageUrl ? (
+              <div className="absolute inset-0 z-0">
+                <img src={storeSettings.bannerImageUrl} alt="Banner" className="w-full h-full object-cover opacity-35" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#0B1E48]/90 via-[#0B1E48]/60 to-transparent" />
               </div>
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className="text-neutral-500 hover:text-blue-700"
-                title="Settings"
-              >
-                <Settings className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            ) : null}
 
-            {/* Main Dashboard Button */}
-            <button
-              onClick={() => setActiveTab('admin')}
-              className={`w-full p-2 font-black rounded-sm flex items-center gap-2 text-left shadow-xs transition-colors cursor-pointer ${
-                activeTab === 'admin'
-                  ? 'bg-[#EA580C] text-white'
-                  : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-900 border border-neutral-200'
-              }`}
-            >
-              <span>📊</span>
-              <span>Main Dashboard</span>
-            </button>
+            <div className="relative z-10 max-w-2xl space-y-2">
+              <span className="inline-flex items-center gap-1.5 bg-orange-500 text-black text-[11px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider">
+                <Sparkles className="w-3 h-3" /> {storeSettings.storeNameGu}
+              </span>
+              <h2 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                {storeSettings.bannerTitle}
+              </h2>
+              <p className="text-xs sm:text-sm text-neutral-200 font-medium">
+                {storeSettings.bannerSubtitle}
+              </p>
 
-            {/* Menu Buttons */}
-            <div className="space-y-1 pt-0.5">
-              <button
-                onClick={() => setIsAddingNewItem(true)}
-                className="w-full text-left p-2 rounded-sm border bg-neutral-50 hover:bg-neutral-100 text-neutral-900 border-neutral-200 flex items-center justify-between font-bold cursor-pointer"
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="text-emerald-700 font-black">➕</span>
-                  <span>નવો સ્ટોક ઉમેરો</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('gst_bill')}
-                className={`w-full text-left p-2 rounded-sm border flex items-center justify-between font-bold transition-colors cursor-pointer ${
-                  activeTab === 'gst_bill'
-                    ? 'bg-orange-100 text-orange-900 border-orange-400 font-black'
-                    : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-900 border-neutral-200'
-                }`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <span className="text-blue-700">🧾</span>
-                  <span>જીએસટી બિલ (POS)</span>
-                </div>
-                <span className="bg-blue-100 text-blue-800 text-[10px] font-extrabold px-1.5 py-0.2 rounded border border-blue-300">
-                  નવું
+              {/* Quick perks */}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <span className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1">
+                  ⚡ ઈન્સ્ટન્ટ ઓનલાઇન રસીદ & બિલ
                 </span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('purchase')}
-                className={`w-full text-left p-2 rounded-sm border flex items-center gap-1.5 font-bold transition-colors cursor-pointer ${
-                  activeTab === 'purchase'
-                    ? 'bg-orange-100 text-orange-900 border-orange-400 font-black'
-                    : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-900 border-neutral-200'
-                }`}
-              >
-                <span className="text-orange-600">🛒</span>
-                <span>ખરીદી એન્ટ્રી (Purchase)</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('expenses')}
-                className={`w-full text-left p-2 rounded-sm border flex items-center gap-1.5 font-bold transition-colors cursor-pointer ${
-                  activeTab === 'expenses'
-                    ? 'bg-orange-100 text-orange-900 border-orange-400 font-black'
-                    : 'bg-neutral-50 hover:bg-neutral-100 text-neutral-900 border-neutral-200'
-                }`}
-              >
-                <span className="text-rose-600">💵</span>
-                <span>દુકાન ખર્ચ (Expenses)</span>
-              </button>
-
-              <button
-                onClick={() => handleExportExcel()}
-                className="w-full text-left p-2 rounded-sm border bg-neutral-50 hover:bg-neutral-100 text-neutral-900 border-neutral-200 flex items-center gap-1.5 font-bold cursor-pointer"
-              >
-                <span className="text-emerald-700">📊</span>
-                <span>Excel રિપોર્ટ ડાઉનલોડ</span>
-              </button>
-
-              <button
-                onClick={() => setShowSettingsModal(true)}
-                className="w-full text-left p-2 rounded-sm border bg-neutral-50 hover:bg-neutral-100 text-neutral-900 border-neutral-200 flex items-center gap-1.5 font-bold cursor-pointer"
-              >
-                <span className="text-purple-600">⚙️</span>
-                <span>વેબસાઇટ સેટિંગ્સ</span>
-              </button>
-
-              <button
-                onClick={() => setActiveTab('customer')}
-                className="w-full text-left p-2 rounded-sm border bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-300 flex items-center gap-1.5 font-bold cursor-pointer"
-              >
-                <span className="text-blue-600">🌐</span>
-                <span>ગ્રાહક વેબસાઇટ જુઓ</span>
-              </button>
-
-              <button
-                onClick={handleLockAdmin}
-                className="w-full text-left p-2 rounded-sm border bg-red-50 hover:bg-red-100 text-red-900 border-red-300 flex items-center gap-1.5 font-bold cursor-pointer"
-              >
-                <span className="text-red-600">🔒</span>
-                <span>પેનલ લૉક કરો (Logout)</span>
-              </button>
+                <span className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1">
+                  📱 ડાયરેક્ટ UPI QR પેમેન્ટ
+                </span>
+                <span className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1">
+                  🏢 CSC ઓથોરાઇઝ્ડ સેન્ટર
+                </span>
+              </div>
             </div>
-          </aside>
 
-          {/* ========================================== */}
-          {/* CENTER POS GRID & WORKBENCH */}
-          {/* ========================================== */}
-          <section className="md:col-span-8 space-y-3">
-            
-            {/* NEW PRODUCT FORM */}
-            <div className="bg-white border border-neutral-300 rounded p-3 shadow-2xs">
-              <div className="flex items-center justify-between font-black text-xs text-neutral-900 mb-2">
-                <div className="flex items-center gap-1">
-                  <span className="text-orange-600">➕</span>
-                  <span>નવી પ્રોડક્ટ / સર્વિસ ઉમેરો</span>
-                </div>
-                <label className="text-[11px] text-blue-700 font-bold cursor-pointer flex items-center gap-1 hover:underline">
-                  <ImageIcon className="w-3.5 h-3.5" />
-                  <span>{newProdImage ? 'ફોટો પસંદ થયો ✅' : 'પ્રોડક્ટ ફોટો અપલોડ'}</span>
+            {/* Admin Banner Edit Trigger */}
+            {isAdminUnlocked && (
+              <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+                <label className="bg-white/90 hover:bg-white text-black px-2.5 py-1 rounded-lg text-xs font-black shadow cursor-pointer flex items-center gap-1">
+                  <Camera className="w-3.5 h-3.5 text-orange-600" />
+                  <span>બેનર ફોટો બદલો</span>
                   <input
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={e => handleImageFileUpload(e, 'newProduct')}
+                    onChange={e => handleImageFileUpload(e, 'bannerImage')}
                   />
                 </label>
-              </div>
-
-              <form onSubmit={handleAddNewProduct} className="space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
-                  <div className="sm:col-span-4">
-                    <input
-                      type="text"
-                      placeholder="આઇટમનું નામ (ગુજરાતી)"
-                      value={newProdName}
-                      onChange={e => setNewProdName(e.target.value)}
-                      className="w-full text-xs font-bold p-1.5 border border-neutral-400 rounded focus:border-blue-600 outline-none"
-                    />
-                  </div>
-                  <div className="sm:col-span-3">
-                    <input
-                      type="text"
-                      placeholder="English Name"
-                      value={newProdEnName}
-                      onChange={e => setNewProdEnName(e.target.value)}
-                      className="w-full text-xs font-bold p-1.5 border border-neutral-400 rounded focus:border-blue-600 outline-none"
-                    />
-                  </div>
-                  <div className="sm:col-span-3">
-                    <select
-                      value={newProdCategory}
-                      onChange={e => setNewProdCategory(e.target.value)}
-                      className="w-full text-xs font-bold p-1.5 border border-neutral-400 rounded focus:border-blue-600 outline-none bg-white"
-                    >
-                      <option value="stationery">સ્ટેશનરી (Stationery)</option>
-                      <option value="books">બુક્સ / નોટબુક</option>
-                      <option value="service">ઓનલાઇન સર્વિસ</option>
-                      <option value="printing">ઝેરોક્ષ / પ્રિન્ટિંગ</option>
-                    </select>
-                  </div>
-                  <div className="sm:col-span-2">
-                    <input
-                      type="text"
-                      placeholder="ઇમોજી / આઇકોન"
-                      value={newProdIcon}
-                      onChange={e => setNewProdIcon(e.target.value)}
-                      className="w-full text-xs font-bold p-1.5 border border-neutral-400 rounded text-center focus:border-blue-600 outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-dashed border-neutral-200 text-xs">
-                  <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold text-neutral-700">
-                    <span className="text-blue-800 font-black">▼ કિંમત અને સ્ટોક:</span>
-                    <span>વેચાણ:</span>
-                    <input
-                      type="number"
-                      value={newProdPrice}
-                      onChange={e => setNewProdPrice(e.target.value)}
-                      className="w-14 p-0.5 border border-neutral-300 rounded font-black text-center"
-                    />
-                    <span>ખરીદો:</span>
-                    <input
-                      type="number"
-                      value={newProdCost}
-                      onChange={e => setNewProdCost(e.target.value)}
-                      className="w-14 p-0.5 border border-neutral-300 rounded font-black text-center"
-                    />
-                    <span>સ્ટોક:</span>
-                    <input
-                      type="number"
-                      value={newProdStock}
-                      onChange={e => setNewProdStock(e.target.value)}
-                      className="w-14 p-0.5 border border-neutral-300 rounded font-black text-center"
-                    />
-                    <span>એકમ:</span>
-                    <input
-                      type="text"
-                      value={newProdUnit}
-                      onChange={e => setNewProdUnit(e.target.value)}
-                      className="w-14 p-0.5 border border-neutral-300 rounded font-black text-center"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="bg-[#0B1E48] hover:bg-blue-900 text-white text-xs font-black px-4 py-1.5 rounded flex items-center gap-1 shadow-xs cursor-pointer"
-                  >
-                    <span>💾 સેવ કરો</span>
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* SEARCH & QUICK ACTION NOTICE */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
-              <div className="relative w-full sm:w-80">
-                <Search className="w-3.5 h-3.5 text-neutral-400 absolute left-2 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="વસ્તુ શોધો: નોટબુક, પેન, દસ્તાવેજ..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full pl-7 pr-2 py-1 text-xs border border-neutral-300 rounded focus:border-blue-600 outline-none bg-white font-bold"
-                />
-              </div>
-
-              <div className="text-[11px] font-black text-orange-600 flex items-center gap-1">
-                <span>⚡ ઇન્વેન્ટરી પર ક્લિક કરવાથી ઝડપથી ૧ સ્ટોક ઘટશે (Instant Sell)</span>
-              </div>
-            </div>
-
-            {/* EXACT ITEM BOXES GRID */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
-              {filteredItems.map(item => (
-                <div
-                  key={item.id}
-                  onClick={() => modifyStock(item.id, -1)}
-                  className={`bg-white rounded border p-2 flex flex-col justify-between relative cursor-pointer hover:shadow-md transition-all select-none group ${
-                    item.isSpecial ? 'border-2 border-red-500' : 'border-blue-400 hover:border-blue-600'
-                  }`}
+                <button
+                  onClick={() => setShowBannerEditModal(true)}
+                  className="bg-black/80 hover:bg-black text-white px-2.5 py-1 rounded-lg text-xs font-black shadow flex items-center gap-1"
                 >
-                  {/* Top Header: Badge, Delete button, Stock number */}
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-1">
-                      {item.badge && (
-                        <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded">
-                          {item.badge}
-                        </span>
-                      )}
-                      <button
-                        onClick={e => handleDeleteItem(item.id, item.nameGu, e)}
-                        className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 p-0.5 rounded transition-opacity"
-                        title="Delete Item"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    <span
-                      className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded border ${
-                        typeof item.stock === 'number' && item.stock <= 0
-                          ? 'bg-red-50 text-red-700 border-red-300 font-black'
-                          : 'bg-blue-50 text-blue-800 border-blue-200'
-                      }`}
-                    >
-                      {item.stock}
-                    </span>
-                  </div>
-
-                  {/* Icon or Image + Title */}
-                  <div className="my-1.5 text-center">
-                    {item.imageUrl ? (
-                      <div className="w-12 h-12 mx-auto mb-1 rounded-lg overflow-hidden border border-neutral-200 flex items-center justify-center bg-neutral-50">
-                        <img src={item.imageUrl} alt={item.nameGu} className="w-full h-full object-cover" />
-                      </div>
-                    ) : (
-                      <div className="text-2xl mb-1">{item.icon || '📦'}</div>
-                    )}
-                    <div className="text-xs font-black text-black leading-tight">
-                      {item.nameGu}
-                    </div>
-                    <div className="text-[10px] text-neutral-500 font-bold leading-tight">
-                      {item.nameEn}
-                    </div>
-                  </div>
-
-                  {/* Price & Action Buttons */}
-                  <div className="pt-1.5 border-t border-dashed border-neutral-200 flex items-center justify-between">
-                    <span className="text-xs font-black text-black">
-                      ₹{item.price}
-                    </span>
-
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={e => {
-                          e.stopPropagation();
-                          setEditingItem(item);
-                        }}
-                        className="p-1 hover:bg-neutral-100 rounded text-neutral-600 text-[10px]"
-                        title="Edit Item details & image"
-                      >
-                        <Edit3 className="w-3 h-3 text-blue-700" />
-                      </button>
-
-                      <button
-                        onClick={e => modifyStock(item.id, -1, e)}
-                        className="bg-neutral-100 hover:bg-red-100 text-red-700 font-black px-1.5 py-0.5 rounded text-[10px] border border-neutral-300"
-                        title="Instant Sell -1"
-                      >
-                        -1
-                      </button>
-
-                      <button
-                        onClick={e => modifyStock(item.id, 1, e)}
-                        className="bg-neutral-100 hover:bg-emerald-100 text-emerald-700 font-black px-1.5 py-0.5 rounded text-[10px] border border-neutral-300"
-                        title="Add Stock +1"
-                      >
-                        +1
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* GST POS BILLING WORKBENCH */}
-            {activeTab === 'gst_bill' && (
-              <div className="bg-white border-2 border-blue-600 rounded-lg p-4 shadow-md space-y-4 mt-6">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h3 className="text-sm font-black text-blue-900 flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-blue-700" />
-                    <span>ઝડપી જીએસટી / દુકાન બિલ જનરેટર</span>
-                  </h3>
-                  <span className="text-xs font-bold text-neutral-600">કાર્ટ આઇટમ્સ: {cart.length}</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-                  <div>
-                    <label className="font-bold block mb-1">ગ્રાહકનું નામ:</label>
-                    <input
-                      type="text"
-                      placeholder="નામ દાખલ કરો"
-                      value={posCustomerName}
-                      onChange={e => setPosCustomerName(e.target.value)}
-                      className="w-full p-1.5 border border-neutral-300 rounded font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold block mb-1">મોબાઇલ નંબર:</label>
-                    <input
-                      type="text"
-                      placeholder="૧૦ આંકડાનો મોબાઇલ"
-                      value={posCustomerMobile}
-                      onChange={e => setPosCustomerMobile(e.target.value)}
-                      className="w-full p-1.5 border border-neutral-300 rounded font-bold"
-                    />
-                  </div>
-                  <div>
-                    <label className="font-bold block mb-1">ચુકવણી પદ્ધતિ (Payment Mode):</label>
-                    <select
-                      value={posPaymentMode}
-                      onChange={e => setPosPaymentMode(e.target.value as any)}
-                      className="w-full p-1.5 border border-neutral-300 rounded font-bold bg-white"
-                    >
-                      <option value="Cash">Cash (રોકડ)</option>
-                      <option value="UPI">UPI (ઓનલાઇન ક્યૂઆર)</option>
-                      <option value="બાકી (Credit)">બાકી (Credit / ઉધાર)</option>
-                      <option value="Online">Online NetBanking</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Cart summary */}
-                <div className="border rounded p-2 bg-neutral-50 text-xs">
-                  <div className="font-bold mb-1 text-neutral-800">બિલમાં પસંદ કરેલી વસ્તુઓ:</div>
-                  {cart.length === 0 ? (
-                    <div className="text-neutral-500 py-2 text-center">
-                      ઉપરના ગ્રીડમાંથી વસ્તુઓ પસંદ કરવા માટે "+ ઉમેરો" અથવા ક્લિક કરો.
-                    </div>
-                  ) : (
-                    <div className="divide-y divide-neutral-200">
-                      {cart.map(c => (
-                        <div key={c.product.id} className="py-1.5 flex justify-between items-center">
-                          <span className="font-bold">{c.product.nameGu} x {c.quantity}</span>
-                          <span className="font-black">₹{c.product.price * c.quantity}</span>
-                        </div>
-                      ))}
-                      <div className="pt-2 flex justify-between items-center font-black text-sm">
-                        <span>કુલ રકમ:</span>
-                        <span className="text-blue-700">₹{cartTotal}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    onClick={() => setCart([])}
-                    className="px-3 py-1.5 border border-neutral-300 rounded text-xs font-bold text-neutral-700 hover:bg-neutral-100"
-                  >
-                    કાર્ટ સાફ કરો
-                  </button>
-                  <button
-                    onClick={handleGeneratePOSBill}
-                    className="px-5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-black flex items-center gap-1.5 shadow"
-                  >
-                    <Printer className="w-4 h-4" />
-                    <span>બિલ બનાવો અને પ્રિન્ટ કરો</span>
-                  </button>
-                </div>
+                  <Edit3 className="w-3.5 h-3.5 text-orange-400" />
+                  <span>ટેક્સ્ટ બદલો</span>
+                </button>
               </div>
             )}
-          </section>
+          </div>
 
-          {/* ========================================== */}
-          {/* RIGHT SIDEBAR (ADMIN PROFILE, BANNER, STATS) */}
-          {/* ========================================== */}
-          <aside className="md:col-span-2 space-y-2.5">
-            
-            {/* ADMIN USER PROFILE CARD */}
-            <div
-              onClick={() => setShowSettingsModal(true)}
-              className="bg-white border border-neutral-300 rounded p-2.5 text-center shadow-2xs space-y-2 cursor-pointer hover:border-blue-500 transition-colors group relative"
-              title="Click to edit Admin profile & photo"
-            >
-              <div className="w-14 h-14 rounded-full border border-neutral-300 mx-auto flex items-center justify-center text-xs font-black text-neutral-700 bg-neutral-50 overflow-hidden relative">
-                {storeSettings.adminProfileImageUrl ? (
-                  <img
-                    src={storeSettings.adminProfileImageUrl}
-                    alt={storeSettings.ownerName}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span>Admin</span>
-                )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
-                  ફોટો
-                </div>
-              </div>
-              <div className="bg-[#0B1E48] text-white text-xs font-black py-1 px-2 rounded shadow-xs">
-                {storeSettings.ownerName}
-              </div>
-            </div>
-
-            {/* AD BANNER BOX */}
-            <div
-              onClick={() => setShowBannerEditModal(true)}
-              className="border border-dashed border-orange-400 bg-orange-50/50 rounded p-2 text-center cursor-pointer hover:bg-orange-100/60 transition-colors overflow-hidden"
-              title="Click to edit banner text and upload image"
-            >
-              {storeSettings.bannerImageUrl ? (
-                <img
-                  src={storeSettings.bannerImageUrl}
-                  alt="Banner"
-                  className="w-full h-16 object-cover rounded mb-1"
+          {/* SEARCH & CATEGORY FILTER BAR */}
+          <div className="bg-white p-3 sm:p-4 rounded-xl border border-neutral-300 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              {/* Search Bar */}
+              <div className="relative w-full sm:w-96">
+                <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="નોટબુક, પેન, પાન કાર્ડ, આધાર સર્ચ કરો..."
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full text-xs font-bold pl-9 pr-3 py-2 bg-neutral-50 border border-neutral-300 rounded-xl focus:border-blue-700 outline-none"
                 />
-              ) : null}
-              <div className="text-xs font-bold text-neutral-800 whitespace-pre-line leading-tight">
-                {storeSettings.bannerText}
+              </div>
+
+              {/* View Cart Quick Bar */}
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <span className="text-xs font-bold text-neutral-500">
+                  કુલ {filteredItems.length} વસ્તુઓ ઉપલબ્ધ
+                </span>
+                {cart.length > 0 && (
+                  <button
+                    onClick={() => setIsCartDrawerOpen(true)}
+                    className="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer animate-pulse"
+                  >
+                    <ShoppingCart className="w-3.5 h-3.5" />
+                    <span>કાર્ટ જુઓ (₹{cartTotalAmount})</span>
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* 8 INTERACTIVE METRIC COUNTERS */}
-            <div className="grid grid-cols-2 gap-1.5 text-center">
-              
-              {/* 1. ડેઇલી સેલ */}
-              <div
-                onClick={() => handleStatClick('dailySales', 'ડેઇલી સેલ (Daily Sales)', stats.dailySales)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition-all shadow-2xs group"
-                title="Click to manually edit Daily Sales"
-              >
-                <div className="text-[10px] font-bold text-neutral-700 flex items-center justify-center gap-1">
-                  <span>📊</span> <span>ડેઇલી સેલ</span>
-                </div>
-                <div className="text-xs font-black text-neutral-900 mt-0.5 group-hover:text-blue-700">
-                  ₹ {stats.dailySales.toFixed(2)}
-                </div>
-              </div>
-
-              {/* 2. ડેઇલી ખરીદી */}
-              <div
-                onClick={() => handleStatClick('dailyPurchase', 'ડેઇલી ખરીદી (Daily Purchase)', stats.dailyPurchase)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition-all shadow-2xs group"
-                title="Click to manually edit Daily Purchase"
-              >
-                <div className="text-[10px] font-bold text-neutral-700 flex items-center justify-center gap-1">
-                  <span>🛒</span> <span>ડેઇલી ખરીદી</span>
-                </div>
-                <div className="text-xs font-black text-neutral-900 mt-0.5 group-hover:text-blue-700">
-                  ₹ {stats.dailyPurchase.toFixed(2)}
-                </div>
-              </div>
-
-              {/* 3. ચોખ્ખો નફો */}
-              <div
-                onClick={() => handleStatClick('netProfit', 'ચોખ્ખો નફો (Net Profit)', stats.netProfit)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-emerald-500 hover:bg-emerald-50/30 transition-all shadow-2xs group"
-                title="Click to manually edit Net Profit"
-              >
-                <div className="text-[10px] font-bold text-emerald-800 flex items-center justify-center gap-1">
-                  <span>💰</span> <span>ચોખ્ખો નફો</span>
-                </div>
-                <div className="text-xs font-black text-emerald-700 mt-0.5">
-                  ₹ {stats.netProfit.toFixed(2)}
-                </div>
-              </div>
-
-              {/* 4. કુલ નુકસાન */}
-              <div
-                onClick={() => handleStatClick('totalLoss', 'કુલ નુકસાન (Total Loss)', stats.totalLoss)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-red-500 hover:bg-red-50/30 transition-all shadow-2xs group"
-                title="Click to manually edit Total Loss"
-              >
-                <div className="text-[10px] font-bold text-neutral-700 flex items-center justify-center gap-1">
-                  <span>📉</span> <span>કુલ નુકસાન</span>
-                </div>
-                <div className="text-xs font-black text-neutral-900 mt-0.5 group-hover:text-red-600">
-                  ₹ {stats.totalLoss.toFixed(2)}
-                </div>
-              </div>
-
-              {/* 5. આઉટ સ્ટોક */}
-              <div
-                onClick={() => handleStatClick('outOfStock', 'આઉટ સ્ટોક (Out of Stock)', stats.outOfStock)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-red-500 hover:bg-red-50/30 transition-all shadow-2xs group"
-                title="Click to edit Out of Stock count"
-              >
-                <div className="text-[10px] font-bold text-red-600 flex items-center justify-center gap-1">
-                  <span>❌</span> <span>આઉટ સ્ટોક</span>
-                </div>
-                <div className="text-xs font-black text-red-600 mt-0.5">
-                  {stats.outOfStock} આઇટમ
-                </div>
-              </div>
-
-              {/* 6. ઓછો સ્ટોક */}
-              <div
-                onClick={() => handleStatClick('lowStock', 'ઓછો સ્ટોક (Low Stock)', stats.lowStock)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-orange-500 hover:bg-orange-50/30 transition-all shadow-2xs group"
-                title="Click to edit Low Stock count"
-              >
-                <div className="text-[10px] font-bold text-orange-600 flex items-center justify-center gap-1">
-                  <span>⚠️</span> <span>ઓછો સ્ટોક</span>
-                </div>
-                <div className="text-xs font-black text-orange-600 mt-0.5">
-                  {stats.lowStock} આઇટમ
-                </div>
-              </div>
-
-              {/* 7. વસ્તુ વેચાણી */}
-              <div
-                onClick={() => handleStatClick('itemsSold', 'વસ્તુ વેચાણી (Items Sold)', stats.itemsSold)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition-all shadow-2xs group"
-                title="Click to edit Items Sold count"
-              >
-                <div className="text-[10px] font-bold text-neutral-700 flex items-center justify-center gap-1">
-                  <span>📦</span> <span>વસ્તુ વેચાણી</span>
-                </div>
-                <div className="text-xs font-black text-neutral-900 mt-0.5">
-                  {stats.itemsSold} નંગ
-                </div>
-              </div>
-
-              {/* 8. કુલ બિલ */}
-              <div
-                onClick={() => handleStatClick('totalBills', 'કુલ બિલ (Total Bills)', stats.totalBills)}
-                className="bg-white border border-neutral-300 rounded p-1.5 cursor-pointer hover:border-blue-500 hover:bg-blue-50/30 transition-all shadow-2xs group"
-                title="Click to edit Total Bills count"
-              >
-                <div className="text-[10px] font-bold text-neutral-700 flex items-center justify-center gap-1">
-                  <span>🧾</span> <span>કુલ બિલ</span>
-                </div>
-                <div className="text-xs font-black text-neutral-900 mt-0.5">
-                  {stats.totalBills} બિલ
-                </div>
-              </div>
-
+            {/* Category Filter Chips */}
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-black">
+              {[
+                { id: 'all', label: 'બધી પ્રોડક્ટ્સ', icon: '🛍️' },
+                { id: 'books', label: 'નોટબુક / ચોપડા', icon: '📖' },
+                { id: 'stationery', label: 'પેન & સ્ટેશનરી', icon: '✒️' },
+                { id: 'service', label: 'ઓનલાઇન CSC સેવાઓ', icon: '📄' },
+                { id: 'printing', label: 'ઝેરોક્ષ & પ્રિન્ટિંગ', icon: '🖨️' },
+                { id: 'office', label: 'ઓફિસ ફાઇલ & સાધનો', icon: '📁' },
+                { id: 'bags', label: 'સ્કૂલ બેગ', icon: '🎒' }
+              ].map(cat => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(cat.id)}
+                  className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    selectedCategory === cat.id
+                      ? 'bg-[#0B1E48] text-white border-blue-900 shadow-2xs'
+                      : 'bg-neutral-100 text-neutral-700 border-neutral-200 hover:bg-neutral-200'
+                  }`}
+                >
+                  <span>{cat.icon}</span>
+                  <span>{cat.label}</span>
+                  {cat.id !== 'all' && (
+                    <span className="opacity-70 text-[10px]">
+                      ({posItems.filter(p => p.category === cat.id).length})
+                    </span>
+                  )}
+                </button>
+              ))}
             </div>
+          </div>
 
-            {/* MASTER RESET BUTTON */}
-            <div className="pt-1">
-              <button
-                onClick={handleMasterResetStats}
-                className="w-full text-center text-[10px] font-black text-neutral-500 hover:text-red-600 py-1 underline cursor-pointer"
-              >
-                રીસેટ સ્ટેટિસ્ટિક્સ (Reset All to 0)
-              </button>
-            </div>
-          </aside>
+          {/* ========================================================================= */}
+          {/* 4. AMAZON / FLIPKART STYLE PRODUCT GRID (Large High-Res Photos) */}
+          {/* ========================================================================= */}
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4.5">
+            {filteredItems.map(item => {
+              const inCart = cart.find(c => c.product.id === item.id);
+              const isOutOfStock = typeof item.stock === 'number' && item.stock <= 0;
+
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-2xl border border-neutral-300 hover:border-orange-500 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group relative"
+                >
+                  {/* Top Badge */}
+                  {item.badge && (
+                    <div className="absolute top-2 left-2 z-20">
+                      <span className="bg-orange-500 text-black text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
+                        {item.badge}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Admin Edit / Delete Shortcuts */}
+                  {isAdminUnlocked && (
+                    <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-white/95 backdrop-blur-xs p-1 rounded-lg border border-neutral-300 shadow-sm">
+                      <button
+                        onClick={() => setEditingItem(item)}
+                        className="text-blue-700 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
+                        title="પ્રોડક્ટ એડિટ કરો"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={e => handleDeleteItem(item.id, item.nameGu, e)}
+                        className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
+                        title="પ્રોડક્ટ ડિલીટ કરો"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Product Image / Icon Area - Large Edge-to-Edge Above Line */}
+                  <div className="h-44 sm:h-52 w-full bg-slate-100 flex items-center justify-center border-b border-neutral-200 overflow-hidden relative group/img">
+                    {item.imageUrl ? (
+                      <img
+                        src={item.imageUrl}
+                        alt={item.nameGu}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-amber-50/90 via-orange-50/50 to-blue-50/50 flex items-center justify-center">
+                        <span className="text-6xl sm:text-7xl group-hover:scale-110 transition-transform duration-300 drop-shadow-2xs">
+                          {item.icon || '📦'}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Quick Admin Crop & Change Photo Trigger */}
+                    {isAdminUnlocked && (
+                      <label
+                        className="absolute bottom-2 left-2 bg-black/80 hover:bg-black text-white px-2 py-1 rounded-lg text-[10px] font-black opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 cursor-pointer z-20 shadow-md"
+                        title="આ ફોટો ક્રોપ અને ઝૂમ કરો"
+                      >
+                        <Camera className="w-3 h-3 text-orange-400" />
+                        <span>ક્રોપ / બદલો</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            setEditingItem(item);
+                            handleImageFileUpload(e, 'editingProduct');
+                          }}
+                        />
+                      </label>
+                    )}
+
+                    {/* Stock status indicator */}
+                    <div className="absolute bottom-2 right-2 text-[10px] font-black z-10 shadow-xs">
+                      {item.isService ? (
+                        <span className="text-blue-800 bg-white/95 px-2 py-0.5 rounded-md border border-blue-200 font-extrabold backdrop-blur-xs">
+                          ⚡ સેવા
+                        </span>
+                      ) : isOutOfStock ? (
+                        <span className="text-red-700 bg-white/95 px-2 py-0.5 rounded-md border border-red-300 font-extrabold backdrop-blur-xs">
+                          ❌ ખલાસ
+                        </span>
+                      ) : (
+                        <span className="text-neutral-800 bg-white/95 px-2 py-0.5 rounded-md border border-neutral-300 font-extrabold backdrop-blur-xs">
+                          સ્ટોક: {item.stock} {item.unit}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Product Info */}
+                  <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-black text-neutral-900 leading-snug line-clamp-2">
+                        {item.nameGu}
+                      </h3>
+                      <p className="text-[10px] text-neutral-500 font-bold truncate mt-0.5">
+                        {item.nameEn}
+                      </p>
+                    </div>
+
+                    {/* Price and Cart Control */}
+                    <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-1">
+                      <div>
+                        <span className="text-sm sm:text-base font-black text-orange-700">
+                          ₹{item.price}
+                        </span>
+                        <span className="text-[10px] text-neutral-500 font-bold block">
+                          / {item.unit}
+                        </span>
+                      </div>
+
+                      {inCart ? (
+                        /* In Cart Stepper */
+                        <div className="flex items-center gap-1 bg-neutral-100 rounded-lg p-0.5 border border-neutral-300">
+                          <button
+                            onClick={() => updateCartQty(item.id, -1)}
+                            className="w-5 h-5 bg-white text-black font-black rounded flex items-center justify-center hover:bg-neutral-200 text-xs shadow-2xs"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="text-xs font-black px-1 text-neutral-900">
+                            {inCart.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateCartQty(item.id, 1)}
+                            className="w-5 h-5 bg-orange-500 text-black font-black rounded flex items-center justify-center hover:bg-orange-600 text-xs shadow-2xs"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        /* Add Button */
+                        <button
+                          onClick={() => addToCart(item)}
+                          disabled={isOutOfStock}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 shadow-2xs transition-transform active:scale-95 cursor-pointer ${
+                            isOutOfStock
+                              ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                              : 'bg-orange-500 hover:bg-orange-600 text-black'
+                          }`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>ઉમેરો</span>
+                        </button>
+                      )}
+                    </div>
+
+                  </div>
+                </div>
+              );
+            })}
+          </div>
 
         </main>
       ) : (
         /* ========================================================================= */
-        /* CUSTOMER VIEW: PUBLIC SHOPPING CATALOG & ONLINE ORDERING (DEFAULT) */
+        /* 5. ADMIN CONTROL DASHBOARD & BILLING COUNTER */
         /* ========================================================================= */
-        <main className="max-w-6xl mx-auto w-full px-4 py-6 flex-1 space-y-6 no-print">
+        <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
-          {/* Top Customer Header Banner */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-3 gap-2">
-            <div>
-              <span className="bg-orange-500 text-black text-xs font-black px-2.5 py-0.5 rounded">
-                ગ્રાહક ખરીદી પોર્ટલ (Customer Shopping)
-              </span>
-              <h2 className="text-2xl font-black text-black mt-1">
-                {storeSettings.storeNameGu}
-              </h2>
-              <p className="text-xs font-bold text-neutral-600">{storeSettings.address}</p>
+          {/* ADMIN TOP CONTROL BAR */}
+          <div className="bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black">
+                <Store className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-black text-neutral-900">
+                  સંચાલક કંટ્રોલ પેનલ (Admin Dashboard)
+                </h2>
+                <p className="text-xs text-neutral-500 font-bold">
+                  સંચાલક: {storeSettings.ownerName} • પાસવર્ડ સુરક્ષિત
+                </p>
+              </div>
             </div>
 
-            {/* Admin Login Button for Owner */}
-            <button
-              onClick={() => handleRequestAdminAccess('admin')}
-              className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3.5 py-2 rounded-lg text-xs font-black flex items-center gap-1.5 shadow transition-transform active:scale-95"
-            >
-              <KeyRound className="w-3.5 h-3.5 text-orange-400" />
-              <span>સંચાલક એડમિન લૉગિન</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setIsAddingNewItem(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ નવો સ્ટોક ઉમેરો</span>
+              </button>
+
+              <button
+                onClick={handleExportExcel}
+                className="bg-green-800 hover:bg-green-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Excel રિપોર્ટ</span>
+              </button>
+
+              <button
+                onClick={() => setShowChangePasswordModal(true)}
+                className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="એડમિન પાસવર્ડ બદલો"
+              >
+                <KeyRound className="w-4 h-4 text-amber-200" />
+                <span>પાસવર્ડ બદલો</span>
+              </button>
+
+              <button
+                onClick={() => setShowSettingsModal(true)}
+                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Settings className="w-4 h-4 text-orange-400" />
+                <span>દુકાન & બિલ સેટિંગ્સ</span>
+              </button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Catalog list */}
-            <div className="lg:col-span-7 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-black text-black">ઉપલબ્ધ વસ્તુઓ પસંદ કરો:</h3>
-                <span className="text-xs font-bold text-neutral-500">કુલ {posItems.length} આઇટમ્સ</span>
+          {/* REAL-TIME STATS CARDS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div
+              onClick={() => {
+                const val = prompt('દૈનિક વેચાણ રકમ દાખલ કરો (₹):', stats.dailySales.toString());
+                if (val !== null) setStats(s => ({ ...s, dailySales: Number(val) || 0 }));
+              }}
+              className="bg-white p-3.5 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-orange-500 transition-colors"
+            >
+              <p className="text-[11px] font-bold text-neutral-500">💰 દૈનિક વેચાણ (Daily Sales)</p>
+              <h3 className="text-lg font-black text-orange-600">₹{stats.dailySales.toFixed(2)}</h3>
+              <span className="text-[10px] text-neutral-400 font-bold">ક્લિક કરી બદલો</span>
+            </div>
+
+            <div
+              onClick={() => {
+                const val = prompt('ખરીદી રકમ દાખલ કરો (₹):', stats.dailyPurchase.toString());
+                if (val !== null) setStats(s => ({ ...s, dailyPurchase: Number(val) || 0 }));
+              }}
+              className="bg-white p-3.5 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-blue-500 transition-colors"
+            >
+              <p className="text-[11px] font-bold text-neutral-500">📦 કુલ ખરીદી (Purchase)</p>
+              <h3 className="text-lg font-black text-blue-700">₹{stats.dailyPurchase.toFixed(2)}</h3>
+              <span className="text-[10px] text-neutral-400 font-bold">ક્લિક કરી બદલો</span>
+            </div>
+
+            <div
+              onClick={() => {
+                const val = prompt('નફો દાખલ કરો (₹):', stats.netProfit.toString());
+                if (val !== null) setStats(s => ({ ...s, netProfit: Number(val) || 0 }));
+              }}
+              className="bg-white p-3.5 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-emerald-500 transition-colors"
+            >
+              <p className="text-[11px] font-bold text-neutral-500">📈 નેટ પ્રોફિટ (Net Profit)</p>
+              <h3 className="text-lg font-black text-emerald-600">₹{stats.netProfit.toFixed(2)}</h3>
+              <span className="text-[10px] text-neutral-400 font-bold">ક્લિક કરી બદલો</span>
+            </div>
+
+            <div className="bg-white p-3.5 rounded-xl border border-neutral-300 shadow-2xs">
+              <p className="text-[11px] font-bold text-neutral-500">🧾 કુલ બિલ & ઓર્ડર</p>
+              <h3 className="text-lg font-black text-neutral-900">{orders.length}</h3>
+              <span className="text-[10px] text-emerald-600 font-bold">વેચાણ થયેલ: {stats.itemsSold} નંગ</span>
+            </div>
+          </div>
+
+          {/* POS COUNTER BILLING & INVENTORY TABLE */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            
+            {/* POS COUNTER BILLING BOX */}
+            <div className="bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between border-b pb-2">
+                <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
+                  <Receipt className="w-4 h-4 text-orange-600" />
+                  <span>કાઉન્ટર બિલિંગ (Instant POS)</span>
+                </h3>
+                <span className="text-xs font-black text-orange-700">
+                  કાર્ટ: {cart.length} વસ્તુ (₹{cartTotalAmount})
+                </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {posItems.map(item => (
-                  <div
-                    key={item.id}
-                    className="border border-neutral-300 rounded-xl p-3 flex flex-col justify-between hover:shadow-md transition-all bg-white"
-                  >
-                    <div className="text-center">
-                      {item.imageUrl ? (
-                        <div className="w-14 h-14 mx-auto rounded-lg overflow-hidden border mb-1 flex items-center justify-center bg-neutral-50">
-                          <img src={item.imageUrl} alt={item.nameGu} className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <span className="text-3xl block mb-1">{item.icon || '📦'}</span>
-                      )}
-                      <h4 className="text-xs font-black text-black mt-1">{item.nameGu}</h4>
-                      <p className="text-[10px] text-neutral-500 font-bold">{item.nameEn}</p>
-                    </div>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  placeholder="ગ્રાહકનું નામ (Customer Name)"
+                  value={posCustomerName}
+                  onChange={e => setPosCustomerName(e.target.value)}
+                  className="w-full text-xs font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                />
+                <input
+                  type="tel"
+                  placeholder="મોબાઇલ નંબર (Mobile No)"
+                  value={posCustomerMobile}
+                  onChange={e => setPosCustomerMobile(e.target.value)}
+                  className="w-full text-xs font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                />
 
-                    <div className="mt-3 pt-2 border-t flex items-center justify-between">
-                      <div>
-                        <span className="text-xs font-black text-black block">₹{item.price}</span>
-                        <span className="text-[10px] text-neutral-500">/{item.unit}</span>
-                      </div>
-                      <button
-                        onClick={() => addToCart(item)}
-                        className="bg-blue-700 hover:bg-blue-800 text-white text-[11px] font-black px-2.5 py-1 rounded shadow-xs"
-                      >
-                        + ઉમેરો
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['Cash', 'UPI', 'બાકી (Credit)'] as const).map(mode => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setPosPaymentMode(mode)}
+                      className={`p-1.5 rounded-lg text-xs font-black border transition-all ${
+                        posPaymentMode === mode
+                          ? 'bg-[#0B1E48] text-white border-blue-900'
+                          : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                      }`}
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-neutral-600">ડિસ્કાઉન્ટ (₹):</span>
+                  <input
+                    type="number"
+                    value={posDiscount || ''}
+                    onChange={e => setPosDiscount(Number(e.target.value) || 0)}
+                    placeholder="0"
+                    className="w-24 text-xs font-black p-1.5 border border-neutral-300 rounded-lg text-right outline-none"
+                  />
+                </div>
+
+                <div className="border-t pt-2 flex items-center justify-between font-black text-sm">
+                  <span>ચૂકવવાપાત્ર:</span>
+                  <span className="text-base text-orange-700">
+                    ₹{Math.max(0, cartTotalAmount - posDiscount)}/-
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGeneratePOSBill}
+                  className="w-full bg-[#0B1E48] hover:bg-blue-900 text-white font-black py-2.5 rounded-xl text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4 text-orange-400" />
+                  <span>કાઉન્ટર બિલ પ્રિન્ટ કરો</span>
+                </button>
               </div>
             </div>
 
-            {/* Cart & Paywall Checkout Form */}
-            <div className="lg:col-span-5 bg-neutral-50 border border-neutral-300 rounded-2xl p-5 space-y-4 shadow-sm">
-              <div className="flex items-center justify-between border-b pb-2">
-                <h3 className="text-base font-black text-black flex items-center gap-1.5">
-                  <ShoppingCart className="w-4 h-4 text-blue-700" />
-                  <span>તમારું કાર્ટ ({cart.length})</span>
-                </h3>
-                <span className="text-base font-black text-blue-800">કુલ: ₹{cartTotal}</span>
+            {/* ORDERS LOGS & MANAGEMENT TABLE */}
+            <div className="lg:col-span-2 bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs space-y-3">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-2">
+                <div>
+                  <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
+                    <FileText className="w-4 h-4 text-blue-700" />
+                    <span>ઓર્ડર અને બિલિંગ મેનેજમેન્ટ ({orders.length})</span>
+                  </h3>
+                  <p className="text-[11px] text-neutral-500 font-bold">
+                    નવા ઓનલાઇન ઓર્ડર્સ પ્રોસેસ કરો, સ્ટેટસ બદલો, બિલ એડિટ/ડિલીટ કરો
+                  </p>
+                </div>
+
+                {/* Filter Tabs: All, Online, Counter */}
+                <div className="flex items-center gap-1 bg-neutral-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setAdminOrderFilter('all')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${
+                      adminOrderFilter === 'all'
+                        ? 'bg-neutral-900 text-white shadow-xs'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    બધા ({orders.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminOrderFilter('online')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all flex items-center gap-1 ${
+                      adminOrderFilter === 'online'
+                        ? 'bg-blue-700 text-white shadow-xs'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    <span>🌐 ઓનલાઇન</span>
+                    <span className="bg-orange-500 text-black px-1 rounded-full text-[10px] font-black">
+                      {orders.filter(o => o.orderType === 'online').length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAdminOrderFilter('counter')}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-black transition-all ${
+                      adminOrderFilter === 'counter'
+                        ? 'bg-emerald-700 text-white shadow-xs'
+                        : 'text-neutral-600 hover:text-neutral-900'
+                    }`}
+                  >
+                    🏪 કાઉન્ટર ({orders.filter(o => o.orderType !== 'online').length})
+                  </button>
+                </div>
               </div>
 
-              {cart.length === 0 ? (
-                <div className="text-center py-6 text-neutral-500 text-xs font-bold">
-                  તમારું કાર્ટ ખાલી છે. ડાબી બાજુથી વસ્તુ પસંદ કરો.
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {/* Cart Items list */}
-                  <div className="divide-y divide-neutral-200 max-h-40 overflow-y-auto pr-1 text-xs">
-                    {cart.map(c => (
-                      <div key={c.product.id} className="py-2 flex items-center justify-between">
-                        <div>
-                          <div className="font-black text-black">{c.product.nameGu}</div>
-                          <div className="text-[10px] text-neutral-500 font-bold">₹{c.product.price} x {c.quantity}</div>
+              {/* ORDERS LIST */}
+              <div className="max-h-96 overflow-y-auto divide-y divide-neutral-200 pr-1 space-y-2">
+                {orders
+                  .filter(o => {
+                    if (adminOrderFilter === 'online') return o.orderType === 'online';
+                    if (adminOrderFilter === 'counter') return o.orderType !== 'online';
+                    return true;
+                  })
+                  .map(o => (
+                    <div
+                      key={o.id}
+                      className="p-3 bg-neutral-50/70 hover:bg-neutral-100/80 rounded-xl border border-neutral-200 transition-colors space-y-2"
+                    >
+                      {/* Top Row: Invoice + Name + Total + Badges */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black text-blue-900 bg-blue-100 px-2 py-0.5 rounded border border-blue-300">
+                            #{o.invoiceNo}
+                          </span>
+                          <span className="text-xs font-black text-neutral-900">
+                            {o.customerName}
+                          </span>
+                          <span className="text-[11px] text-neutral-500 font-bold">
+                            📞 {o.mobile}
+                          </span>
+                          {o.orderType === 'online' ? (
+                            <span className="bg-purple-100 text-purple-800 text-[10px] font-black px-2 py-0.5 rounded border border-purple-300 flex items-center gap-0.5">
+                              🌐 ઓનલાઇન ઓર્ડર
+                            </span>
+                          ) : (
+                            <span className="bg-neutral-200 text-neutral-700 text-[10px] font-black px-2 py-0.5 rounded">
+                              🏪 કાઉન્ટર
+                            </span>
+                          )}
                         </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black text-orange-700">
+                            ₹{o.total}
+                          </span>
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded ${
+                              o.paymentStatus === 'Paid'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-red-100 text-red-700 border border-red-300'
+                            }`}
+                          >
+                            {o.paymentMode} ({o.paymentStatus})
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Items & Address details */}
+                      <div className="text-[11px] text-neutral-600 bg-white p-2 rounded-lg border border-neutral-200">
+                        <p className="font-bold">
+                          🛒 <strong className="text-neutral-800">આઇટમ્સ:</strong>{' '}
+                          {o.items.map(it => `${it.name} (${it.qty} ${it.unit})`).join(', ')}
+                        </p>
+                        {o.address && (
+                          <p className="font-bold text-neutral-500 mt-0.5">
+                            📍 <strong>સરનામું:</strong> {o.address}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Bottom Controls: Live Status Changer + Screenshot View + Edit + Delete + Print */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        {/* Live Delivery Status Selector */}
                         <div className="flex items-center gap-1.5">
+                          <label className="text-[10px] font-black text-neutral-700">
+                            સ્ટેટસ:
+                          </label>
+                          <select
+                            value={o.orderStatus || 'placed'}
+                            onChange={e =>
+                              handleUpdateOrderStatus(o.id, e.target.value as OrderRecord['orderStatus'])
+                            }
+                            className={`text-xs font-black px-2 py-1 rounded-lg border outline-none cursor-pointer ${
+                              (o.orderStatus || 'placed') === 'delivered'
+                                ? 'bg-emerald-100 text-emerald-900 border-emerald-400'
+                                : (o.orderStatus || 'placed') === 'cancelled'
+                                ? 'bg-red-100 text-red-900 border-red-400'
+                                : 'bg-blue-100 text-blue-900 border-blue-400'
+                            }`}
+                          >
+                            <option value="placed">📝 ઓર્ડર મળ્યો (Placed)</option>
+                            <option value="confirmed">💳 પેમેન્ટ મંજૂર (Confirmed)</option>
+                            <option value="packed">📦 પેક થઈ ગયું (Packed)</option>
+                            <option value="out_for_delivery">🚚 રવાના થયો (Out for Delivery)</option>
+                            <option value="delivered">✅ ડિલિવરી પૂર્ણ (Delivered)</option>
+                            <option value="cancelled">❌ રદ (Cancelled)</option>
+                          </select>
+
+                          {o.statusUpdatedAt && (
+                            <span className="text-[9px] text-neutral-400 font-bold hidden sm:inline">
+                              ({o.statusUpdatedAt})
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-1.5 ml-auto">
+                          {/* Payment Screenshot Viewer Button */}
+                          {o.paymentScreenshot && (
+                            <button
+                              type="button"
+                              onClick={() => setViewingScreenshot(o.paymentScreenshot!)}
+                              className="bg-purple-100 hover:bg-purple-200 text-purple-900 px-2.5 py-1 rounded-lg border border-purple-300 text-xs font-black flex items-center gap-1 cursor-pointer"
+                              title="UPI પેમેન્ટ સ્ક્રીનશોટ જુઓ"
+                            >
+                              <ImageIcon className="w-3.5 h-3.5 text-purple-700" />
+                              <span>સ્ક્રીનશોટ</span>
+                            </button>
+                          )}
+
+                          {/* Print Invoice Button */}
                           <button
-                            onClick={() => updateCartQty(c.product.id, -1)}
-                            className="w-6 h-6 bg-neutral-200 rounded font-black flex items-center justify-center"
+                            type="button"
+                            onClick={() => {
+                              setActiveInvoiceOrder(o);
+                              setIsSuccessModal(false);
+                            }}
+                            className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 px-2.5 py-1 rounded-lg border border-neutral-300 text-xs font-black flex items-center gap-1 cursor-pointer"
+                            title="બિલ પ્રિન્ટ / જુઓ"
+                          >
+                            <Printer className="w-3.5 h-3.5 text-neutral-700" />
+                            <span>પ્રિન્ટ</span>
+                          </button>
+
+                          {/* Edit Bill Button */}
+                          <button
+                            type="button"
+                            onClick={() => setEditingOrder(o)}
+                            className="bg-blue-50 hover:bg-blue-100 text-blue-800 px-2.5 py-1 rounded-lg border border-blue-300 text-xs font-black flex items-center gap-1 cursor-pointer"
+                            title="બિલ એડિટ કરો"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-blue-700" />
+                            <span>એડિટ</span>
+                          </button>
+
+                          {/* Delete Bill with Auto-Restock Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteOrder(o.id)}
+                            className="bg-red-50 hover:bg-red-100 text-red-700 px-2.5 py-1 rounded-lg border border-red-300 text-xs font-black flex items-center gap-1 cursor-pointer"
+                            title="બિલ ડિલીટ કરો (માલ સ્ટોકમાં જમા થશે)"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                            <span>ડિલીટ</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                {orders.length === 0 && (
+                  <p className="text-center py-6 text-xs text-neutral-500 font-bold">
+                    કોઈ ઓર્ડર ઉપલબ્ધ નથી.
+                  </p>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* INVENTORY MANAGEMENT TABLE WITH DIRECT STOCK INPUT */}
+          <div className="bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs space-y-3">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <div>
+                <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
+                  <Package className="w-4 h-4 text-emerald-600" />
+                  <span>ઇન્વેન્ટરી સ્ટોક મેનેજમેન્ટ ({posItems.length} આઇટમ્સ)</span>
+                </h3>
+                <p className="text-[11px] text-neutral-500 font-bold">
+                  હાજર સ્ટોક ખાનામાં સીધો નંબર (દા.ત. 100) લખીને તરત સ્ટોક અપડેટ કરો
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAddingNewItem(true)}
+                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 text-orange-400" />
+                <span>નવી પ્રોડક્ટ ઉમેરો</span>
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-neutral-100 text-neutral-700 border-b font-black">
+                    <th className="p-2">પ્રોડક્ટ</th>
+                    <th className="p-2">કેટેગરી</th>
+                    <th className="p-2">વેચાણ ભાવ</th>
+                    <th className="p-2">ખરીદ ભાવ</th>
+                    <th className="p-2 text-center">હાજર સ્ટોક (ડાયરેક્ટ અપડેટ)</th>
+                    <th className="p-2 text-right">એક્શન</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-200">
+                  {posItems.map(item => (
+                    <tr key={item.id} className="hover:bg-neutral-50">
+                      <td className="p-2 font-black text-neutral-900 flex items-center gap-2">
+                        {item.imageUrl ? (
+                          <img
+                            src={item.imageUrl}
+                            alt={item.nameGu}
+                            className="w-8 h-8 rounded-lg object-contain bg-white border border-neutral-300 shrink-0"
+                          />
+                        ) : (
+                          <span className="text-lg">{item.icon || '📦'}</span>
+                        )}
+                        <div>
+                          <span>{item.nameGu}</span>
+                          <span className="block text-[10px] text-neutral-400 font-bold">{item.nameEn}</span>
+                        </div>
+                      </td>
+                      <td className="p-2 font-bold text-neutral-600">{item.category}</td>
+                      <td className="p-2 font-black text-orange-700">₹{item.price}</td>
+                      <td className="p-2 font-bold text-neutral-600">₹{item.costPrice}</td>
+                      
+                      {/* DIRECT STOCK NUMBER INPUT + QUICK +/- BUTTONS */}
+                      <td className="p-2 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={e => modifyStock(item.id, -1, e)}
+                            className="w-6 h-6 bg-neutral-200 hover:bg-neutral-300 rounded-md font-black text-xs cursor-pointer flex items-center justify-center"
+                            title="1 ઘટાડો"
                           >
                             -
                           </button>
-                          <span className="font-black w-4 text-center">{c.quantity}</span>
+                          
+                          <input
+                            type="number"
+                            key={item.stock}
+                            defaultValue={item.stock}
+                            onBlur={e => handleDirectStockUpdate(item.id, e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                handleDirectStockUpdate(item.id, (e.target as HTMLInputElement).value);
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            className="w-16 text-center font-black text-xs py-1 px-1.5 border-2 border-neutral-300 rounded-md focus:border-orange-500 outline-none bg-white text-neutral-900"
+                            title="અહીં સીધો સ્ટોક નંબર લખો (દા.ત. 100)"
+                          />
+
                           <button
-                            onClick={() => updateCartQty(c.product.id, 1)}
-                            className="w-6 h-6 bg-orange-500 text-black rounded font-black flex items-center justify-center"
+                            type="button"
+                            onClick={e => modifyStock(item.id, 1, e)}
+                            className="w-6 h-6 bg-orange-500 hover:bg-orange-600 text-black rounded-md font-black text-xs cursor-pointer flex items-center justify-center"
+                            title="1 વધારો"
                           >
                             +
                           </button>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      </td>
 
-                  {/* Customer Details Form */}
-                  <div className="space-y-2.5 pt-2 border-t border-neutral-200 text-xs">
-                    <div>
-                      <label className="font-black block mb-0.5">તમારું પૂરું નામ (Full Name) *:</label>
-                      <input
-                        type="text"
-                        placeholder="નામ દાખલ કરો"
-                        value={customerName}
-                        onChange={e => setCustomerName(e.target.value)}
-                        className="w-full p-2 border border-neutral-300 rounded font-bold bg-white focus:border-blue-600 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="font-black block mb-0.5">મોબાઇલ નંબર (Mobile) *:</label>
-                      <input
-                        type="text"
-                        placeholder="૧૦ આંકડાનો મોબાઇલ નંબર"
-                        value={customerMobile}
-                        onChange={e => setCustomerMobile(e.target.value)}
-                        className="w-full p-2 border border-neutral-300 rounded font-bold bg-white focus:border-blue-600 outline-none"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="font-black block mb-0.5">સરનામું (ગામ / તાલુકો) *:</label>
-                      <input
-                        type="text"
-                        placeholder="ગામ, તાલુકો, સોસાયટી"
-                        value={customerAddress}
-                        onChange={e => setCustomerAddress(e.target.value)}
-                        className="w-full p-2 border border-neutral-300 rounded font-bold bg-white focus:border-blue-600 outline-none"
-                      />
-                    </div>
-
-                    {/* Payment Mode Selection */}
-                    <div>
-                      <label className="font-black block mb-0.5">ચુકવણી પદ્ધતિ પસંદ કરો:</label>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                          { id: 'UPI', label: 'UPI / QR' },
-                          { id: 'Cash', label: 'Cash (રોકડ)' },
-                          { id: 'બાકી (Credit)', label: 'બાકી (Credit)' }
-                        ].map(m => (
+                      <td className="p-2 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
-                            key={m.id}
                             type="button"
-                            onClick={() => setBillPaymentMode(m.id as any)}
-                            className={`p-1.5 rounded text-[11px] font-bold border text-center transition-all ${
-                              billPaymentMode === m.id
-                                ? 'bg-blue-700 text-white border-blue-800 font-black'
-                                : 'bg-white text-neutral-800 border-neutral-300'
-                            }`}
+                            onClick={() => setEditingItem(item)}
+                            className="text-blue-700 hover:text-blue-900 p-1 font-bold text-xs cursor-pointer"
+                            title="એડિટ"
                           >
-                            {m.label}
+                            <Edit3 className="w-4 h-4" />
                           </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Dynamic UPI QR Code box */}
-                    <div className="bg-white border-2 border-dashed border-blue-500 rounded-xl p-3 text-center space-y-2">
-                      <div className="text-xs font-black text-blue-900">
-                        📱 સ્કેન કરીને ₹{cartTotal} ચૂકવો
-                      </div>
-                      {upiQrCodeUrl && (
-                        <div className="w-32 h-32 mx-auto border p-1 rounded-lg bg-white shadow-xs">
-                          <img src={upiQrCodeUrl} alt="UPI QR" className="w-full h-full object-contain" />
+                          <button
+                            type="button"
+                            onClick={e => handleDeleteItem(item.id, item.nameGu, e)}
+                            className="text-red-600 hover:text-red-800 p-1 font-bold text-xs cursor-pointer"
+                            title="ડિલીટ"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
-                      )}
-                      <div className="text-[11px] font-black text-neutral-800">
-                        UPI ID: <span className="text-blue-700 select-all">{storeSettings.upiId}</span>
-                      </div>
-                    </div>
-
-                    {/* SCREENSHOT PROOF UPLOAD (MANDATORY PAYWALL LOCK) */}
-                    <div className="space-y-1 pt-1">
-                      <label className="font-black block text-xs text-neutral-900">
-                        📸 પેમેન્ટ રસીદ / સ્ક્રીનશોટ અપલોડ કરો *
-                      </label>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={e => {
-                          const f = e.target.files?.[0];
-                          if (f) {
-                            setPaymentProofFile(f);
-                            const r = new FileReader();
-                            r.onload = () => setPaymentProofPreview(r.result as string);
-                            r.readAsDataURL(f);
-                            showToast('✅ પેમેન્ટ સ્ક્રીનશોટ સિલેક્ટ થયો!');
-                          }
-                        }}
-                        className="w-full text-xs file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-black file:bg-orange-500 file:text-black hover:file:bg-orange-600 cursor-pointer"
-                      />
-                      {paymentProofPreview && (
-                        <div className="text-[10px] font-bold text-emerald-700 flex items-center gap-1 mt-1">
-                          <CheckCircle className="w-3.5 h-3.5" />
-                          <span>સ્ક્રીનશોટ જોડાયેલ છે</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* FINAL WHATSAPP SUBMIT BUTTON */}
-                    <button
-                      disabled={!paymentProofFile && !paymentProofPreview}
-                      onClick={handleCustomerWhatsAppOrder}
-                      className={`w-full py-3 rounded-xl font-black text-xs flex items-center justify-center gap-2 shadow-md transition-all ${
-                        paymentProofFile || paymentProofPreview
-                          ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95'
-                          : 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
-                      }`}
-                    >
-                      <Phone className="w-4 h-4" />
-                      <span>📲 ઓર્ડર કન્ફર્મ કરો (WhatsApp)</span>
-                    </button>
-                    {(!paymentProofFile && !paymentProofPreview) && (
-                      <p className="text-[10px] text-center text-red-600 font-bold">
-                        ⚠️ ઓર્ડર મોકલવા માટે પેમેન્ટનો સ્ક્રીનશોટ અપલોડ કરવો જરૂરી છે.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
+
         </main>
       )}
 
       {/* ========================================================================= */}
-      {/* 4. EDIT ITEM MODAL (NAME, PRICE, COST, STOCK, EMOJI, CUSTOM IMAGE UPLOAD) */}
+      {/* 6. SIDE DRAWER CART & CHECKOUT MODAL */}
       {/* ========================================================================= */}
-      {editingItem && isAdminUnlocked && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-5 max-w-md w-full border-2 border-black shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-black text-sm text-black flex items-center gap-2">
-                <Edit3 className="w-4 h-4 text-blue-700" />
-                <span>આઇટમ વિગતો અને ફોટો બદલો</span>
-              </h3>
-              <button onClick={() => setEditingItem(null)} className="text-neutral-500 hover:text-black">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+      <CartDrawer
+        isOpen={isCartDrawerOpen}
+        onClose={() => setIsCartDrawerOpen(false)}
+        cart={cart}
+        onUpdateQty={updateCartQty}
+        onRemoveItem={removeCartItem}
+        onClearCart={() => setCart([])}
+        storeSettings={storeSettings}
+        onConfirmOrder={handleCustomerConfirmOrder}
+      />
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold block mb-1">આઇટમ નામ (ગુજરાતી):</label>
-                <input
-                  type="text"
-                  value={editingItem.nameGu}
-                  onChange={e => setEditingItem({ ...editingItem, nameGu: e.target.value })}
-                  className="w-full p-2 border rounded font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-1">English Name:</label>
-                <input
-                  type="text"
-                  value={editingItem.nameEn}
-                  onChange={e => setEditingItem({ ...editingItem, nameEn: e.target.value })}
-                  className="w-full p-2 border rounded font-bold"
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="font-bold block mb-1">વેચાણ ભાવ (₹):</label>
-                  <input
-                    type="number"
-                    value={editingItem.price}
-                    onChange={e => setEditingItem({ ...editingItem, price: Number(e.target.value) })}
-                    className="w-full p-2 border rounded font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold block mb-1">ખરીદ ભાવ (₹):</label>
-                  <input
-                    type="number"
-                    value={editingItem.costPrice}
-                    onChange={e => setEditingItem({ ...editingItem, costPrice: Number(e.target.value) })}
-                    className="w-full p-2 border rounded font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="font-bold block mb-1">સ્ટોક (Stock):</label>
-                  <input
-                    type="text"
-                    value={editingItem.stock}
-                    onChange={e => setEditingItem({ ...editingItem, stock: isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value) })}
-                    className="w-full p-2 border rounded font-bold"
-                  />
-                </div>
-              </div>
-
-              {/* Item Photo Upload */}
-              <div className="p-2.5 bg-neutral-50 rounded border border-neutral-200">
-                <label className="font-bold block mb-1">આઇટમ ફોટો (Upload Custom Image):</label>
-                <div className="flex items-center gap-3">
-                  {editingItem.imageUrl ? (
-                    <img src={editingItem.imageUrl} alt="Preview" className="w-12 h-12 rounded object-cover border" />
-                  ) : (
-                    <div className="text-2xl">{editingItem.icon || '📦'}</div>
-                  )}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={e => handleImageFileUpload(e, 'editingProduct')}
-                    className="text-xs file:py-1 file:px-2 file:rounded file:border-0 file:bg-blue-700 file:text-white"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center pt-2 border-t">
-              <button
-                onClick={e => handleDeleteItem(editingItem.id, editingItem.nameGu, e)}
-                className="text-red-600 font-bold hover:underline flex items-center gap-1 text-xs"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>ડીલીટ કરો</span>
-              </button>
-
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setEditingItem(null)}
-                  className="px-3 py-1.5 border rounded text-xs font-bold"
-                >
-                  રદ કરો
-                </button>
-                <button
-                  onClick={handleSaveItemEdit}
-                  className="px-4 py-1.5 bg-[#0B1E48] text-white rounded text-xs font-black shadow"
-                >
-                  સેવ કરો
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* ========================================================================= */}
+      {/* 7. PRINTABLE INVOICE & ORDER SUCCESS MODAL */}
+      {/* ========================================================================= */}
+      {activeInvoiceOrder && (
+        <InvoiceModal
+          order={activeInvoiceOrder}
+          storeSettings={storeSettings}
+          onClose={() => {
+            setActiveInvoiceOrder(null);
+            setIsSuccessModal(false);
+          }}
+          isSuccessView={isSuccessModal}
+        />
       )}
 
       {/* ========================================================================= */}
-      {/* 5. ON-CLICK STAT OVERRIDE MODAL */}
+      {/* 8. ADMIN STORE & BILL SETTINGS MODAL */}
       {/* ========================================================================= */}
-      {editStatKey && isAdminUnlocked && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-5 max-w-sm w-full border-2 border-black shadow-2xl space-y-3">
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-5 max-w-xl w-full border-2 border-black shadow-2xl space-y-4 my-auto">
             <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-black text-sm text-black">
-                ✏️ {editStatLabel} બદલો
-              </h3>
-              <button onClick={() => setEditStatKey(null)} className="text-neutral-500 hover:text-black">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div>
-              <label className="text-xs font-bold block mb-1">નવી કિંમત / આંકડો દાખલ કરો:</label>
-              <input
-                type="number"
-                step="any"
-                value={editStatValue}
-                onChange={e => setEditStatValue(e.target.value)}
-                className="w-full text-base font-black p-2 border-2 border-black rounded focus:ring-2 focus:ring-blue-600 outline-none"
-                autoFocus
-              />
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <button
-                onClick={() => setEditStatKey(null)}
-                className="px-3 py-1.5 border rounded text-xs font-bold"
-              >
-                રદ કરો
-              </button>
-              <button
-                onClick={handleSaveStat}
-                className="px-4 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-black shadow"
-              >
-                અપડેટ કરો
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 6. BANNER EDIT MODAL (PHOTO & TEXT) */}
-      {/* ========================================================================= */}
-      {showBannerEditModal && isAdminUnlocked && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl p-5 max-w-md w-full border-2 border-black shadow-2xl space-y-3">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-black text-sm text-black">
-                🖼️ જાહેરાત બેનર એડિટ & ફોટો અપલોડ
-              </h3>
-              <button onClick={() => setShowBannerEditModal(false)} className="text-neutral-500 hover:text-black">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-bold block mb-1">બેનર લખાણ (Banner Text):</label>
-                <textarea
-                  rows={3}
-                  value={storeSettings.bannerText}
-                  onChange={e => setStoreSettings({ ...storeSettings, bannerText: e.target.value })}
-                  className="w-full p-2 border rounded font-bold"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-1">બેનર ફોટો અપલોડ (Upload Image):</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={e => handleImageFileUpload(e, 'bannerImage')}
-                  className="w-full text-xs"
-                />
-              </div>
-
-              {storeSettings.bannerImageUrl && (
-                <div className="relative">
-                  <img src={storeSettings.bannerImageUrl} alt="Banner Preview" className="w-full h-24 object-cover rounded border" />
-                  <button
-                    onClick={() => setStoreSettings({ ...storeSettings, bannerImageUrl: '' })}
-                    className="absolute top-1 right-1 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded"
-                  >
-                    હટાવો
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <button
-                onClick={() => setShowBannerEditModal(false)}
-                className="px-4 py-1.5 bg-[#0B1E48] text-white rounded text-xs font-black shadow"
-              >
-                સેવ કરો
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* 7. FULL STORE SETTINGS MODAL */}
-      {/* ========================================================================= */}
-      {showSettingsModal && isAdminUnlocked && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl p-5 max-w-lg w-full border-2 border-black shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-black text-sm text-black flex items-center gap-2">
+              <h3 className="font-black text-sm text-neutral-900 flex items-center gap-1.5">
                 <Settings className="w-4 h-4 text-orange-600" />
-                <span>દુકાન & વેબસાઇટ સેટિંગ્સ (Store Settings)</span>
+                <span>દુકાન, લોગો & બિલ સેટિંગ્સ (Store & Invoice Settings)</span>
               </h3>
-              <button onClick={() => setShowSettingsModal(false)} className="text-neutral-500 hover:text-black">
+              <button onClick={() => setShowSettingsModal(false)} className="text-neutral-400 hover:text-black">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div className="bg-orange-50 p-2.5 rounded border border-orange-200">
-                <label className="font-black text-blue-900 block mb-1">
-                  💳 UPI ID (આ UPI પર ગ્રાહકોના પૈસા જમા થશે):
-                </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div>
+                <label className="font-bold block mb-0.5 text-neutral-700">દુકાન નામ (English):</label>
                 <input
                   type="text"
-                  value={storeSettings.upiId}
-                  onChange={e => setStoreSettings({ ...storeSettings, upiId: e.target.value })}
-                  placeholder="8140430395@apl"
-                  className="w-full p-2 border-2 border-blue-600 rounded font-black text-sm bg-white"
-                />
-                <span className="text-[10px] text-neutral-600 mt-1 block font-bold">
-                  નોંધ: આ UPI ID બદલવાથી ગ્રાહક વ્યૂ અને બિલના બધા QR કોડ તરત જ નવા UPI સાથે જોડાઈ જશે.
-                </span>
-              </div>
-
-              <div className="bg-blue-50 p-2.5 rounded border border-blue-200">
-                <label className="font-black text-blue-900 block mb-1">
-                  🔐 એડમિન પાસવર્ડ (Admin Password):
-                </label>
-                <input
-                  type="text"
-                  value={storeSettings.adminPassword || 'Bharat@1994'}
-                  onChange={e => setStoreSettings({ ...storeSettings, adminPassword: e.target.value })}
-                  className="w-full p-2 border border-blue-400 rounded font-black text-xs bg-white"
+                  value={storeSettings.storeNameEn}
+                  onChange={e => setStoreSettings({ ...storeSettings, storeNameEn: e.target.value })}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                 />
               </div>
 
               <div>
-                <label className="font-bold block mb-1">દુકાન માલિક / એડમિન નામ:</label>
+                <label className="font-bold block mb-0.5 text-neutral-700">દુકાન નામ (ગુજરાતી):</label>
+                <input
+                  type="text"
+                  value={storeSettings.storeNameGu}
+                  onChange={e => setStoreSettings({ ...storeSettings, storeNameGu: e.target.value })}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-0.5 text-neutral-700">સંચાલક નામ (Owner):</label>
                 <input
                   type="text"
                   value={storeSettings.ownerName}
                   onChange={e => setStoreSettings({ ...storeSettings, ownerName: e.target.value })}
-                  className="w-full p-2 border rounded font-bold"
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                 />
               </div>
 
               <div>
-                <label className="font-bold block mb-1">સંપર્ક મોબાઇલ નંબર:</label>
+                <label className="font-bold block mb-0.5 text-neutral-700">મોબાઇલ નંબર (Mobile):</label>
                 <input
                   type="text"
                   value={storeSettings.phone}
-                  onChange={e => setStoreSettings({ ...storeSettings, phone: e.target.value, phoneDisplay: `+૯૧ ${e.target.value}` })}
-                  className="w-full p-2 border rounded font-bold"
+                  onChange={e => setStoreSettings({ ...storeSettings, phone: e.target.value, phoneDisplay: `+91 ${e.target.value}` })}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                 />
               </div>
 
               <div>
-                <label className="font-bold block mb-1">સરનામું:</label>
-                <textarea
-                  rows={2}
+                <label className="font-bold block mb-0.5 text-neutral-700">UPI ID (QR પેમેન્ટ માટે):</label>
+                <input
+                  type="text"
+                  value={storeSettings.upiId}
+                  onChange={e => setStoreSettings({ ...storeSettings, upiId: e.target.value })}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-0.5 text-neutral-700">GSTIN નંબર:</label>
+                <input
+                  type="text"
+                  value={storeSettings.gstNumber}
+                  onChange={e => setStoreSettings({ ...storeSettings, gstNumber: e.target.value })}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="font-bold block mb-0.5 text-neutral-700">દુકાન સરનામું (Address):</label>
+                <input
+                  type="text"
                   value={storeSettings.address}
                   onChange={e => setStoreSettings({ ...storeSettings, address: e.target.value })}
-                  className="w-full p-2 border rounded font-bold"
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                 />
               </div>
 
-              <div>
-                <label className="font-bold block mb-1">દોડતી જાહેરાત પટ્ટી (Marquee Text):</label>
-                <textarea
-                  rows={2}
-                  value={storeSettings.marqueeText}
-                  onChange={e => setStoreSettings({ ...storeSettings, marqueeText: e.target.value })}
-                  className="w-full p-2 border rounded font-bold"
+              <div className="sm:col-span-2">
+                <label className="font-bold block mb-0.5 text-neutral-700">બિલ ફૂટર નોંધ (Invoice Footer Note):</label>
+                <input
+                  type="text"
+                  value={storeSettings.invoiceFooterNote}
+                  onChange={e => setStoreSettings({ ...storeSettings, invoiceFooterNote: e.target.value })}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                 />
               </div>
 
-              {/* Admin Profile Image Upload */}
-              <div className="p-2 border rounded bg-neutral-50 flex items-center justify-between">
-                <div>
-                  <label className="font-bold block">એડમિન પ્રોફાઇલ ફોટો:</label>
-                  <span className="text-[10px] text-neutral-500">Bharat Chaudhary Photo</span>
+              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
+                <label className="font-black block mb-1 text-amber-900 flex items-center justify-between">
+                  <span>🔐 એડમિન પાસવર્ડ (સુરક્ષિત બદલો)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-white px-2.5 py-1.5 rounded-lg border border-amber-300 font-mono text-xs font-bold text-neutral-600 truncate">
+                    {'•'.repeat(storeSettings.adminPassword.length || 8)}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowChangePasswordModal(true)}
+                    className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-black shadow-xs whitespace-nowrap cursor-pointer"
+                  >
+                    બદલો
+                  </button>
                 </div>
+                <p className="text-[10px] text-amber-700 font-bold mt-1">
+                  * વેરિફિકેશન નંબર 8140430395 અને જૂનો પાસવર્ડ દાખલ કર્યા પછી જ બદલાશે.
+                </p>
+              </div>
+
+              {/* Photo Upload Triggers inside Settings */}
+              <div>
+                <label className="font-bold block mb-0.5 text-neutral-700">ડાબો લોગો ફોટો (ક્રોપ & ઝૂમ):</label>
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={e => handleImageFileUpload(e, 'adminProfile')}
-                  className="text-xs"
+                  onChange={e => handleImageFileUpload(e, 'leftLogo')}
+                  className="w-full text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-0.5 text-neutral-700">જમણો લોગો ફોટો (ક્રોપ & ઝૂમ):</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={e => handleImageFileUpload(e, 'rightLogo')}
+                  className="w-full text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-0.5 text-neutral-700">કસ્ટમ પેમેન્ટ QR કોડ (ક્રોપ & ઝૂમ):</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={e => handleImageFileUpload(e, 'customQr')}
+                  className="w-full text-xs"
                 />
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t">
+            <div className="pt-2 flex justify-end gap-2 border-t">
               <button
                 onClick={() => {
                   setShowSettingsModal(false);
-                  showToast('💾 સેટિંગ્સ સફળતાપૂર્વક સેવ થઈ ગયા!');
+                  showToast('✅ સેટિંગ્સ સફળતાપૂર્વક સાચવી લીધા!');
                 }}
-                className="px-5 py-2 bg-[#0B1E48] hover:bg-blue-900 text-white rounded text-xs font-black shadow"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-black shadow"
               >
-                સેવ કરો અને લાગુ કરો
+                સાચવો (Save Settings)
               </button>
             </div>
           </div>
@@ -2393,101 +1996,283 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 8. PRINTABLE INVOICE / RECEIPT MODAL */}
+      {/* 9. FAST NEW PRODUCT MODAL */}
       {/* ========================================================================= */}
-      {activePrintInvoice && (
-        <div id="printable-invoice" className="fixed inset-0 bg-white z-50 p-6 overflow-y-auto">
-          <div className="max-w-xl mx-auto border-2 border-black p-6 rounded-xl space-y-4 text-black bg-white">
-            
-            {/* INVOICE HEADER */}
-            <div className="text-center border-b-2 border-black pb-3 space-y-1">
-              <div className="flex justify-center items-center gap-2">
-                {storeSettings.leftLogoUrl && (
-                  <img src={storeSettings.leftLogoUrl} alt="Logo" className="w-10 h-10 object-contain" />
+      {isAddingNewItem && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full border-2 border-black shadow-2xl space-y-4 my-auto">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-black text-sm text-neutral-900 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 text-emerald-600" />
+                <span>+ નવી પ્રોડક્ટ / સેવા ઉમેરો</span>
+              </h3>
+              <button onClick={() => setIsAddingNewItem(false)} className="text-neutral-400 hover:text-black">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddNewProduct} className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold block mb-1">આઇટમ નામ (ગુજરાતી) *</label>
+                <input
+                  type="text"
+                  placeholder="દા.ત. ક્લાસમેટ નોટબુક"
+                  value={newProdName}
+                  onChange={e => setNewProdName(e.target.value)}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">English Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Classmate Notebook"
+                  value={newProdEnName}
+                  onChange={e => setNewProdEnName(e.target.value)}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold block mb-1">વેચાણ ભાવ (₹) *</label>
+                  <input
+                    type="number"
+                    value={newProdPrice}
+                    onChange={e => setNewProdPrice(e.target.value)}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">ખરીદ ભાવ (₹)</label>
+                  <input
+                    type="number"
+                    value={newProdCost}
+                    onChange={e => setNewProdCost(e.target.value)}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold block mb-1">કેટેગરી</label>
+                  <select
+                    value={newProdCategory}
+                    onChange={e => setNewProdCategory(e.target.value as any)}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white"
+                  >
+                    <option value="stationery">પેન & સ્ટેશનરી</option>
+                    <option value="books">નોટબુક / ચોપડા</option>
+                    <option value="service">ઓનલાઇન CSC સેવા</option>
+                    <option value="printing">ઝેરોક્ષ & પ્રિન્ટિંગ</option>
+                    <option value="office">ઓફિસ ફાઇલ</option>
+                    <option value="bags">સ્કૂલ બેગ</option>
+                    <option value="other">અન્ય</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">સ્ટોક જથ્થો</label>
+                  <input
+                    type="number"
+                    value={newProdStock}
+                    onChange={e => setNewProdStock(e.target.value)}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">પ્રોડક્ટ ફોટો (ક્રોપ & ઝૂમ સપોર્ટ):</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => handleImageFileUpload(e, 'newProduct')}
+                    className="w-full text-xs"
+                  />
+                  {newProdImage && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCropModalData({
+                          isOpen: true,
+                          imageSrc: newProdImage,
+                          title: 'નવી પ્રોડક્ટ ફોટો ક્રોપ અને ઝૂમ કરો',
+                          aspectPreset: 'square',
+                          target: 'newProduct'
+                        })
+                      }
+                      className="px-2.5 py-1 bg-neutral-800 text-white rounded text-[11px] font-bold whitespace-nowrap"
+                    >
+                      🔍 ફરી ક્રોપ કરો
+                    </button>
+                  )}
+                </div>
+                {newProdImage && (
+                  <div className="mt-2 w-16 h-16 rounded-lg border border-neutral-300 overflow-hidden bg-slate-100">
+                    <img src={newProdImage} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
                 )}
-                <h2 className="text-xl font-black text-black uppercase">
-                  {storeSettings.storeNameEn}
-                </h2>
               </div>
-              <p className="text-xs font-bold text-neutral-800">{storeSettings.storeNameGu} - {storeSettings.tagline}</p>
-              <p className="text-[11px] font-bold text-neutral-700">{storeSettings.address}</p>
-              <p className="text-xs font-black">📞 મો. {storeSettings.phoneDisplay} | GSTIN: {storeSettings.gstNumber}</p>
-            </div>
 
-            {/* BILL DETAILS */}
-            <div className="flex justify-between items-center text-xs font-bold border-b pb-2">
-              <div>
-                <div><strong>બિલ નં:</strong> {activePrintInvoice.invoiceNo}</div>
-                <div><strong>ગ્રાહક:</strong> {activePrintInvoice.customerName}</div>
-                <div><strong>મોબાઇલ:</strong> +91 {activePrintInvoice.mobile}</div>
+              <div className="pt-2 flex justify-end gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewItem(false)}
+                  className="px-3.5 py-2 border rounded-xl font-bold text-neutral-600"
+                >
+                  રદ કરો
+                </button>
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-black shadow"
+                >
+                  ઉમેરો (Add Product)
+                </button>
               </div>
-              <div className="text-right">
-                <div><strong>તારીખ:</strong> {activePrintInvoice.date}</div>
-                <div><strong>ચુકવણી:</strong> <span className="font-black underline">{activePrintInvoice.paymentMode}</span></div>
-                <div><strong>સ્ટેટસ:</strong> {activePrintInvoice.paymentStatus}</div>
-              </div>
-            </div>
+            </form>
+          </div>
+        </div>
+      )}
 
-            {/* ITEMS TABLE */}
-            <table className="w-full text-xs text-left border-collapse">
-              <thead>
-                <tr className="border-b-2 border-black">
-                  <th className="py-1">ક્રમ</th>
-                  <th className="py-1">વિગત (Item)</th>
-                  <th className="py-1 text-center">જથ્થો (Qty)</th>
-                  <th className="py-1 text-right">ભાવ (₹)</th>
-                  <th className="py-1 text-right">રકમ (₹)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-300 font-bold">
-                {activePrintInvoice.items.map((it, idx) => (
-                  <tr key={idx}>
-                    <td className="py-1">{idx + 1}</td>
-                    <td className="py-1">{it.name}</td>
-                    <td className="py-1 text-center">{it.qty}</td>
-                    <td className="py-1 text-right">₹{it.price}</td>
-                    <td className="py-1 text-right font-black">₹{it.qty * it.price}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* TOTALS */}
-            <div className="border-t-2 border-black pt-2 flex justify-between items-center text-sm font-black">
-              <div>
-                <span className="text-xs font-bold block">પેમેન્ટ મોડ: {activePrintInvoice.paymentMode}</span>
-                <span className="text-[11px] text-neutral-600">મુલાકાત બદલ આભાર! 🙏</span>
-              </div>
-              <div className="text-right">
-                <div>કુલ રકમ: ₹{activePrintInvoice.total}/-</div>
-              </div>
-            </div>
-
-            {/* QR Code on Invoice */}
-            <div className="border-t pt-2 flex items-center justify-between text-xs">
-              <div>
-                <span className="font-bold block">UPI દ્વારા પેમેન્ટ કરો:</span>
-                <span className="text-[10px] text-neutral-600">{storeSettings.upiId}</span>
-              </div>
-              {upiQrCodeUrl && (
-                <img src={upiQrCodeUrl} alt="QR" className="w-16 h-16 border rounded" />
-              )}
-            </div>
-
-            {/* ACTION BUTTONS */}
-            <div className="pt-3 border-t flex justify-end gap-2 no-print">
-              <button
-                onClick={() => setActivePrintInvoice(null)}
-                className="px-4 py-1.5 border rounded text-xs font-bold"
-              >
-                બંધ કરો
+      {/* ========================================================================= */}
+      {/* 10. EDIT PRODUCT MODAL */}
+      {/* ========================================================================= */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 overflow-y-auto">
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full border-2 border-black shadow-2xl space-y-4 my-auto">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="font-black text-sm text-neutral-900 flex items-center gap-1.5">
+                <Edit3 className="w-4 h-4 text-blue-700" />
+                <span>આઇટમ એડિટ કરો: {editingItem.nameGu}</span>
+              </h3>
+              <button onClick={() => setEditingItem(null)} className="text-neutral-400 hover:text-black">
+                <X className="w-5 h-5" />
               </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="font-bold block mb-1">આઇટમ નામ (ગુજરાતી)</label>
+                <input
+                  type="text"
+                  value={editingItem.nameGu}
+                  onChange={e => setEditingItem({ ...editingItem, nameGu: e.target.value })}
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold block mb-1">વેચાણ ભાવ (₹)</label>
+                  <input
+                    type="number"
+                    value={editingItem.price}
+                    onChange={e => setEditingItem({ ...editingItem, price: Number(e.target.value) || 0 })}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">હાજર સ્ટોક</label>
+                  <input
+                    type="text"
+                    value={editingItem.stock}
+                    onChange={e => setEditingItem({ ...editingItem, stock: isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value) })}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">પ્રોડક્ટ ફોટો (ક્રોપ & ઝૂમ સપોર્ટ):</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={e => handleImageFileUpload(e, 'editingProduct')}
+                    className="w-full text-xs"
+                  />
+                  {editingItem.imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCropModalData({
+                          isOpen: true,
+                          imageSrc: editingItem.imageUrl || '',
+                          title: `"${editingItem.nameGu}" ફોટો ક્રોપ અને ઝૂમ કરો`,
+                          aspectPreset: 'square',
+                          target: 'editingProduct'
+                        })
+                      }
+                      className="px-2.5 py-1 bg-neutral-800 text-white rounded text-[11px] font-bold whitespace-nowrap"
+                    >
+                      🔍 ફરી ક્રોપ કરો
+                    </button>
+                  )}
+                </div>
+                {editingItem.imageUrl && (
+                  <div className="mt-2 w-16 h-16 rounded-lg border border-neutral-300 overflow-hidden bg-slate-100">
+                    <img src={editingItem.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 flex justify-end gap-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="px-3.5 py-2 border rounded-xl font-bold text-neutral-600"
+                >
+                  રદ કરો
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveItemEdit}
+                  className="bg-blue-800 hover:bg-blue-900 text-white px-5 py-2 rounded-xl font-black shadow"
+                >
+                  સેવ કરો (Save Changes)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 11. BANNER TEXT EDIT MODAL */}
+      {/* ========================================================================= */}
+      {showBannerEditModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3">
+          <div className="bg-white rounded-2xl p-5 max-w-md w-full border-2 border-black shadow-2xl space-y-3">
+            <h3 className="font-black text-sm text-neutral-900">🖼️ બેનર ટેક્સ્ટ એડિટ કરો</h3>
+            <div>
+              <label className="text-xs font-bold block mb-1">મુખ્ય હેડિંગ (Title):</label>
+              <input
+                type="text"
+                value={storeSettings.bannerTitle}
+                onChange={e => setStoreSettings({ ...storeSettings, bannerTitle: e.target.value })}
+                className="w-full text-xs font-bold p-2 border border-neutral-300 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="text-xs font-bold block mb-1">વિગત (Subtitle):</label>
+              <textarea
+                rows={2}
+                value={storeSettings.bannerSubtitle}
+                onChange={e => setStoreSettings({ ...storeSettings, bannerSubtitle: e.target.value })}
+                className="w-full text-xs font-bold p-2 border border-neutral-300 rounded-lg resize-none"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
               <button
-                onClick={() => window.print()}
-                className="px-5 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-black flex items-center gap-1.5 shadow"
+                onClick={() => setShowBannerEditModal(false)}
+                className="bg-[#0B1E48] text-white px-4 py-1.5 rounded-lg text-xs font-black"
               >
-                <Printer className="w-4 h-4" />
-                <span>પ્રિન્ટ કરો (Print)</span>
+                સાચવો
               </button>
             </div>
           </div>
@@ -2495,46 +2280,300 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 9. FOOTER */}
+      {/* 12. IMAGE CROPPER & ZOOM MODAL (For Product Photos, Logos, Banner & QR) */}
       {/* ========================================================================= */}
-      <footer className="bg-white border-t border-neutral-300 py-2 text-[11px] font-bold text-neutral-800 no-print">
-        <div className="max-w-[1550px] mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
-          
-          {/* Strict Address */}
-          <div className="flex items-center gap-1 text-center sm:text-left">
-            <span className="text-red-600">📍</span>
-            <span className="font-extrabold">સરનામું:</span>
-            <span>{storeSettings.address}</span>
-          </div>
+      {cropModalData.isOpen && (
+        <ImageCropModal
+          imageSrc={cropModalData.imageSrc}
+          title={cropModalData.title}
+          aspectPreset={cropModalData.aspectPreset}
+          onClose={() => setCropModalData(prev => ({ ...prev, isOpen: false }))}
+          onCropComplete={handleCropComplete}
+        />
+      )}
 
-          {/* Phone & Policies */}
-          <div className="flex items-center gap-4">
-            <a href={`tel:+91${storeSettings.phone}`} className="flex items-center gap-1 hover:text-blue-700">
-              <span>📞 મો. {storeSettings.phoneDisplay}</span>
-            </a>
-            <span className="text-neutral-400">|</span>
-            <span className="text-neutral-600">🔒 પ્રાઇવેસી પોલિસી | નિયમો અને શરતો</span>
+      {/* ========================================================================= */}
+      {/* 13. SECURE ADMIN PASSWORD CHANGE MODAL (Requires 8140430395 Verification) */}
+      {/* ========================================================================= */}
+      {showChangePasswordModal && (
+        <ChangePasswordModal
+          currentStoredPassword={storeSettings.adminPassword}
+          ownerSecretNumber="8140430395"
+          onClose={() => setShowChangePasswordModal(false)}
+          onPasswordChanged={newPass => {
+            setStoreSettings(prev => ({ ...prev, adminPassword: newPass }));
+            showToast('✅ એડમિન પાસવર્ડ સફળતાપૂર્વક બદલાઈ ગયો!');
+          }}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 14. CUSTOMER LIVE ORDER TRACKING MODAL */}
+      {/* ========================================================================= */}
+      {showTrackingModal && (
+        <OrderTrackingModal
+          isOpen={showTrackingModal}
+          onClose={() => setShowTrackingModal(false)}
+          orders={orders}
+          onViewInvoice={order => {
+            setActiveInvoiceOrder(order);
+            setIsSuccessModal(false);
+          }}
+          storeSettings={storeSettings}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 15. PAYMENT SCREENSHOT FULLSCREEN VIEWER MODAL */}
+      {/* ========================================================================= */}
+      {viewingScreenshot && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-3 animate-fade-in no-print">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-4 border-2 border-neutral-800 shadow-2xl space-y-3 relative">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-purple-700" />
+                <span>UPI પેમેન્ટ સ્ક્રીનશોટ વેરિફિકેશન</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setViewingScreenshot(null)}
+                className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] overflow-auto rounded-xl border border-neutral-300 bg-neutral-900 flex items-center justify-center p-2">
+              <img
+                src={viewingScreenshot}
+                alt="Payment Screenshot"
+                className="max-h-[65vh] w-auto object-contain rounded-lg shadow"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1 border-t">
+              <button
+                type="button"
+                onClick={() => setViewingScreenshot(null)}
+                className="px-4 py-2 bg-neutral-900 hover:bg-black text-white text-xs font-black rounded-xl cursor-pointer"
+              >
+                બંધ કરો (Close)
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="max-w-[1550px] mx-auto px-4 mt-1 pt-1 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between text-[10px] text-neutral-600">
-          <div>
-            👨‍💻 <strong className="text-neutral-900">Developer:</strong>{' '}
-            <span className="text-orange-600 font-extrabold">{storeSettings.developerCredit}</span>
-            &nbsp;&nbsp;&nbsp;🕒 Last Update: <strong className="text-neutral-900">{storeSettings.lastUpdate}</strong>
-          </div>
-
-          <div className="flex items-center gap-2 mt-1 sm:mt-0">
-            <div className="border border-neutral-300 rounded px-2 py-0.5 bg-neutral-50 flex items-center gap-1 font-bold">
-              <span>👁️ Visitor Counter:</span>
-              <span className="text-blue-800 font-black">{visitorCount}</span>
+      {/* ========================================================================= */}
+      {/* 16. EDIT BILL / ORDER MODAL */}
+      {/* ========================================================================= */}
+      {editingOrder && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 animate-fade-in no-print">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 border-2 border-neutral-800 shadow-2xl space-y-3 relative">
+            <div className="flex items-center justify-between border-b pb-2">
+              <div>
+                <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
+                  <Edit3 className="w-4 h-4 text-blue-700" />
+                  <span>બિલ એડિટ કરો #{editingOrder.invoiceNo}</span>
+                </h3>
+                <p className="text-[11px] text-neutral-500 font-bold">{editingOrder.date}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <span className="text-[10px] bg-emerald-700 text-white px-2 py-0.5 rounded font-black">
-              ✨ Powered by Netlify
-            </span>
+
+            <div className="space-y-2.5 text-xs font-bold">
+              <div>
+                <label className="block text-neutral-700 mb-1">ગ્રાહકનું નામ:</label>
+                <input
+                  type="text"
+                  value={editingOrder.customerName}
+                  onChange={e =>
+                    setEditingOrder({ ...editingOrder, customerName: e.target.value })
+                  }
+                  className="w-full p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-neutral-700 mb-1">મોબાઇલ નંબર:</label>
+                <input
+                  type="tel"
+                  value={editingOrder.mobile}
+                  onChange={e =>
+                    setEditingOrder({ ...editingOrder, mobile: e.target.value })
+                  }
+                  className="w-full p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                />
+              </div>
+
+              <div>
+                <label className="block text-neutral-700 mb-1">સરનામું:</label>
+                <input
+                  type="text"
+                  value={editingOrder.address || ''}
+                  onChange={e =>
+                    setEditingOrder({ ...editingOrder, address: e.target.value })
+                  }
+                  className="w-full p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-neutral-700 mb-1">પેમેન્ટ મોડ:</label>
+                  <select
+                    value={editingOrder.paymentMode}
+                    onChange={e =>
+                      setEditingOrder({
+                        ...editingOrder,
+                        paymentMode: e.target.value as OrderRecord['paymentMode']
+                      })
+                    }
+                    className="w-full p-2 border border-neutral-300 rounded-lg outline-none"
+                  >
+                    <option value="Cash">Cash (રોકડ)</option>
+                    <option value="UPI">UPI QR</option>
+                    <option value="બાકી (Credit)">બાકી (Credit)</option>
+                    <option value="Online">Online</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-neutral-700 mb-1">પેમેન્ટ સ્ટેટસ:</label>
+                  <select
+                    value={editingOrder.paymentStatus}
+                    onChange={e =>
+                      setEditingOrder({
+                        ...editingOrder,
+                        paymentStatus: e.target.value as OrderRecord['paymentStatus']
+                      })
+                    }
+                    className="w-full p-2 border border-neutral-300 rounded-lg outline-none"
+                  >
+                    <option value="Paid">Paid (ચૂકવાઈ ગયું)</option>
+                    <option value="બાકી">બાકી (Pending)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-neutral-700 mb-1">ડિલિવરી સ્ટેટસ:</label>
+                <select
+                  value={editingOrder.orderStatus || 'placed'}
+                  onChange={e =>
+                    setEditingOrder({
+                      ...editingOrder,
+                      orderStatus: e.target.value as OrderRecord['orderStatus']
+                    })
+                  }
+                  className="w-full p-2 border border-neutral-300 rounded-lg outline-none"
+                >
+                  <option value="placed">📝 ઓર્ડર મળ્યો (Placed)</option>
+                  <option value="confirmed">💳 પેમેન્ટ મંજૂર (Confirmed)</option>
+                  <option value="packed">📦 પેક થઈ ગયું (Packed)</option>
+                  <option value="out_for_delivery">🚚 રવાના થયો (Out for Delivery)</option>
+                  <option value="delivered">✅ ડિલિવરી પૂર્ણ (Delivered)</option>
+                  <option value="cancelled">❌ રદ (Cancelled)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end gap-2 border-t">
+              <button
+                type="button"
+                onClick={() => setEditingOrder(null)}
+                className="px-3.5 py-2 border rounded-xl text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+              >
+                રદ કરો
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSaveOrderEdit(editingOrder)}
+                className="px-5 py-2 bg-blue-800 hover:bg-blue-900 text-white rounded-xl text-xs font-black shadow cursor-pointer"
+              >
+                બિલ સેવ કરો
+              </button>
+            </div>
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 14. PROFESSIONAL FOOTER WITH REAL VISITOR COUNTER */}
+      {/* ========================================================================= */}
+      <footer className="bg-[#0B1E48] text-white border-t border-blue-900 mt-8 py-6 px-4 no-print text-xs">
+        <div className="max-w-[1550px] mx-auto grid grid-cols-1 md:grid-cols-4 gap-6">
+          
+          {/* Col 1: Store Brand */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🏪</span>
+              <h3 className="font-black text-sm text-orange-400">
+                {storeSettings.storeNameGu}
+              </h3>
+            </div>
+            <p className="text-[11px] text-neutral-300">
+              {storeSettings.storeNameEn}
+            </p>
+            <p className="text-[10px] text-neutral-400">
+              {storeSettings.tagline} • સંચાલક: {storeSettings.ownerName}
+            </p>
+          </div>
+
+          {/* Col 2: Address & Location */}
+          <div className="space-y-1.5">
+            <h4 className="font-black text-orange-400 text-xs">📍 દુકાન સરનામું</h4>
+            <p className="text-[11px] text-neutral-300 leading-relaxed">
+              {storeSettings.address}
+            </p>
+            <p className="text-[11px] font-bold text-neutral-300">
+              📞 હેલ્પલાઇન: <a href={`tel:+91${storeSettings.phone}`} className="text-orange-400 hover:underline">{storeSettings.phoneDisplay}</a>
+            </p>
+          </div>
+
+          {/* Col 3: CSC & Online Services */}
+          <div className="space-y-1.5">
+            <h4 className="font-black text-orange-400 text-xs">⚡ ઉપલબ્ધ સેવાઓ</h4>
+            <ul className="text-[11px] text-neutral-300 space-y-1">
+              <li>✓ તમામ સરકારી ભરતી ઓનલાઇન ફોર્મ</li>
+              <li>✓ આધાર સ્માર્ટ કાર્ડ પ્રિન્ટિંગ & અપડેટ</li>
+              <li>✓ પાન કાર્ડ નવું & નામ સુધારો</li>
+              <li>✓ સ્કૂલ/ઓફિસ સ્ટેશનરી હોલસેલ ભાવે</li>
+            </ul>
+          </div>
+
+          {/* Col 4: Real Visitor Counter */}
+          <div className="space-y-2 bg-blue-950/80 p-3 rounded-xl border border-blue-900">
+            <div className="flex items-center justify-between">
+              <span className="font-black text-xs text-orange-400">🌐 કુલ મુલાકાતીઓ (Visitors)</span>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+            </div>
+            
+            <div className="bg-neutral-900 p-2 rounded-lg border border-neutral-700 flex items-center justify-center gap-1 font-mono text-base font-black text-emerald-400 tracking-widest shadow-inner">
+              {visitorCount.split('').map((digit, idx) => (
+                <span key={idx} className="bg-neutral-800 px-1.5 py-0.5 rounded border border-neutral-700">
+                  {digit}
+                </span>
+              ))}
+            </div>
+            <p className="text-[9px] text-neutral-400 text-center">
+              લાસ્ટ અપડેટ: 12/09/2026 • ડેવલપર: {storeSettings.developerCredit}
+            </p>
+          </div>
+
+        </div>
+
+        <div className="max-w-[1550px] mx-auto border-t border-blue-900/60 mt-6 pt-4 text-center text-[10px] text-neutral-400">
+          © 2026 {storeSettings.storeNameEn}. All Rights Reserved. • Powered by AI Studio
         </div>
       </footer>
+
     </div>
   );
 }
