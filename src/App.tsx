@@ -1,57 +1,26 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import * as XLSX from 'xlsx';
 import {
-  ShoppingBag,
   ShoppingCart,
-  Plus,
-  Minus,
   Trash2,
   CheckCircle,
-  AlertCircle,
-  Upload,
   Phone,
-  MapPin,
-  Clock,
-  User,
-  Eye,
   Lock,
   Unlock,
   Printer,
-  FileSpreadsheet,
-  RotateCcw,
   Search,
-  Zap,
-  TrendingUp,
-  CreditCard,
   FileText,
-  Copy,
-  Check,
-  ShieldCheck,
-  X,
-  Edit3,
   Sparkles,
-  Package,
-  Layers,
-  ArrowRight,
-  ExternalLink,
-  ChevronRight,
-  SlidersHorizontal,
-  PlusCircle,
-  FileDown,
   LogOut,
-  ZoomIn,
-  ZoomOut,
   Image as ImageIcon,
   Settings,
-  DollarSign,
-  Wallet,
-  Building2,
-  Calendar,
-  Save,
-  HelpCircle,
-  Percent,
-  Receipt
+  Edit3,
+  X,
+  Eye,
+  EyeOff,
+  KeyRound,
+  ShieldCheck
 } from 'lucide-react';
 
 // Product Interface with support for custom image uploads or emojis
@@ -289,9 +258,16 @@ const INITIAL_POS_ITEMS: ProductItem[] = [
 ];
 
 export default function App() {
-  // Navigation View: 'admin' (Original layout) | 'customer' (Client store) | 'gst_bill' | 'purchase' | 'expenses' | 'settings'
-  const [activeTab, setActiveTab] = useState<'admin' | 'customer' | 'gst_bill' | 'purchase' | 'expenses' | 'settings'>('admin');
+  // Navigation View: ALWAYS DEFAULT TO 'customer' SO LINK SHARING OPENS CUSTOMER SHOP BY DEFAULT
+  const [activeTab, setActiveTab] = useState<'admin' | 'customer' | 'gst_bill' | 'purchase' | 'expenses' | 'settings'>('customer');
   
+  // Admin Password & Lock State (Bharat@1994)
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(false);
+  const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
+  const [enteredPassword, setEnteredPassword] = useState<string>('');
+  const [showPasswordText, setShowPasswordText] = useState<boolean>(false);
+  const [passwordError, setPasswordError] = useState<string>('');
+
   // UI Zoom state
   const [zoomLevel, setZoomLevel] = useState<number>(100);
 
@@ -320,7 +296,8 @@ export default function App() {
       bannerText: '🖼️ જાહેરાત બેનર\n(Click to edit banner & photo)',
       adminProfileImageUrl: '',
       developerCredit: 'Bharat Chaudhary',
-      lastUpdate: '12/09/2026'
+      lastUpdate: '12/09/2026',
+      adminPassword: 'Bharat@1994'
     };
   });
 
@@ -520,6 +497,44 @@ export default function App() {
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = error => reject(error);
     });
+  };
+
+  // Admin Access Request Handler (checks if unlocked, otherwise requests Bharat@1994)
+  const handleRequestAdminAccess = (targetTab: 'admin' | 'gst_bill' | 'purchase' | 'expenses' | 'settings' = 'admin') => {
+    if (isAdminUnlocked) {
+      if (targetTab === 'settings') {
+        setShowSettingsModal(true);
+      } else {
+        setActiveTab(targetTab);
+      }
+    } else {
+      setEnteredPassword('');
+      setPasswordError('');
+      setShowPasswordModal(true);
+    }
+  };
+
+  // Handle Submit Password
+  const handleVerifyPassword = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const correctPass = storeSettings.adminPassword || 'Bharat@1994';
+    if (enteredPassword === correctPass) {
+      setIsAdminUnlocked(true);
+      setShowPasswordModal(false);
+      setPasswordError('');
+      setActiveTab('admin');
+      showToast('🔓 એડમિન પેનલ સફળતાપૂર્વક અનલૉક થઈ! સ્વાગત છે ભરતભાઈ.');
+    } else {
+      setPasswordError('❌ ખોટો પાસવર્ડ! કૃપા કરીને સાચો પાસવર્ડ દાખલ કરો.');
+    }
+  };
+
+  // Lock Admin and return to Customer view
+  const handleLockAdmin = () => {
+    setIsAdminUnlocked(false);
+    setActiveTab('customer');
+    setShowSettingsModal(false);
+    showToast('🔒 એડમિન પેનલ લૉક થઈ ગઈ! (ગ્રાહક પેજ ચાલુ છે)');
   };
 
   // Increment / Decrement Stock on POS Click
@@ -893,24 +908,40 @@ export default function App() {
       className="min-h-screen bg-white text-black font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white"
     >
       {/* ========================================================================= */}
-      {/* 1. TOP HEADER - EXACT REPLICA OF THE IMAGE WITH FULL EDIT/UPLOAD CAPABILITIES */}
+      {/* 1. TOP HEADER - CLEAN & DYNAMIC */}
       {/* ========================================================================= */}
       <header className="bg-white border-b border-neutral-300 no-print">
         <div className="max-w-[1550px] mx-auto px-4 py-2 flex items-center justify-between">
           
-          {/* LEFT PRISHA LOGO (Click to Upload or Edit) */}
+          {/* LEFT PRISHA LOGO */}
           <div className="flex items-center gap-2 group relative">
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={e => handleImageFileUpload(e, 'leftLogo')}
-              />
-              <div
-                className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm hover:border-orange-500 transition-all overflow-hidden relative"
-                title="Click to Upload Left Logo Photo"
-              >
+            {isAdminUnlocked ? (
+              <label className="cursor-pointer">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={e => handleImageFileUpload(e, 'leftLogo')}
+                />
+                <div
+                  className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm hover:border-orange-500 transition-all overflow-hidden relative"
+                  title="Click to Upload Left Logo Photo"
+                >
+                  {storeSettings.leftLogoUrl ? (
+                    <img src={storeSettings.leftLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                  ) : (
+                    <>
+                      <span className="text-[10px] font-black text-orange-600 leading-none">PRISHA</span>
+                      <span className="text-sm">🪪</span>
+                    </>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
+                    બદલો
+                  </div>
+                </div>
+              </label>
+            ) : (
+              <div className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm overflow-hidden">
                 {storeSettings.leftLogoUrl ? (
                   <img src={storeSettings.leftLogoUrl} alt="Logo" className="w-full h-full object-contain" />
                 ) : (
@@ -919,14 +950,11 @@ export default function App() {
                     <span className="text-sm">🪪</span>
                   </>
                 )}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
-                  બદલો
-                </div>
               </div>
-            </label>
+            )}
           </div>
 
-          {/* CENTER MAIN STORE BRANDING (Editable in Settings) */}
+          {/* CENTER MAIN STORE BRANDING */}
           <div className="text-center flex flex-col items-center">
             <div className="flex items-center gap-2 flex-wrap justify-center">
               <span className="text-3xl sm:text-4xl font-black text-[#EA580C] tracking-tight uppercase">
@@ -946,19 +974,35 @@ export default function App() {
 
           {/* RIGHT CONTROLS & TWIN LOGO */}
           <div className="flex items-center gap-3">
-            {/* TWIN RIGHT LOGO (Click to Upload) */}
+            {/* TWIN RIGHT LOGO */}
             <div className="flex items-center gap-2 group relative">
-              <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={e => handleImageFileUpload(e, 'rightLogo')}
-                />
-                <div
-                  className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm hover:border-orange-500 transition-all overflow-hidden relative"
-                  title="Click to Upload Right Logo Photo"
-                >
+              {isAdminUnlocked ? (
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => handleImageFileUpload(e, 'rightLogo')}
+                  />
+                  <div
+                    className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm hover:border-orange-500 transition-all overflow-hidden relative"
+                    title="Click to Upload Right Logo Photo"
+                  >
+                    {storeSettings.rightLogoUrl ? (
+                      <img src={storeSettings.rightLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <>
+                        <span className="text-[10px] font-black text-orange-600 leading-none">PRISHA</span>
+                        <span className="text-sm">📚</span>
+                      </>
+                    )}
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
+                      બદલો
+                    </div>
+                  </div>
+                </label>
+              ) : (
+                <div className="w-13 h-13 rounded-lg bg-white border border-neutral-300 flex flex-col items-center justify-center p-1 shadow-sm overflow-hidden">
                   {storeSettings.rightLogoUrl ? (
                     <img src={storeSettings.rightLogoUrl} alt="Logo" className="w-full h-full object-contain" />
                   ) : (
@@ -967,11 +1011,8 @@ export default function App() {
                       <span className="text-sm">📚</span>
                     </>
                   )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
-                    બદલો
-                  </div>
                 </div>
-              </label>
+              )}
             </div>
 
             {/* ZOOM / SCALE CONTROLS */}
@@ -999,11 +1040,11 @@ export default function App() {
               </button>
             </div>
 
-            {/* SETTINGS GEAR */}
+            {/* SETTINGS GEAR (PROTECTED BY PASSWORD) */}
             <button
-              onClick={() => setShowSettingsModal(true)}
+              onClick={() => handleRequestAdminAccess('settings')}
               className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 p-2 rounded-full border border-neutral-300 shadow-xs transition-transform active:scale-95 cursor-pointer"
-              title="વેબસાઇટ & દુકાન સેટિંગ્સ (Edit UPI, Name, Address, Marquee)"
+              title="વેબસાઇટ & દુકાન સેટિંગ્સ (Admin Password Required)"
             >
               <Settings className="w-4 h-4 text-neutral-700" />
             </button>
@@ -1015,7 +1056,13 @@ export default function App() {
           {/* Home Page Tab */}
           <div className="flex items-center">
             <button
-              onClick={() => setActiveTab('admin')}
+              onClick={() => {
+                if (isAdminUnlocked) {
+                  setActiveTab('admin');
+                } else {
+                  setActiveTab('customer');
+                }
+              }}
               className="bg-[#002244] hover:bg-[#003366] text-white px-4 py-1 rounded text-xs font-black border border-blue-900 flex items-center gap-1.5 cursor-pointer"
             >
               <span>Home Page</span>
@@ -1032,27 +1079,40 @@ export default function App() {
             </div>
           </div>
 
-          {/* Right Mode Switchers */}
+          {/* Right Mode Switchers & Admin Lock Control */}
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setActiveTab(activeTab === 'customer' ? 'admin' : 'customer')}
-              className={`px-3 py-1 rounded text-[11px] font-black flex items-center gap-1 border transition-all cursor-pointer ${
-                activeTab === 'customer'
-                  ? 'bg-orange-500 text-black border-white'
-                  : 'bg-[#1E40AF] hover:bg-blue-700 text-white border-blue-400'
-              }`}
-            >
-              <Eye className="w-3.5 h-3.5" />
-              <span>{activeTab === 'customer' ? '⚙️ એડમિન પેનલ' : '🌐 ગ્રાહક વ્યૂ (Live Shop)'}</span>
-            </button>
+            {isAdminUnlocked ? (
+              <>
+                <button
+                  onClick={() => setActiveTab(activeTab === 'customer' ? 'admin' : 'customer')}
+                  className={`px-3 py-1 rounded text-[11px] font-black flex items-center gap-1 border transition-all cursor-pointer ${
+                    activeTab === 'customer'
+                      ? 'bg-orange-500 text-black border-white'
+                      : 'bg-[#1E40AF] hover:bg-blue-700 text-white border-blue-400'
+                  }`}
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>{activeTab === 'customer' ? '⚙️ એડમિન પેનલ' : '🌐 ગ્રાહક વ્યૂ (Live Shop)'}</span>
+                </button>
 
-            <button
-              onClick={() => showToast('🔒 લૉગઆઉટ સેવ થઈ ગયું!')}
-              className="bg-[#B91C1C] hover:bg-red-700 text-white px-2.5 py-1 rounded text-[11px] font-black flex items-center gap-1 cursor-pointer"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-              <span>લૉગઆઉટ</span>
-            </button>
+                <button
+                  onClick={handleLockAdmin}
+                  className="bg-[#B91C1C] hover:bg-red-700 text-white px-2.5 py-1 rounded text-[11px] font-black flex items-center gap-1 cursor-pointer shadow-xs"
+                  title="એડમિન લૉક કરો અને ગ્રાહક પેજ પર જાઓ"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>લૉક / લૉગઆઉટ</span>
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => handleRequestAdminAccess('admin')}
+                className="bg-orange-500 hover:bg-orange-600 text-black px-3 py-1 rounded text-[11px] font-black flex items-center gap-1.5 shadow-sm cursor-pointer transition-transform active:scale-95"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>🔐 સંચાલક લૉગિન (Admin Login)</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1066,9 +1126,86 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* MAIN BODY: ADMIN DASHBOARD (EXACT SCREENSHOT LAYOUT) */}
+      {/* 2. ADMIN PASSWORD VERIFICATION MODAL (BHARAT@1994) */}
       {/* ========================================================================= */}
-      {activeTab !== 'customer' ? (
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border-2 border-black shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-black">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-black">સંચાલક સુરક્ષા લૉગિન</h3>
+                  <p className="text-[10px] text-neutral-500 font-bold">Bharat Chaudhary Private Access</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPasswordModal(false)}
+                className="text-neutral-400 hover:text-black p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleVerifyPassword} className="space-y-3">
+              <div>
+                <label className="text-xs font-black block mb-1 text-neutral-800">
+                  🔑 એડમિન પાસવર્ડ દાખલ કરો:
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPasswordText ? 'text' : 'password'}
+                    placeholder="Enter Password..."
+                    value={enteredPassword}
+                    onChange={e => {
+                      setEnteredPassword(e.target.value);
+                      setPasswordError('');
+                    }}
+                    className="w-full text-sm font-black p-2.5 pr-10 border-2 border-neutral-400 rounded-xl focus:border-blue-700 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordText(!showPasswordText)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700"
+                  >
+                    {showPasswordText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {passwordError && (
+                  <p className="text-[11px] font-black text-red-600 mt-1.5 bg-red-50 p-1.5 rounded border border-red-200">
+                    {passwordError}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordModal(false)}
+                  className="px-3.5 py-2 border rounded-xl text-xs font-bold text-neutral-700 hover:bg-neutral-100"
+                >
+                  રદ કરો
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-[#0B1E48] hover:bg-blue-900 text-white rounded-xl text-xs font-black shadow flex items-center gap-1.5"
+                >
+                  <Unlock className="w-3.5 h-3.5 text-orange-400" />
+                  <span>અનલૉક કરો</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* 3. MAIN BODY: CUSTOMER VIEW (DEFAULT) OR ADMIN DASHBOARD (IF UNLOCKED) */}
+      {/* ========================================================================= */}
+      {activeTab !== 'customer' && isAdminUnlocked ? (
         <main className="max-w-[1550px] mx-auto w-full px-2 sm:px-3 py-3 grid grid-cols-1 md:grid-cols-12 gap-3 flex-1 no-print">
           
           {/* ========================================== */}
@@ -1178,6 +1315,14 @@ export default function App() {
                 <span className="text-blue-600">🌐</span>
                 <span>ગ્રાહક વેબસાઇટ જુઓ</span>
               </button>
+
+              <button
+                onClick={handleLockAdmin}
+                className="w-full text-left p-2 rounded-sm border bg-red-50 hover:bg-red-100 text-red-900 border-red-300 flex items-center gap-1.5 font-bold cursor-pointer"
+              >
+                <span className="text-red-600">🔒</span>
+                <span>પેનલ લૉક કરો (Logout)</span>
+              </button>
             </div>
           </aside>
 
@@ -1186,7 +1331,7 @@ export default function App() {
           {/* ========================================== */}
           <section className="md:col-span-8 space-y-3">
             
-            {/* NEW PRODUCT FORM (Always visible or toggleable) */}
+            {/* NEW PRODUCT FORM */}
             <div className="bg-white border border-neutral-300 rounded p-3 shadow-2xs">
               <div className="flex items-center justify-between font-black text-xs text-neutral-900 mb-2">
                 <div className="flex items-center gap-1">
@@ -1250,7 +1395,7 @@ export default function App() {
 
                 <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-dashed border-neutral-200 text-xs">
                   <div className="flex items-center gap-2 flex-wrap text-[11px] font-bold text-neutral-700">
-                    <span className="text-blue-800 font-black">▼ ખરીદો/વેચાણ કિંમત અને સ્ટોક:</span>
+                    <span className="text-blue-800 font-black">▼ કિંમત અને સ્ટોક:</span>
                     <span>વેચાણ:</span>
                     <input
                       type="number"
@@ -1309,9 +1454,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* ============================================================== */}
-            {/* EXACT ITEM BOXES GRID WITH IMAGE UPLOAD & FULL EDIT/DELETE */}
-            {/* ============================================================== */}
+            {/* EXACT ITEM BOXES GRID */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5">
               {filteredItems.map(item => (
                 <div
@@ -1329,7 +1472,6 @@ export default function App() {
                           {item.badge}
                         </span>
                       )}
-                      {/* Trash / Delete button */}
                       <button
                         onClick={e => handleDeleteItem(item.id, item.nameGu, e)}
                         className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 p-0.5 rounded transition-opacity"
@@ -1374,7 +1516,6 @@ export default function App() {
                     </span>
 
                     <div className="flex items-center gap-1">
-                      {/* Edit Button */}
                       <button
                         onClick={e => {
                           e.stopPropagation();
@@ -1386,7 +1527,6 @@ export default function App() {
                         <Edit3 className="w-3 h-3 text-blue-700" />
                       </button>
 
-                      {/* -1 Button */}
                       <button
                         onClick={e => modifyStock(item.id, -1, e)}
                         className="bg-neutral-100 hover:bg-red-100 text-red-700 font-black px-1.5 py-0.5 rounded text-[10px] border border-neutral-300"
@@ -1395,7 +1535,6 @@ export default function App() {
                         -1
                       </button>
 
-                      {/* +1 Button */}
                       <button
                         onClick={e => modifyStock(item.id, 1, e)}
                         className="bg-neutral-100 hover:bg-emerald-100 text-emerald-700 font-black px-1.5 py-0.5 rounded text-[10px] border border-neutral-300"
@@ -1409,7 +1548,7 @@ export default function App() {
               ))}
             </div>
 
-            {/* GST POS BILLING WORKBENCH (if activeTab === 'gst_bill') */}
+            {/* GST POS BILLING WORKBENCH */}
             {activeTab === 'gst_bill' && (
               <div className="bg-white border-2 border-blue-600 rounded-lg p-4 shadow-md space-y-4 mt-6">
                 <div className="flex items-center justify-between border-b pb-2">
@@ -1503,7 +1642,7 @@ export default function App() {
           {/* ========================================== */}
           <aside className="md:col-span-2 space-y-2.5">
             
-            {/* TOP ADMIN USER PROFILE CARD (Clickable to change Name / Upload Photo) */}
+            {/* ADMIN USER PROFILE CARD */}
             <div
               onClick={() => setShowSettingsModal(true)}
               className="bg-white border border-neutral-300 rounded p-2.5 text-center shadow-2xs space-y-2 cursor-pointer hover:border-blue-500 transition-colors group relative"
@@ -1528,7 +1667,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* CLICKABLE AD BANNER BOX (Upload Banner Photo / Text) */}
+            {/* AD BANNER BOX */}
             <div
               onClick={() => setShowBannerEditModal(true)}
               className="border border-dashed border-orange-400 bg-orange-50/50 rounded p-2 text-center cursor-pointer hover:bg-orange-100/60 transition-colors overflow-hidden"
@@ -1546,9 +1685,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* ============================================================= */}
-            {/* 8 INTERACTIVE METRIC COUNTERS (CLICK ANY CARD TO EDIT VALUES) */}
-            {/* ============================================================= */}
+            {/* 8 INTERACTIVE METRIC COUNTERS */}
             <div className="grid grid-cols-2 gap-1.5 text-center">
               
               {/* 1. ડેઇલી સેલ */}
@@ -1679,24 +1816,29 @@ export default function App() {
         </main>
       ) : (
         /* ========================================================================= */
-        /* CUSTOMER VIEW (LOCKED CLIENT SHOPPING WITH UPI QR & SCREENSHOT PAYWALL) */
+        /* CUSTOMER VIEW: PUBLIC SHOPPING CATALOG & ONLINE ORDERING (DEFAULT) */
         /* ========================================================================= */
         <main className="max-w-6xl mx-auto w-full px-4 py-6 flex-1 space-y-6 no-print">
+          
+          {/* Top Customer Header Banner */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b pb-3 gap-2">
             <div>
               <span className="bg-orange-500 text-black text-xs font-black px-2.5 py-0.5 rounded">
-                ગ્રાહક ખરીદી પોર્ટલ
+                ગ્રાહક ખરીદી પોર્ટલ (Customer Shopping)
               </span>
               <h2 className="text-2xl font-black text-black mt-1">
-                {storeSettings.storeNameGu} - ઓનલાઇન ઓર્ડર
+                {storeSettings.storeNameGu}
               </h2>
+              <p className="text-xs font-bold text-neutral-600">{storeSettings.address}</p>
             </div>
+
+            {/* Admin Login Button for Owner */}
             <button
-              onClick={() => setActiveTab('admin')}
-              className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3.5 py-2 rounded-lg text-xs font-black flex items-center gap-1.5 shadow"
+              onClick={() => handleRequestAdminAccess('admin')}
+              className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3.5 py-2 rounded-lg text-xs font-black flex items-center gap-1.5 shadow transition-transform active:scale-95"
             >
-              <Lock className="w-3.5 h-3.5 text-orange-400" />
-              <span>સંચાલક એડમિન પેનલ</span>
+              <KeyRound className="w-3.5 h-3.5 text-orange-400" />
+              <span>સંચાલક એડમિન લૉગિન</span>
             </button>
           </div>
 
@@ -1889,7 +2031,7 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* FINAL WHATSAPP SUBMIT BUTTON (LOCKED IF NO SCREENSHOT) */}
+                    {/* FINAL WHATSAPP SUBMIT BUTTON */}
                     <button
                       disabled={!paymentProofFile && !paymentProofPreview}
                       onClick={handleCustomerWhatsAppOrder}
@@ -1918,7 +2060,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 4. EDIT ITEM MODAL (NAME, PRICE, COST, STOCK, EMOJI, CUSTOM IMAGE UPLOAD) */}
       {/* ========================================================================= */}
-      {editingItem && (
+      {editingItem && isAdminUnlocked && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 max-w-md w-full border-2 border-black shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b pb-2">
@@ -2030,9 +2172,9 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 5. ON-CLICK STAT OVERRIDE MODAL (CLICK ANY STATISTIC COUNTER TO EDIT) */}
+      {/* 5. ON-CLICK STAT OVERRIDE MODAL */}
       {/* ========================================================================= */}
-      {editStatKey && (
+      {editStatKey && isAdminUnlocked && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl p-5 max-w-sm w-full border-2 border-black shadow-2xl space-y-3">
             <div className="flex items-center justify-between border-b pb-2">
@@ -2077,7 +2219,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 6. BANNER EDIT MODAL (PHOTO & TEXT) */}
       {/* ========================================================================= */}
-      {showBannerEditModal && (
+      {showBannerEditModal && isAdminUnlocked && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl p-5 max-w-md w-full border-2 border-black shadow-2xl space-y-3">
             <div className="flex items-center justify-between border-b pb-2">
@@ -2136,9 +2278,9 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 7. FULL STORE SETTINGS MODAL (UPI ID, PHONE, ADDRESS, OWNER NAME, ETC.) */}
+      {/* 7. FULL STORE SETTINGS MODAL */}
       {/* ========================================================================= */}
-      {showSettingsModal && (
+      {showSettingsModal && isAdminUnlocked && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-5 max-w-lg w-full border-2 border-black shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-2">
@@ -2168,6 +2310,18 @@ export default function App() {
                 </span>
               </div>
 
+              <div className="bg-blue-50 p-2.5 rounded border border-blue-200">
+                <label className="font-black text-blue-900 block mb-1">
+                  🔐 એડમિન પાસવર્ડ (Admin Password):
+                </label>
+                <input
+                  type="text"
+                  value={storeSettings.adminPassword || 'Bharat@1994'}
+                  onChange={e => setStoreSettings({ ...storeSettings, adminPassword: e.target.value })}
+                  className="w-full p-2 border border-blue-400 rounded font-black text-xs bg-white"
+                />
+              </div>
+
               <div>
                 <label className="font-bold block mb-1">દુકાન માલિક / એડમિન નામ:</label>
                 <input
@@ -2189,7 +2343,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="font-bold block mb-1">સરનામું (Strict Address Match):</label>
+                <label className="font-bold block mb-1">સરનામું:</label>
                 <textarea
                   rows={2}
                   value={storeSettings.address}
@@ -2199,7 +2353,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="font-bold block mb-1">ઉપરની દોડતી જાહેરાત પટ્ટી (Marquee Ticker Text):</label>
+                <label className="font-bold block mb-1">દોડતી જાહેરાત પટ્ટી (Marquee Text):</label>
                 <textarea
                   rows={2}
                   value={storeSettings.marqueeText}
@@ -2212,7 +2366,7 @@ export default function App() {
               <div className="p-2 border rounded bg-neutral-50 flex items-center justify-between">
                 <div>
                   <label className="font-bold block">એડમિન પ્રોફાઇલ ફોટો:</label>
-                  <span className="text-[10px] text-neutral-500">Bharat Chaudhary photo</span>
+                  <span className="text-[10px] text-neutral-500">Bharat Chaudhary Photo</span>
                 </div>
                 <input
                   type="file"
@@ -2239,7 +2393,7 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 8. PRINTABLE INVOICE / RECEIPT MODAL (GST, LOGO, UPI QR, CASH/CREDIT) */}
+      {/* 8. PRINTABLE INVOICE / RECEIPT MODAL */}
       {/* ========================================================================= */}
       {activePrintInvoice && (
         <div id="printable-invoice" className="fixed inset-0 bg-white z-50 p-6 overflow-y-auto">
@@ -2320,7 +2474,7 @@ export default function App() {
               )}
             </div>
 
-            {/* ACTION BUTTONS (Hidden in Print) */}
+            {/* ACTION BUTTONS */}
             <div className="pt-3 border-t flex justify-end gap-2 no-print">
               <button
                 onClick={() => setActivePrintInvoice(null)}
@@ -2341,7 +2495,7 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 9. STRICT FOOTER (EXACT MATCH) */}
+      {/* 9. FOOTER */}
       {/* ========================================================================= */}
       <footer className="bg-white border-t border-neutral-300 py-2 text-[11px] font-bold text-neutral-800 no-print">
         <div className="max-w-[1550px] mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
