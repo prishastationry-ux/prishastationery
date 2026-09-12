@@ -155,7 +155,7 @@ export interface PrintJobRecord {
   discount: number;
   totalAmount: number;
   paymentStatus: 'Pending' | 'Paid' | 'બાકી';
-  paymentMode?: 'UPI' | 'Cash' | 'Online' | 'બાકી';
+  paymentMode?: 'UPI' | 'Cash' | 'Online' | 'બાકી (Credit)';
   adminNotes?: string;
   invoiceGenerated?: boolean;
   invoiceNo?: string;
