@@ -206,10 +206,13 @@ export default function App() {
   const [newProdPrice, setNewProdPrice] = useState('50');
   const [newProdCost, setNewProdCost] = useState('35');
   const [newProdStock, setNewProdStock] = useState('50');
+  const [newProdMrp, setNewProdMrp] = useState('');
+  const [newProdBulkPricing, setNewProdBulkPricing] = useState('');
+  const [newProdIsHidden, setNewProdIsHidden] = useState(false);
   const [newProdIcon, setNewProdIcon] = useState('📦');
   const [newProdImage, setNewProdImage] = useState<string>('');
   const [newProdUnit, setNewProdUnit] = useState('નંગ');
-  const [newProdCategory, setNewProdCategory] = useState<'books' | 'stationery' | 'service' | 'printing' | 'office' | 'bags' | 'other'>('stationery');
+  const [newProdCategory, setNewProdCategory] = useState<string>('પેન & સ્ટેશનરી');
   const [newProdBadge, setNewProdBadge] = useState('');
 
   // POS Direct Counter Billing Form & In-Bill Item Selection
@@ -392,6 +395,9 @@ export default function App() {
       price: Number(newProdPrice) || 0,
       costPrice: Number(newProdCost) || 0,
       stock: newProdCategory === 'service' ? 'સેવા' : Number(newProdStock) || 0,
+      mrp: newProdMrp ? Number(newProdMrp) : undefined,
+      bulkPricing: newProdBulkPricing || undefined,
+      isHidden: newProdIsHidden,
       isService: newProdCategory === 'service',
       unit: newProdUnit || 'નંગ',
       icon: newProdIcon || '📦',
@@ -404,6 +410,9 @@ export default function App() {
     setNewProdEnName('');
     setNewProdImage('');
     setNewProdBadge('');
+    setNewProdMrp('');
+    setNewProdBulkPricing('');
+    setNewProdIsHidden(false);
     setIsAddingNewItem(false);
     showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu}`);
   };
@@ -534,6 +543,7 @@ export default function App() {
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const totalAmount = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const totalProfit = cart.reduce((sum, item) => sum + (Math.max(0, item.product.price - item.product.costPrice) * item.quantity), 0);
 
     // Deduct stock
     setPosItems(prev =>
@@ -557,7 +567,8 @@ export default function App() {
         name: c.product.nameGu,
         qty: c.quantity,
         price: c.product.price,
-        unit: c.product.unit
+        unit: c.product.unit,
+        productId: c.product.id
       })),
       subtotal: totalAmount,
       discount: 0,
@@ -578,7 +589,8 @@ export default function App() {
       ...s,
       dailySales: Number((s.dailySales + totalAmount).toFixed(2)),
       itemsSold: s.itemsSold + cart.reduce((acc, curr) => acc + curr.quantity, 0),
-      totalBills: s.totalBills + 1
+      totalBills: s.totalBills + 1,
+      netProfit: Number((s.netProfit + totalProfit).toFixed(2))
     }));
 
     // Clear Cart and Close Drawer
@@ -588,6 +600,10 @@ export default function App() {
     // Open Instant Order Success & Printable Bill Modal on Customer Screen!
     setActiveInvoiceOrder(newOrder);
     setIsSuccessModal(true);
+    setTimeout(() => {
+      setActiveInvoiceOrder(null);
+      setIsSuccessModal(false);
+    }, 3000);
     showToast(`🎉 ઓર્ડર #${orderId} કન્ફર્મ થઈ ગયો! નીચેથી બિલ પ્રિન્ટ કે સેવ કરો.`);
   };
 
@@ -769,7 +785,7 @@ export default function App() {
         setPosItems(prev =>
           prev.map(p => {
             const matchedItem = orderToDelete.items.find(
-              it => it.name === p.nameGu || it.name === p.nameEn
+              it => it.productId === p.id || it.name === p.nameGu || it.name === p.nameEn
             );
             if (matchedItem && typeof p.stock === 'number') {
               return { ...p, stock: p.stock + matchedItem.qty };
@@ -777,6 +793,17 @@ export default function App() {
             return p;
           })
         );
+        
+        // calculate profit to deduct
+        const totalProfitToDeduct = orderToDelete.items.reduce((sum, item) => {
+          if (item.productId) {
+            const prod = posItems.find(p => p.id === item.productId);
+            if (prod) {
+              return sum + (Math.max(0, item.price - prod.costPrice) * item.qty);
+            }
+          }
+          return sum + (item.price * item.qty * 0.1);
+        }, 0);
 
         // Deduct from business stats
         setStats(s => ({
@@ -786,7 +813,8 @@ export default function App() {
           itemsSold: Math.max(
             0,
             s.itemsSold - orderToDelete.items.reduce((acc, curr) => acc + curr.qty, 0)
-          )
+          ),
+          netProfit: Math.max(0, Number((s.netProfit - totalProfitToDeduct).toFixed(2)))
         }));
 
         const trashRec: TrashRecord = {
@@ -991,6 +1019,17 @@ export default function App() {
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const billSubtotal = billItems.reduce((sum, item) => sum + item.price * item.qty, 0);
     const finalTotal = Math.max(0, billSubtotal - posDiscount);
+    
+    // Calculate profit
+    const totalProfit = billItems.reduce((sum, item) => {
+      if (item.productId) {
+        const prod = posItems.find(p => p.id === item.productId);
+        if (prod) {
+          return sum + (Math.max(0, item.price - prod.costPrice) * item.qty);
+        }
+      }
+      return sum + (item.price * item.qty * 0.1); // Fallback 10% profit if custom item
+    }, 0);
 
     // Deduct stock for inventory products
     setPosItems(prev =>
@@ -1010,7 +1049,7 @@ export default function App() {
       customerName: posCustomerName || 'Walk-in Customer (કાઉન્ટર)',
       mobile: posCustomerMobile || storeSettings.phone,
       address: 'દુકાન કાઉન્ટર - થરાદ',
-      items: billItems.map(b => ({ name: b.name, qty: b.qty, price: b.price, unit: b.unit })),
+      items: billItems.map(b => ({ name: b.name, qty: b.qty, price: b.price, unit: b.unit, productId: b.productId })),
       subtotal: billSubtotal,
       discount: posDiscount,
       tax: 0,
@@ -1030,7 +1069,8 @@ export default function App() {
       ...s,
       dailySales: Number((s.dailySales + finalTotal).toFixed(2)),
       itemsSold: s.itemsSold + billItems.reduce((acc, curr) => acc + curr.qty, 0),
-      totalBills: s.totalBills + 1
+      totalBills: s.totalBills + 1,
+      netProfit: Number((s.netProfit + totalProfit).toFixed(2))
     }));
 
     setPosBillItems([]);
@@ -1080,6 +1120,9 @@ export default function App() {
 
   // Filtered Items for Catalog & POS Grid
   const filteredItems = posItems.filter(item => {
+    // If not admin, hide items marked as hidden
+    if (!isAdminUnlocked && item.isHidden) return false;
+    
     const matchesSearch =
       item.nameGu.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
@@ -1532,29 +1575,20 @@ export default function App() {
                 <span>🖨️ ૧. ઓનલાઇન પ્રિન્ટ (Upload & Print)</span>
               </button>
 
-              {[
-                { id: 'books', label: '૨. નોટબુક / ચોપડા', icon: '📖' },
-                { id: 'stationery', label: '૩. પેન & પેન્સિલ', icon: '✒️' },
-                { id: 'office', label: '૪. સ્ટેશનરી & ફાઇલ્સ', icon: '📁' },
-                { id: 'service', label: '૫. ઓનલાઇન CSC સેવાઓ', icon: '📄' },
-                { id: 'printing', label: '૬. ઝેરોક્ષ & સેવાઓ', icon: '🖨️' },
-                { id: 'bags', label: '૭. સ્કૂલ બેગ', icon: '🎒' },
-                { id: 'all', label: 'બધી પ્રોડક્ટ્સ', icon: '🛍️' }
-              ].map(cat => (
+              {['all', ...Array.from(new Set(posItems.map(p => p.category)))].map(cat => (
                 <button
-                  key={cat.id}
-                  onClick={() => setSelectedCategory(cat.id)}
+                  key={cat}
+                  onClick={() => setSelectedCategory(cat)}
                   className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border ${
-                    selectedCategory === cat.id
+                    selectedCategory === cat
                       ? 'bg-[#0B1E48] text-white border-blue-900 shadow-2xs'
                       : 'bg-neutral-100 text-neutral-700 border-neutral-200 hover:bg-neutral-200'
                   }`}
                 >
-                  <span>{cat.icon}</span>
-                  <span>{cat.label}</span>
-                  {cat.id !== 'all' && (
+                  <span>{cat === 'all' ? '🛍️ બધી પ્રોડક્ટ્સ' : `✨ ${cat}`}</span>
+                  {cat !== 'all' && (
                     <span className="opacity-70 text-[10px]">
-                      ({posItems.filter(p => p.category === cat.id).length})
+                      ({posItems.filter(p => p.category === cat).length})
                     </span>
                   )}
                 </button>
@@ -1701,15 +1735,28 @@ export default function App() {
                       <p className="text-[10px] text-neutral-500 font-bold truncate mt-0.5">
                         {item.nameEn}
                       </p>
+                      
+                      {/* Bulk Pricing / Offer Note */}
+                      {item.bulkPricing && (
+                        <p className="text-[9px] sm:text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded mt-1.5 inline-block">
+                          {item.bulkPricing}
+                        </p>
+                      )}
                     </div>
 
                     {/* Price and Cart Control */}
                     <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-1">
                       <div>
+                        {/* Show MRP if exists and greater than price */}
+                        {item.mrp && item.mrp > item.price && (
+                          <div className="text-[10px] sm:text-[11px] text-neutral-400 font-bold line-through">
+                            ₹{item.mrp}
+                          </div>
+                        )}
                         <span className="text-sm sm:text-base font-black text-orange-700">
                           ₹{item.price}
                         </span>
-                        <span className="text-[10px] text-neutral-500 font-bold block">
+                        <span className="text-[10px] text-neutral-500 font-bold ml-1">
                           / {item.unit}
                         </span>
                       </div>
@@ -2418,10 +2465,15 @@ export default function App() {
                         <div>
                           <span>{item.nameGu}</span>
                           <span className="block text-[10px] text-neutral-400 font-bold">{item.nameEn}</span>
+                          {item.isHidden && <span className="inline-block mt-0.5 px-1.5 py-0.5 bg-red-100 text-red-700 text-[9px] font-black rounded border border-red-200">Hidden</span>}
                         </div>
                       </td>
                       <td className="p-2 font-bold text-neutral-600">{item.category}</td>
-                      <td className="p-2 font-black text-orange-700">₹{item.price}</td>
+                      <td className="p-2 font-black text-orange-700">
+                        ₹{item.price}
+                        {item.mrp && <span className="block text-[10px] text-neutral-400 font-bold line-through">MRP ₹{item.mrp}</span>}
+                        {item.bulkPricing && <span className="block text-[9px] text-emerald-600 mt-0.5">{item.bulkPricing}</span>}
+                      </td>
                       <td className="p-2 font-bold text-neutral-600">₹{item.costPrice}</td>
                       
                       {/* DIRECT STOCK NUMBER INPUT + QUICK +/- BUTTONS */}
@@ -2733,7 +2785,7 @@ export default function App() {
                     type="number"
                     value={newProdPrice}
                     onChange={e => setNewProdPrice(e.target.value)}
-                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500"
                     required
                   />
                 </div>
@@ -2743,27 +2795,21 @@ export default function App() {
                     type="number"
                     value={newProdCost}
                     onChange={e => setNewProdCost(e.target.value)}
-                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500 bg-orange-50"
                   />
                 </div>
               </div>
-
+              
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="font-bold block mb-1">કેટેગરી</label>
-                  <select
-                    value={newProdCategory}
-                    onChange={e => setNewProdCategory(e.target.value as any)}
-                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white"
-                  >
-                    <option value="stationery">પેન & સ્ટેશનરી</option>
-                    <option value="books">નોટબુક / ચોપડા</option>
-                    <option value="service">ઓનલાઇન CSC સેવા</option>
-                    <option value="printing">ઝેરોક્ષ & પ્રિન્ટિંગ</option>
-                    <option value="office">ઓફિસ ફાઇલ</option>
-                    <option value="bags">સ્કૂલ બેગ</option>
-                    <option value="other">અન્ય</option>
-                  </select>
+                  <label className="font-bold block mb-1 text-neutral-600">છાપેલી કિંમત (MRP ₹)</label>
+                  <input
+                    type="number"
+                    value={newProdMrp}
+                    onChange={e => setNewProdMrp(e.target.value)}
+                    placeholder="દા.ત. 100"
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                  />
                 </div>
                 <div>
                   <label className="font-bold block mb-1">સ્ટોક જથ્થો</label>
@@ -2774,6 +2820,47 @@ export default function App() {
                     className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1">કેટેગરી</label>
+                <input
+                  list="category-list"
+                  type="text"
+                  value={newProdCategory}
+                  onChange={e => setNewProdCategory(e.target.value)}
+                  placeholder="નવી કેટેગરી લખો અથવા પસંદ કરો"
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white"
+                />
+                <datalist id="category-list">
+                  {Array.from(new Set(posItems.map(p => p.category))).map(cat => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+              </div>
+              
+              <div>
+                <label className="font-bold block mb-1 text-neutral-600">હોલસેલ ભાવ / ઓફર વિગત</label>
+                <input
+                  type="text"
+                  value={newProdBulkPricing}
+                  onChange={e => setNewProdBulkPricing(e.target.value)}
+                  placeholder='દા.ત. "5 નંગ: ₹200, 10 નંગ: ₹350"'
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none text-[11px]"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 mt-2">
+                <input 
+                  type="checkbox" 
+                  id="hideNewProduct" 
+                  checked={newProdIsHidden}
+                  onChange={e => setNewProdIsHidden(e.target.checked)}
+                  className="w-4 h-4 accent-orange-600 cursor-pointer"
+                />
+                <label htmlFor="hideNewProduct" className="font-bold text-red-600 cursor-pointer">
+                  આ પ્રોડક્ટ ગ્રાહકને ન બતાવો (Hide from Customer)
+                </label>
               </div>
 
               <div>
@@ -2857,6 +2944,23 @@ export default function App() {
                 />
               </div>
 
+              <div>
+                <label className="font-bold block mb-1">કેટેગરી</label>
+                <input
+                  list="edit-category-list"
+                  type="text"
+                  value={editingItem.category}
+                  onChange={e => setEditingItem({ ...editingItem, category: e.target.value })}
+                  placeholder="કેટેગરી લખો અથવા પસંદ કરો"
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white"
+                />
+                <datalist id="edit-category-list">
+                  {Array.from(new Set(posItems.map(p => p.category))).map(cat => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+              </div>
+
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold block mb-1">વેચાણ ભાવ (₹)</label>
@@ -2864,6 +2968,28 @@ export default function App() {
                     type="number"
                     value={editingItem.price}
                     onChange={e => setEditingItem({ ...editingItem, price: Number(e.target.value) || 0 })}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">ખરીદ કિંમત (₹)</label>
+                  <input
+                    type="number"
+                    value={editingItem.costPrice}
+                    onChange={e => setEditingItem({ ...editingItem, costPrice: Number(e.target.value) || 0 })}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500 bg-orange-50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="font-bold block mb-1 text-neutral-600">છાપેલી કિંમત (MRP ₹)</label>
+                  <input
+                    type="number"
+                    value={editingItem.mrp || ''}
+                    onChange={e => setEditingItem({ ...editingItem, mrp: e.target.value ? Number(e.target.value) : undefined })}
+                    placeholder="દા.ત. 100"
                     className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                   />
                 </div>
@@ -2876,6 +3002,30 @@ export default function App() {
                     className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                   />
                 </div>
+              </div>
+              
+              <div>
+                <label className="font-bold block mb-1 text-neutral-600">હોલસેલ ભાવ / ઓફર વિગત</label>
+                <input
+                  type="text"
+                  value={editingItem.bulkPricing || ''}
+                  onChange={e => setEditingItem({ ...editingItem, bulkPricing: e.target.value })}
+                  placeholder='દા.ત. "5 નંગ: ₹200, 10 નંગ: ₹350"'
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none text-[11px]"
+                />
+              </div>
+              
+              <div className="flex items-center gap-2 mt-2">
+                <input 
+                  type="checkbox" 
+                  id="hideProduct" 
+                  checked={editingItem.isHidden || false}
+                  onChange={e => setEditingItem({ ...editingItem, isHidden: e.target.checked })}
+                  className="w-4 h-4 accent-orange-600 cursor-pointer"
+                />
+                <label htmlFor="hideProduct" className="font-bold text-red-600 cursor-pointer">
+                  આ પ્રોડક્ટ ગ્રાહકને ન બતાવો (Hide from Customer)
+                </label>
               </div>
 
               <div>

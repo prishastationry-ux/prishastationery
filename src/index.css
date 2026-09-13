@@ -9,21 +9,12 @@
 }
 
 @media print {
-  body * {
-    visibility: hidden;
-  }
-  #printable-bill-area, #printable-bill-area *, #printable-invoice, #printable-invoice * {
-    visibility: visible;
-  }
-  #printable-bill-area, #printable-invoice {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    margin: 0;
-    padding: 16px;
+  @page { size: A5 portrait; margin: 5mm; }
+  body {
     background: white;
-    color: black !important;
+  }
+  body > *:not(#prisha-print-iframe) {
+    display: none !important;
   }
   .no-print {
     display: none !important;

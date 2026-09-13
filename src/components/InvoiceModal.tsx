@@ -71,7 +71,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <title>Invoice_${order.invoiceNo}</title>
           <style>
             @page {
-              size: A4 portrait;
+              size: A5 portrait;
               margin: 6mm;
             }
             @media print {

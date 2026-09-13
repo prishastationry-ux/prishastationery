@@ -13,6 +13,11 @@ export interface ProductItem {
   badge?: string;
   isSpecial?: boolean;
   description?: string;
+  
+  // New properties based on feedback
+  isHidden?: boolean; // છુપાવો (ગ્રાહકને ન દેખાય)
+  mrp?: number; // છાપેલી કિંમત (Cross-out)
+  bulkPricing?: string; // હોલસેલ ભાવ (e.g. "5 નંગ: ₹200")
 }
 
 export interface CartItem {
@@ -25,6 +30,7 @@ export interface BillItem {
   qty: number;
   price: number;
   unit?: string;
+  productId?: string;
 }
 
 export interface OrderRecord {
