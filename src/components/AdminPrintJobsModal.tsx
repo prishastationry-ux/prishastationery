@@ -63,31 +63,20 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   const activeJob = effectiveJobs.find(j => j.id === selectedJobId) || filteredJobs[0] || null;
 
-  // File Download Helper with robust fetch() conversion for mobile & PC files of any size
-  const handleDownloadFile = async (file: PrintJobFile) => {
+  // File Download Helper with direct anchor download for mobile & PC files of any size (100% offline/online reliable)
+  const handleDownloadFile = (file: PrintJobFile) => {
     if (!file.fileDataUrl) {
       alert('ફાઇલ ડેટા ઉપલબ્ધ નથી.');
       return;
     }
 
     try {
-      if (file.fileDataUrl.startsWith('data:') || file.fileDataUrl.startsWith('blob:')) {
-        const response = await fetch(file.fileDataUrl);
-        const blob = await response.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        
-        // Open in new tab and trigger download
-        window.open(blobUrl, '_blank');
-
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = file.fileName || `Print_Doc_${Date.now()}`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      } else {
-        window.open(file.fileDataUrl, '_blank');
-      }
+      const link = document.createElement('a');
+      link.href = file.fileDataUrl;
+      link.download = file.fileName || `Print_Document_${Date.now()}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } catch (e) {
       console.error('Download error:', e);
       window.open(file.fileDataUrl, '_blank');

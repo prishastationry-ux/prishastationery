@@ -76,6 +76,14 @@ export default function App() {
   const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS as any);
 
+  useEffect(() => {
+    // Ensure printJobs starts clean of any demo jobs
+    if (printJobs && printJobs.some(j => j.id === 'prn-demo-1' || j.jobNo === 'PRN-8821')) {
+      const cleaned = printJobs.filter(j => j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821');
+      setPrintJobs(cleaned);
+    }
+  }, []);
+
   // Order Tracking & Admin Order Management States
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);

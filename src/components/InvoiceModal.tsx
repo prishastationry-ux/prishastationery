@@ -34,113 +34,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       .catch(err => console.error(err));
   }, [order, storeSettings]);
 
-  // 1. Direct PC Print using isolated iframe - Scaled specifically for EXACT 1-PAGE A4 output with logo
+  // 1. Direct Print using CSS print body class (Guaranteed 1-page A4, no blank page, all text & logo present)
   const handleDirectPrint = () => {
-    const billElement = billContentRef.current;
-    if (!billElement) {
+    document.body.classList.add('printing-invoice-mode');
+    setTimeout(() => {
       window.print();
-      return;
-    }
-
-    try {
-      const existingIframe = document.getElementById('prisha-print-iframe');
-      if (existingIframe) existingIframe.remove();
-
-      const printIframe = document.createElement('iframe');
-      printIframe.id = 'prisha-print-iframe';
-      printIframe.style.position = 'fixed';
-      printIframe.style.right = '0';
-      printIframe.style.bottom = '0';
-      printIframe.style.width = '0px';
-      printIframe.style.height = '0px';
-      printIframe.style.border = 'none';
-      document.body.appendChild(printIframe);
-
-      const iframeDoc = printIframe.contentDocument || printIframe.contentWindow?.document;
-      if (!iframeDoc) {
-        window.print();
-        return;
-      }
-
-      iframeDoc.open();
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Invoice_${order.invoiceNo}</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 8mm;
-            }
-            @media print {
-              html, body {
-                width: 100%;
-                margin: 0 !important;
-                padding: 0 !important;
-                background: #ffffff !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              .no-print {
-                display: none !important;
-              }
-            }
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Gujarati", Helvetica, Arial, sans-serif;
-              color: #000000;
-              background: #ffffff;
-              margin: 0;
-              padding: 0;
-              font-size: 11px;
-              line-height: 1.35;
-            }
-            * {
-              box-sizing: border-box;
-            }
-            .bill-wrapper {
-              width: 100%;
-              max-width: 100%;
-              margin: 0 auto;
-              padding: 4px;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 4px 0;
-            }
-            th, td {
-              border: 1px solid #222222;
-              padding: 4px 6px;
-            }
-            th {
-              background-color: #f1f3f5 !important;
-              font-weight: 800;
-            }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .font-black { font-weight: 900; }
-          </style>
-        </head>
-        <body>
-          <div class="bill-wrapper">
-            ${billElement.innerHTML}
-          </div>
-        </body>
-        </html>
-      `);
-      iframeDoc.close();
-
       setTimeout(() => {
-        printIframe.contentWindow?.focus();
-        printIframe.contentWindow?.print();
-      }, 400);
-    } catch (e) {
-      console.error('Print error:', e);
-      window.print();
-    }
+        document.body.classList.remove('printing-invoice-mode');
+      }, 500);
+    }, 100);
   };
 
   // 2. Direct A4 PDF Download with multi-page support for large orders
@@ -265,6 +167,28 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           .no-print {
             display: none !important;
           }
+        }
+
+        body.printing-invoice-mode > *:not(.fixed) {
+          display: none !important;
+        }
+        body.printing-invoice-mode .no-print {
+          display: none !important;
+        }
+        body.printing-invoice-mode #printable-bill-area {
+          display: block !important;
+          visibility: visible !important;
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          margin: 0 !important;
+          padding: 5mm !important;
+          box-shadow: none !important;
+          border: none !important;
+          background: white !important;
+          z-index: 999999 !important;
         }
       `}</style>
       <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-neutral-300 print:border-none print:shadow-none my-auto">
