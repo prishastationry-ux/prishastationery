@@ -72,18 +72,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <style>
             @page {
               size: A5 portrait;
-              margin: 6mm;
+              margin: 4mm;
             }
             @media print {
               html, body {
                 width: 100%;
-                height: 100%;
+                height: auto !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
-                overflow: hidden !important;
+                overflow: visible !important;
               }
               .no-print {
                 display: none !important;
@@ -310,8 +310,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <p className="text-[9px] text-neutral-600 font-medium max-w-md mx-auto leading-tight">
                 {storeSettings.address}
               </p>
-              <div className="flex items-center justify-center gap-2 mt-0.5 text-[9.5px] font-black text-neutral-800">
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 mt-0.5 text-[9.5px] font-black text-neutral-800">
                 <span>📞 +91 {storeSettings.phone}</span>
+                {storeSettings.email && (
+                  <>
+                    <span>•</span>
+                    <span>✉️ {storeSettings.email}</span>
+                  </>
+                )}
                 {storeSettings.billShowGst !== false && storeSettings.gstNumber && (
                   <>
                     <span>•</span>
@@ -399,7 +405,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 )}
                 <div className="text-[9.5px] space-y-0.5 leading-tight">
                   <p className="font-black text-neutral-900">UPI પેમેન્ટ વેરિફિકેશન</p>
-                  <p className="text-[8.5px] text-neutral-600 truncate">{storeSettings.upiId}</p>
+                  {!storeSettings.hideUpiOnBill && (
+                    <p className="text-[8.5px] text-neutral-600 truncate">{storeSettings.upiId}</p>
+                  )}
                   <p className="text-[8.5px] font-bold text-emerald-700">✓ 100% સુરક્ષિત ડિજિટલ બિલ</p>
                 </div>
               </div>

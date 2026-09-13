@@ -36,6 +36,10 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
     billShowGst: settings.billShowGst !== false,
     billShowQr: settings.billShowQr !== false,
     billShowLogos: settings.billShowLogos !== false,
+    email: settings.email || "",
+    hideUpiOnBill: settings.hideUpiOnBill || false,
+    showMrpOnStore: settings.showMrpOnStore !== false,
+    showDiscountOnStore: settings.showDiscountOnStore !== false,
     billShowFraudWarning: settings.billShowFraudWarning !== false,
     billShowSpecialOffer: settings.billShowSpecialOffer !== false,
     billTermsNote: settings.billTermsNote || 'કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ. ખરીદેલ માલ પરત લેવાશે નહિ.'
@@ -267,8 +271,32 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
 
               <div>
                 <label className="text-[11px] font-black text-neutral-700 block mb-1">
-                  સત્તાવાર UPI ID:
+                  Gmail / ઈમેલ (Email):
                 </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={e => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                  placeholder="prishastationry@gmail.com"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-black text-neutral-700">
+                    સત્તાવાર UPI ID:
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-red-600">
+                    <input
+                      type="checkbox"
+                      checked={formData.hideUpiOnBill}
+                      onChange={e => setFormData({ ...formData, hideUpiOnBill: e.target.checked })}
+                      className="rounded"
+                    />
+                    <span>બિલ પર છુપાવો (Hide)</span>
+                  </label>
+                </div>
                 <input
                   type="text"
                   value={formData.upiId}
@@ -390,6 +418,38 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
                 onChange={e => setFormData({ ...formData, invoiceFooterNote: e.target.value })}
                 className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
               />
+            </div>
+          </div>
+
+          {/* SECTION 4: STORE DISPLAY PREFERENCES (PRICE, MRP, DISCOUNT VISIBILITY) */}
+          <div className="bg-white p-4 rounded-xl border border-neutral-200 shadow-2xs space-y-3">
+            <div className="flex items-center gap-2 border-b pb-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+              <h3 className="text-xs font-black text-neutral-900 uppercase tracking-wider">
+                ૪. સ્ટોર ડિસ્પ્લે સેટિંગ્સ (Store Display Preferences)
+              </h3>
+            </div>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <label className="flex items-center gap-2 cursor-pointer p-2 border border-neutral-200 rounded-lg bg-neutral-50 hover:bg-neutral-100">
+                <input
+                  type="checkbox"
+                  checked={formData.showMrpOnStore}
+                  onChange={e => setFormData({ ...formData, showMrpOnStore: e.target.checked })}
+                  className="rounded w-4 h-4 accent-emerald-600"
+                />
+                <span className="text-xs font-black text-neutral-800">MRP (છાપેલી કિંમત) બતાવો</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer p-2 border border-neutral-200 rounded-lg bg-neutral-50 hover:bg-neutral-100">
+                <input
+                  type="checkbox"
+                  checked={formData.showDiscountOnStore}
+                  onChange={e => setFormData({ ...formData, showDiscountOnStore: e.target.checked })}
+                  className="rounded w-4 h-4 accent-emerald-600"
+                />
+                <span className="text-xs font-black text-neutral-800">ડિસ્કાઉન્ટ % (બચત) બતાવો</span>
+              </label>
             </div>
           </div>
 

@@ -30,6 +30,10 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   billShowGst: true,
   billShowQr: true,
   billShowLogos: true,
+  email: "",
+  hideUpiOnBill: false,
+  showMrpOnStore: true,
+  showDiscountOnStore: true,
   billShowFraudWarning: true,
   billShowSpecialOffer: true,
   billTermsNote: 'કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ. ખરીદેલ માલ પરત લેવાશે નહિ.'

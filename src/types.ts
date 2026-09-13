@@ -85,6 +85,10 @@ export interface StoreSettings {
   billShowGst?: boolean;
   billShowQr?: boolean;
   billShowLogos?: boolean;
+  email?: string;
+  hideUpiOnBill?: boolean;
+  showMrpOnStore?: boolean;
+  showDiscountOnStore?: boolean;
   billShowFraudWarning?: boolean;
   billShowSpecialOffer?: boolean;
   billTermsNote?: string;
@@ -108,6 +112,15 @@ export interface BusinessStats {
   lowStock: number;
   itemsSold: number;
   totalBills: number;
+  correctionDaily?: number;
+  correctionWeekly?: number;
+  correctionMonthly?: number;
+  correctionYearly?: number;
+  correctionStockVal?: number;
+  totalStockValue?: number;
+  weeklySales?: number;
+  monthlySales?: number;
+  yearlySales?: number;
 }
 
 export interface ExpenseRecord {
