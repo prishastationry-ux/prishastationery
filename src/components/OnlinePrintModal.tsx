@@ -45,28 +45,32 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Helper to read file as virtual object URL for local stream and admin downloading without bloating localStorage
+  // Helper to read file as base64 data URL so admin can download reliably without blob expiration or internet issues
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
     Array.from(selectedFiles).forEach((file: File) => {
-      const objectUrl = URL.createObjectURL(file);
-      const newFileItem: PrintJobFile = {
-        id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type || 'application/octet-stream',
-        fileDataUrl: objectUrl,
-        copies: 1,
-        colorMode: 'black_white',
-        sideOption: 'single_side',
-        paperSize: 'A4',
-        lamination: false,
-        notes: ''
-      };
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        const base64Result = uploadEvent.target?.result as string;
+        const newFileItem: PrintJobFile = {
+          id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          fileName: file.name,
+          fileSize: file.size,
+          fileType: file.type || 'application/octet-stream',
+          fileDataUrl: base64Result || '',
+          copies: 1,
+          colorMode: 'black_white',
+          sideOption: 'single_side',
+          paperSize: 'A4',
+          lamination: false,
+          notes: ''
+        };
 
-      setFilesList(prev => [...prev, newFileItem]);
+        setFilesList(prev => [...prev, newFileItem]);
+      };
+      reader.readAsDataURL(file);
     });
 
     if (fileInputRef.current) {
