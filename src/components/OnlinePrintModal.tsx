@@ -17,10 +17,17 @@ import {
   Share2,
   Layers,
   FileDown,
-  Info
+  Info,
+  Loader2,
+  Zap
 } from 'lucide-react';
 import { PrintJobFile, PrintJobRecord, StoreSettings } from '../types';
-import { saveFileToStorage, saveFileToCloudStorage } from '../lib/fileStorage';
+import {
+  saveFileToStorage,
+  uploadFileObjectInChunks,
+  formatFileSize,
+  MAX_FILE_SIZE
+} from '../lib/fileStorage';
 
 interface OnlinePrintModalProps {
   isOpen: boolean;
@@ -46,42 +53,79 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Helper to read file as base64 data URL so admin can download reliably without blob expiration or internet issues
+  // Stream-upload files up to 1 GB directly in chunks with real-time speed & progress
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
-    Array.from(selectedFiles).forEach((file: File) => {
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        const base64Result = uploadEvent.target?.result as string;
-        const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
-        const newFileItem: PrintJobFile = {
-          id: fileId,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type || 'application/octet-stream',
-          fileDataUrl: base64Result || '',
-          copies: 1,
-          colorMode: 'black_white',
-          sideOption: 'single_side',
-          paperSize: 'A4',
-          lamination: false,
-          notes: ''
-        };
+    const filesArray: File[] = Array.from(selectedFiles);
 
-        // Cache in IndexedDB locally and upload to chunked cloud storage in background
-        saveFileToCloudStorage(
-          fileId,
-          base64Result,
-          file.name,
-          file.type || 'application/octet-stream',
-          file.size
+    // Validate 1 GB size limit
+    for (const file of filesArray) {
+      if (file.size > MAX_FILE_SIZE) {
+        alert(
+          `⚠️ ફાઇલ "${file.name}" 1 GB કરતાં મોટી છે (${formatFileSize(file.size)}).\nમહત્તમ 1 GB સુધીની ફાઇલ અપલોડ કરી શકાય છે.`
         );
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
+    }
 
-        setFilesList(prev => [...prev, newFileItem]);
+    filesArray.forEach((file: File) => {
+      const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const newFileItem: PrintJobFile = {
+        id: fileId,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type || 'application/octet-stream',
+        fileBlob: file,
+        uploadStatus: 'uploading',
+        uploadProgress: 0,
+        uploadSpeed: 'શરૂ થઈ રહ્યું છે...',
+        copies: 1,
+        colorMode: 'black_white',
+        sideOption: 'single_side',
+        paperSize: 'A4',
+        lamination: false,
+        notes: ''
       };
-      reader.readAsDataURL(file);
+
+      setFilesList(prev => [...prev, newFileItem]);
+
+      // Stream upload chunks with real-time progress & speed
+      uploadFileObjectInChunks(
+        file,
+        fileId,
+        file.name,
+        file.type || 'application/octet-stream',
+        (prog) => {
+          setFilesList(prev =>
+            prev.map(item =>
+              item.id === fileId
+                ? {
+                    ...item,
+                    uploadProgress: prog.percent,
+                    uploadSpeed: prog.speed,
+                    uploadStatus: prog.percent >= 100 ? 'completed' : 'uploading'
+                  }
+                : item
+            )
+          );
+        }
+      ).then(success => {
+        setFilesList(prev =>
+          prev.map(item =>
+            item.id === fileId
+              ? {
+                  ...item,
+                  uploadStatus: success ? 'completed' : 'error',
+                  uploadProgress: success ? 100 : item.uploadProgress,
+                  uploadSpeed: success ? 'પૂર્ણ' : 'ભૂલ'
+                }
+              : item
+          )
+        );
+      });
     });
 
     if (fileInputRef.current) {
@@ -97,12 +141,6 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
   const handleRemoveFile = (id: string) => {
     setFilesList(prev => prev.filter(f => f.id !== id));
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   };
 
   const getFileIcon = (fileType: string, fileName: string) => {
@@ -125,6 +163,13 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       alert('કૃપા કરીને ઓછામાં ઓછી એક ફાઇલ અપલોડ કરો.');
       return;
     }
+
+    const stillUploading = filesList.some(f => f.uploadStatus === 'uploading');
+    if (stillUploading) {
+      alert('⚠️ ફાઇલ હજી ક્લાઉડમાં અપલોડ થઈ રહી છે. કૃપા કરીને અપલોડ પૂર્ણ થવા દો.');
+      return;
+    }
+
     if (!customerName.trim()) {
       alert('કૃપા કરીને તમારું પૂરું નામ લખો.');
       return;
@@ -136,29 +181,17 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
     setIsSubmitting(true);
 
-    try {
-      // Ensure all files are uploaded and saved to chunked cloud storage
-      await Promise.all(
-        filesList.map(f => {
-          if (f.fileDataUrl && f.fileDataUrl.length > 50) {
-            return saveFileToCloudStorage(
-              f.id,
-              f.fileDataUrl,
-              f.fileName,
-              f.fileType,
-              f.fileSize
-            );
-          }
-          return Promise.resolve(true);
-        })
-      );
-    } catch (err) {
-      console.warn('Cloud storage sync warning:', err);
-    }
-
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const jobNo = `PRN-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const totalJobSize = filesList.reduce((sum, f) => sum + (f.fileSize || 0), 0);
+
+    // Strip in-memory blob references before storing
+    const cleanFiles = filesList.map(f => {
+      const { fileBlob, ...rest } = f;
+      return rest;
+    });
 
     const newJob: PrintJobRecord = {
       id: `print-job-${Date.now()}`,
@@ -167,13 +200,14 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       mobile: mobile.trim(),
       address: address.trim(),
       deliveryType,
-      files: filesList,
+      files: cleanFiles,
+      totalJobSize,
       createdAt: dateFormatted,
       status: 'received',
       subtotal: 0,
       extraCharges: 0,
       discount: 0,
-      totalAmount: 0, // Admin will edit and set actual price upon reviewing pages
+      totalAmount: 0,
       paymentStatus: 'Pending',
       paymentMode: 'UPI'
     };
@@ -189,8 +223,10 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       const modeText = f.colorMode === 'black_white' ? 'બ્લેક & વ્હાઇટ' : f.colorMode === 'color' ? 'કલર પ્રિન્ટ' : 'PVC કાર્ડ';
       const sideText = f.sideOption === 'single_side' ? 'સિંગલ સાઇડ' : 'ડબલ સાઇડ';
       const lamText = f.lamination ? ' + લેમિનેશન' : '';
-      fileDetails += `\n📄 *ફાઇલ ${idx + 1}:* ${f.fileName}\n   • ${modeText} | ${f.paperSize} | ${sideText}${lamText}\n   • કોપી: ${f.copies}${f.notes ? `\n   • સૂચના: ${f.notes}` : ''}\n`;
+      fileDetails += `\n📄 *ફાઇલ ${idx + 1}:* ${f.fileName} (${formatFileSize(f.fileSize)})\n   • ${modeText} | ${f.paperSize} | ${sideText}${lamText}\n   • કોપી: ${f.copies}${f.notes ? `\n   • સૂચના: ${f.notes}` : ''}\n`;
     });
+
+    const totalSizeText = job.totalJobSize ? ` (${formatFileSize(job.totalJobSize)})` : '';
 
     const msg =
       `🖨️ *ઓનલાઇન પ્રિન્ટ રિક્વેસ્ટ - ${storeSettings.storeNameGu}*\n` +
@@ -201,13 +237,15 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       `📞 *મોબાઇલ:* +91 ${job.mobile}\n` +
       `🚚 *ડિલિવરી:* ${job.deliveryType === 'pickup' ? 'દુકાનેથી રૂબરૂ પિકઅપ' : `હોમ ડિલિવરી (${job.address})`}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `📑 *પ્રિન્ટ કરવા માટેની ફાઇલો (${job.files.length}):*` +
+      `📑 *પ્રિન્ટ કરવા માટેની ફાઇલો (${job.files.length})${totalSizeText}:*` +
       fileDetails +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `💡 ફાઇલો વેબસાઇટ પર સબમિટ થઈ ગઈ છે. કૃપા કરીને પ્રિન્ટ કરી બિલ મોકલો.\n\nઆભાર!`;
+      `💡 ફાઇલો વેબસાઇટ પર સુરક્ષિત સબમિટ થઈ ગઈ છે. કૃપા કરીને પ્રિન્ટ કરી બિલ મોકલો.\n\nઆભાર!`;
 
     window.open(`https://wa.me/91${storeSettings.phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
+
+  const totalFilesSize = filesList.reduce((sum, f) => sum + (f.fileSize || 0), 0);
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
@@ -217,35 +255,36 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
         <div className="bg-[#0B1E48] text-white p-4 sm:p-5 flex items-center justify-between border-b border-blue-900 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-orange-500/20 text-orange-400 flex items-center justify-center font-black border border-orange-500/30 shrink-0">
-              <Printer className="w-5 h-5" />
+              <Printer className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-                <span>🖨️ ઓનલાઇન પ્રિન્ટિંગ & ડોક્યુમેન્ટ સર્વિસ</span>
-                <span className="bg-orange-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">
+              <h2 className="text-base sm:text-lg font-black tracking-tight flex items-center gap-2">
+                <span>ઓનલાઇન ઝેરોક્ષ / પ્રિન્ટ ઓર્ડર</span>
+                <span className="text-[10px] bg-orange-500 text-black px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
                   Live
                 </span>
               </h2>
-              <p className="text-xs text-blue-200 font-medium">
-                Photo, PDF, Excel, Word કે અન્ય કોઈ પણ ફાઇલ અપલોડ કરો — અમે પ્રિન્ટ કરી તૈયાર રાખીશું!
+              <p className="text-xs text-blue-200">
+                ઘેરબેઠાં PDF કે ફોટો અપલોડ કરો (1 GB સુધી) • અમે તાત્કાલિક પ્રિન્ટ કરી આપીશું
               </p>
             </div>
           </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-neutral-300 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* MODAL BODY */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-6 flex-1">
-          
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-6">
+
           {submittedJob ? (
             /* SUCCESS CONFIRMATION VIEW */
-            <div className="text-center py-6 px-4 space-y-5">
+            <div className="text-center py-6 sm:py-8 space-y-4 animate-fade-in">
               <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
                 <CheckCircle2 className="w-10 h-10" />
               </div>
@@ -258,7 +297,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                   જોબ નંબર: <span className="font-mono text-base font-black bg-orange-100 px-2 py-0.5 rounded">{submittedJob.jobNo}</span>
                 </p>
                 <p className="text-xs text-neutral-600 max-w-md mx-auto pt-1">
-                  તમારી કુલ <span className="font-black text-neutral-900">{submittedJob.files.length} ફાઇલો</span> દુકાનદારને મળી ગઈ છે. દુકાનદાર ફાઇલો પ્રિન્ટ કરી તમને બિલ સાથે જાણ કરશે.
+                  તમારી કુલ <span className="font-black text-neutral-900">{submittedJob.files.length} ફાઇલો ({formatFileSize(submittedJob.totalJobSize || 0)})</span> દુકાનદારને સુરક્ષિત મળી ગઈ છે.
                 </p>
               </div>
 
@@ -295,10 +334,10 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                 <div className="flex items-center justify-between">
                   <label className="text-xs sm:text-sm font-black text-neutral-800 flex items-center gap-1.5">
                     <UploadCloud className="w-4 h-4 text-orange-600" />
-                    <span>૧. પ્રિન્ટ કરવા માટેની ફાઇલો અપલોડ કરો (PDF, Photo, Word, Excel વગેરે):</span>
+                    <span>૧. પ્રિન્ટ કરવા માટેની ફાઇલો અપલોડ કરો (PDF, Photo, Docs):</span>
                   </label>
-                  <span className="text-[11px] font-bold text-neutral-500">
-                    {filesList.length} ફાઇલ પસંદ કરેલ
+                  <span className="text-[11px] font-bold text-neutral-600 bg-neutral-100 px-2 py-0.5 rounded-full">
+                    {filesList.length} ફાઇલ {totalFilesSize > 0 && `(${formatFileSize(totalFilesSize)})`}
                   </span>
                 </div>
 
@@ -320,9 +359,14 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                   <p className="text-sm font-black text-neutral-800">
                     ફાઇલ પસંદ કરવા માટે અહીં ક્લિક કરો અથવા ખેંચીને મૂકો (Drag & Drop)
                   </p>
-                  <p className="text-xs text-neutral-500 mt-1 font-medium">
-                    સપોર્ટ: PDF, JPG / PNG ફોટો, Word (.docx), Excel (.xlsx), કાર્ડ વગેરે (એકસાથે ઘણી બધી ફાઇલો ઉમેરી શકાય છે)
-                  </p>
+                  <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
+                    <span className="text-xs text-orange-800 font-black bg-orange-100/80 px-2 py-0.5 rounded-full">
+                      🚀 ૧ GB સુધીની ફાઇલ સપોર્ટેડ છે (PDF & Image Limit 1 GB)
+                    </span>
+                    <span className="text-xs text-neutral-500 font-medium">
+                      PDF, JPG/PNG ફોટો, Word, Excel વગેરે
+                    </span>
+                  </div>
                 </div>
               </div>
 
@@ -350,7 +394,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                         key={file.id}
                         className="bg-neutral-50 rounded-2xl p-3.5 border border-neutral-200 shadow-2xs space-y-3"
                       >
-                        {/* Top: File Name, Size & Delete */}
+                        {/* Top: File Name, Size Badge & Delete */}
                         <div className="flex items-center justify-between gap-2 border-b border-neutral-200 pb-2.5">
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="w-10 h-10 rounded-xl bg-white border border-neutral-200 flex items-center justify-center shrink-0">
@@ -360,9 +404,17 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                               <p className="text-xs sm:text-sm font-black text-neutral-900 truncate">
                                 {index + 1}. {file.fileName}
                               </p>
-                              <p className="text-[11px] text-neutral-500 font-bold">
-                                {formatFileSize(file.fileSize)}
-                              </p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-[11px] font-black text-blue-900 bg-blue-100/80 px-2 py-0.5 rounded">
+                                  {formatFileSize(file.fileSize)}
+                                </span>
+                                {file.uploadStatus === 'completed' && (
+                                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    અપલોડ થઈ ગયું
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -376,7 +428,29 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                           </button>
                         </div>
 
-                        {/* Middle: Controls Grid (Color, Side, Paper Size, Lamination, Copies) */}
+                        {/* Upload Progress & Speed Bar (Live Indicator) */}
+                        {file.uploadStatus === 'uploading' && (
+                          <div className="bg-orange-50/80 p-2.5 rounded-xl border border-orange-200 space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-black text-orange-950">
+                              <span className="flex items-center gap-1.5">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-orange-600" />
+                                અપલોડ થઈ રહ્યું છે: {file.uploadProgress || 0}%
+                              </span>
+                              <span className="font-mono text-orange-700 bg-orange-100 px-2 py-0.5 rounded flex items-center gap-1 text-[11px]">
+                                <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                સ્પીડ: {file.uploadSpeed || '0 KB/s'}
+                              </span>
+                            </div>
+                            <div className="w-full bg-neutral-200 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="bg-gradient-to-r from-orange-500 to-amber-500 h-full transition-all duration-200 rounded-full"
+                                style={{ width: `${Math.max(5, file.uploadProgress || 0)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Middle: Controls Grid (Color, Side, Paper Size, Copies) */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
                           {/* Color Mode */}
                           <div>
@@ -510,10 +584,9 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                 </div>
               )}
 
-              {/* CUSTOMER CONTACT DETAILS, NOTICE & SUBMIT (ONLY SHOWN AFTER FILE UPLOADED) */}
+              {/* CUSTOMER CONTACT DETAILS & SUBMIT */}
               {filesList.length > 0 && (
                 <div className="space-y-4 animate-fade-in">
-                  {/* CUSTOMER CONTACT DETAILS */}
                   <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 space-y-3">
                     <h3 className="text-xs sm:text-sm font-black text-neutral-900 flex items-center gap-1.5">
                       <User className="w-4 h-4 text-blue-700" />
@@ -609,11 +682,25 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                   {/* SUBMIT BUTTON */}
                   <button
                     type="submit"
-                    disabled={isSubmitting || filesList.length === 0}
+                    disabled={isSubmitting || filesList.length === 0 || filesList.some(f => f.uploadStatus === 'uploading')}
                     className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-black py-3.5 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 cursor-pointer transition-transform active:scale-[0.98] disabled:opacity-50"
                   >
-                    <Printer className="w-5 h-5" />
-                    <span>પ્રિન્ટ રિક્વેસ્ટ સબમિટ કરો ({filesList.length} ફાઇલો)</span>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-neutral-900" />
+                        <span>પ્રિન્ટ રિક્વેસ્ટ નોંધાઈ રહી છે...</span>
+                      </>
+                    ) : filesList.some(f => f.uploadStatus === 'uploading') ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin text-neutral-900" />
+                        <span>ફાઇલ ક્લાઉડમાં અપલોડ થઈ રહી છે... રાહ જુઓ</span>
+                      </>
+                    ) : (
+                      <>
+                        <Printer className="w-5 h-5" />
+                        <span>પ્રિન્ટ રિક્વેસ્ટ સબમિટ કરો ({filesList.length} ફાઇલો • {formatFileSize(totalFilesSize)})</span>
+                      </>
+                    )}
                   </button>
                 </div>
               )}

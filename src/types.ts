@@ -148,6 +148,10 @@ export interface PrintJobFile {
   fileSize: number;
   fileType: string;
   fileDataUrl?: string; // base64 or blob URL
+  fileBlob?: Blob; // optional in-memory blob for instant viewing
+  uploadStatus?: 'pending' | 'uploading' | 'completed' | 'error';
+  uploadProgress?: number; // 0 to 100
+  uploadSpeed?: string; // e.g. "2.4 MB/s"
   copies: number;
   colorMode: 'black_white' | 'color' | 'pvc_card';
   sideOption: 'single_side' | 'double_side';
@@ -178,4 +182,5 @@ export interface PrintJobRecord {
   adminNotes?: string;
   invoiceGenerated?: boolean;
   invoiceNo?: string;
+  totalJobSize?: number;
 }

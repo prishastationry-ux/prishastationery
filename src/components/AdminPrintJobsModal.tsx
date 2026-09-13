@@ -20,14 +20,18 @@ import {
   ExternalLink,
   DollarSign,
   Eye,
-  Loader2
+  Loader2,
+  Zap
 } from 'lucide-react';
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
 import {
   getFileFromCloudStorage,
   createBlobUrl,
+  createBlobUrlAsync,
   downloadFileSafely,
-  openFileInNewTab
+  openFileInNewTab,
+  formatFileSize,
+  formatSpeed
 } from '../lib/fileStorage';
 
 interface AdminPrintJobsModalProps {
@@ -61,6 +65,13 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   const [extraChargeNote, setExtraChargeNote] = useState<string>('બાઈન્ડિંગ / અન્ય ખર્ચ');
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    fileId: string;
+    percent: number;
+    speed: string;
+    loadedBytes?: number;
+    totalBytes?: number;
+  } | null>(null);
   const [viewingFile, setViewingFile] = useState<{
     file: PrintJobFile;
     blobUrl: string;
@@ -84,17 +95,32 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     return await getFileFromCloudStorage(file.id);
   };
 
-  // Safe File Download using Blob & ObjectURL (exact original size, never 0 KB)
+  // Safe File Download using Blob & ObjectURL (exact original size, never 0 KB, with real-time speed)
   const handleDownloadFile = async (file: PrintJobFile) => {
     setLoadingFileId(file.id);
+    setDownloadProgress({ fileId: file.id, percent: 0, speed: 'શરૂ થઈ રહ્યું છે...' });
     try {
-      const dataUrl = await getFullFileDataUrl(file);
-      if (!dataUrl) {
-        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો સંપૂર્ણ ડેટા મળ્યો નથી.\nકૃપા કરીને ગ્રાહકને નીચે આપેલા 'WhatsApp' બટન દ્વારા ફાઇલ મોકલવા કહો.`);
+      let fileUrl = file.fileDataUrl;
+      // If fileUrl is missing, or is a dead blob URL from another device, fetch fresh from cloud
+      if (!fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:')) {
+        fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
+          setDownloadProgress({
+            fileId: file.id,
+            percent: prog.percent,
+            speed: prog.speed,
+            loadedBytes: prog.loadedBytes,
+            totalBytes: prog.totalBytes
+          });
+        });
+      }
+
+      if (!fileUrl) {
+        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા મળ્યો નથી.\nકૃપા કરીને ગ્રાહકને નીચે આપેલા 'WhatsApp' બટન દ્વારા ફાઇલ મોકલવા કહો.`);
         return;
       }
 
-      const success = downloadFileSafely(dataUrl, file.fileName || `Print_Document_${Date.now()}`);
+      setDownloadProgress({ fileId: file.id, percent: 100, speed: 'સાચવી રહ્યા છીએ...' });
+      const success = await downloadFileSafely(fileUrl, file.fileName || `Print_Document_${Date.now()}`);
       if (!success) {
         alert('ફાઇલ ડાઉનલોડ કરવામાં અસમર્થ: ફાઇલ કરપ્ટ અથવા ખાલી છે.');
       }
@@ -103,28 +129,44 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       alert('ફાઇલ ડાઉનલોડ કરવામાં ભૂલ આવી.');
     } finally {
       setLoadingFileId(null);
+      setDownloadProgress(null);
     }
   };
 
   // Open file in-screen document viewer (view right there without automatic download)
   const handleViewFileOnScreen = async (file: PrintJobFile) => {
     setLoadingFileId(file.id);
+    setDownloadProgress({ fileId: file.id, percent: 0, speed: 'લોડ થઈ રહ્યું છે...' });
     try {
-      const dataUrl = await getFullFileDataUrl(file);
-      if (!dataUrl) {
-        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ઉપલબ્ધ નથી.`);
+      let fileUrl = file.fileDataUrl;
+      if (!fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:')) {
+        fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
+          setDownloadProgress({
+            fileId: file.id,
+            percent: prog.percent,
+            speed: prog.speed,
+            loadedBytes: prog.loadedBytes,
+            totalBytes: prog.totalBytes
+          });
+        });
+      }
+
+      if (!fileUrl) {
+        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ઉપલબ્ધ નથી.\nકૃપા કરીને ગ્રાહકને WhatsApp પર મોકલવા કહો.`);
         return;
       }
-      const blobUrl = createBlobUrl(dataUrl);
+
+      const blobUrl = await createBlobUrlAsync(fileUrl);
       if (!blobUrl) {
         alert('ફાઇલ ખોલવામાં સમસ્યા આવી. ફાઇલ કરપ્ટ હોઈ શકે છે.');
         return;
       }
-      setViewingFile({ file, blobUrl, dataUrl });
+      setViewingFile({ file, blobUrl, dataUrl: fileUrl });
     } catch (e) {
       console.error('Error opening file on screen:', e);
     } finally {
       setLoadingFileId(null);
+      setDownloadProgress(null);
     }
   };
 
@@ -399,7 +441,9 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                         📞 +91 {job.mobile}
                       </p>
                       <div className="flex items-center justify-between text-[10px] text-neutral-400 font-medium mt-1">
-                        <span>{job.files.length} ફાઇલો</span>
+                        <span>
+                          {job.files.length} ફાઇલો • {formatFileSize(job.totalJobSize || job.files.reduce((a, b) => a + (b.fileSize || 0), 0))}
+                        </span>
                         <span>{job.createdAt.split(' ')[0]}</span>
                       </div>
                     </div>
@@ -506,6 +550,9 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                                 {idx + 1}. {file.fileName}
                               </p>
                               <div className="flex items-center gap-2 text-[11px] font-bold text-neutral-600 flex-wrap">
+                                <span className="font-black text-blue-900 bg-blue-100 px-1.5 py-0.5 rounded text-[10px]">
+                                  {formatFileSize(file.fileSize)}
+                                </span>
                                 <span className="bg-neutral-200 px-1.5 py-0.5 rounded text-[10px]">
                                   {file.colorMode === 'black_white'
                                     ? '⚪⚫ B&W'
@@ -574,6 +621,28 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                             </div>
                           </div>
                         </div>
+
+                        {/* Download / View Speed and Progress Bar */}
+                        {downloadProgress && downloadProgress.fileId === file.id && (
+                          <div className="bg-blue-50/90 border border-blue-200 p-2.5 rounded-xl space-y-1.5">
+                            <div className="flex items-center justify-between text-xs font-black text-blue-950">
+                              <span className="flex items-center gap-1.5">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                                ડાઉનલોડ / લોડિંગ થઈ રહ્યું છે: {downloadProgress.percent}%
+                              </span>
+                              <span className="font-mono text-blue-700 bg-white px-2 py-0.5 rounded border border-blue-200 text-[11px] flex items-center gap-1">
+                                <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                સ્પીડ: {downloadProgress.speed}
+                              </span>
+                            </div>
+                            <div className="w-full bg-neutral-200 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="bg-gradient-to-r from-blue-600 to-indigo-600 h-full transition-all duration-200 rounded-full"
+                                style={{ width: `${Math.max(5, downloadProgress.percent)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
 
                         {file.notes && (
                           <p className="text-[11px] text-orange-900 bg-orange-50 border border-orange-200 px-2 py-1 rounded-lg font-bold">
@@ -715,7 +784,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                   <h3 className="text-sm font-black truncate">{viewingFile.file.fileName}</h3>
                   <p className="text-[11px] text-neutral-400 font-medium">
                     {viewingFile.file.paperSize} • {viewingFile.file.colorMode === 'black_white' ? '⚪⚫ B&W' : '🌈 કલર'} • {viewingFile.file.copies} કોપી
-                    {viewingFile.file.fileSize ? ` • ${(viewingFile.file.fileSize / 1024).toFixed(1)} KB` : ''}
+                    {viewingFile.file.fileSize ? ` • ${formatFileSize(viewingFile.file.fileSize)}` : ''}
                   </p>
                 </div>
               </div>
@@ -739,7 +808,9 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => downloadFileSafely(viewingFile.dataUrl, viewingFile.file.fileName)}
+                  onClick={async () => {
+                    await downloadFileSafely(viewingFile.blobUrl || viewingFile.dataUrl, viewingFile.file.fileName);
+                  }}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition"
                   title="ઓરિજનલ ફાઇલ PC માં ડાઉનલોડ કરો"
                 >
@@ -749,10 +820,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
                 <button
                   type="button"
-                  onClick={() => {
-                    URL.revokeObjectURL(viewingFile.blobUrl);
-                    setViewingFile(null);
-                  }}
+                  onClick={() => setViewingFile(null)}
                   className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white p-1.5 rounded-xl cursor-pointer transition"
                   title="બંધ કરો"
                 >
@@ -787,7 +855,9 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                   </p>
                   <button
                     type="button"
-                    onClick={() => downloadFileSafely(viewingFile.dataUrl, viewingFile.file.fileName)}
+                    onClick={async () => {
+                      await downloadFileSafely(viewingFile.blobUrl || viewingFile.dataUrl, viewingFile.file.fileName);
+                    }}
                     className="bg-emerald-600 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-2 mx-auto cursor-pointer"
                   >
                     <FileDown className="w-4 h-4" />
