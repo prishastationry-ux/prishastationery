@@ -132,25 +132,38 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             size: A4 portrait;
             margin: 5mm;
           }
-          body, html {
-            width: 210mm;
-            height: 297mm;
+          body {
+            background: #ffffff !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: #ffffff !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
           }
-          .no-print {
+          body > * {
             display: none !important;
           }
+          div.fixed {
+            position: static !important;
+            display: block !important;
+            background: transparent !important;
+            padding: 0 !important;
+          }
+          #printable-bill-area, #printable-bill-area * {
+            display: block !important;
+            visibility: visible !important;
+          }
           #printable-bill-area {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 10mm !important;
+            padding: 5mm !important;
             box-shadow: none !important;
             border: none !important;
+            background: white !important;
+          }
+          .no-print {
+            display: none !important;
           }
         }
       `}</style>
