@@ -45,37 +45,28 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Helper to read file as data url for local preview and admin downloading
+  // Helper to read file as virtual object URL for local stream and admin downloading without bloating localStorage
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
     Array.from(selectedFiles).forEach((file: File) => {
-      if (file.size > 2 * 1024 * 1024) {
-        alert(`❌ સૂચના: ફાઈલ "${file.name}" મોટી છે (${(file.size / 1024 / 1024).toFixed(2)} MB).\n\nકૃપા કરીને 2MB થી નાની ફાઈલ અથવા ફોટો અપલોડ કરો.`);
-        return;
-      }
-
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        const newFileItem: PrintJobFile = {
-          id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-          fileName: file.name,
-          fileSize: file.size,
-          fileType: file.type || 'application/octet-stream',
-          fileDataUrl: result,
-          copies: 1,
-          colorMode: 'black_white',
-          sideOption: 'single_side',
-          paperSize: 'A4',
-          lamination: false,
-          notes: ''
-        };
-
-        setFilesList(prev => [...prev, newFileItem]);
+      const objectUrl = URL.createObjectURL(file);
+      const newFileItem: PrintJobFile = {
+        id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type || 'application/octet-stream',
+        fileDataUrl: objectUrl,
+        copies: 1,
+        colorMode: 'black_white',
+        sideOption: 'single_side',
+        paperSize: 'A4',
+        lamination: false,
+        notes: ''
       };
-      reader.readAsDataURL(file);
+
+      setFilesList(prev => [...prev, newFileItem]);
     });
 
     if (fileInputRef.current) {
