@@ -21,7 +21,6 @@ import {
   DollarSign
 } from 'lucide-react';
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
-import { INITIAL_PRINT_JOBS } from '../data';
 
 interface AdminPrintJobsModalProps {
   isOpen: boolean;
@@ -313,25 +312,38 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                         <span className="font-mono text-xs font-black text-orange-700 bg-orange-50 px-1.5 py-0.5 rounded">
                           {job.jobNo}
                         </span>
-                        <span
-                          className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                            job.status === 'received'
-                              ? 'bg-blue-100 text-blue-800'
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                              job.status === 'received'
+                                ? 'bg-blue-100 text-blue-800'
+                                : job.status === 'printed'
+                                ? 'bg-purple-100 text-purple-800'
+                                : job.status === 'ready'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-neutral-100 text-neutral-700'
+                            }`}
+                          >
+                            {job.status === 'received'
+                              ? 'નવી રિક્વેસ્ટ'
                               : job.status === 'printed'
-                              ? 'bg-purple-100 text-purple-800'
+                              ? 'પ્રિન્ટેડ'
                               : job.status === 'ready'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-neutral-100 text-neutral-700'
-                          }`}
-                        >
-                          {job.status === 'received'
-                            ? 'નવી રિક્વેસ્ટ'
-                            : job.status === 'printed'
-                            ? 'પ્રિન્ટેડ'
-                            : job.status === 'ready'
-                            ? 'તૈયાર છે'
-                            : job.status}
-                        </span>
+                              ? 'તૈયાર છે'
+                              : job.status}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteJob(job.id);
+                            }}
+                            className="p-1 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="આ પ્રિન્ટ જોબ ડિલીટ કરો"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <p className="text-xs font-black text-neutral-900 truncate">

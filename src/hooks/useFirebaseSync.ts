@@ -3,11 +3,49 @@ import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
+  // Helper to filter out any legacy sample / starter mock printing requests or test invoices
+  const filterMockData = (val: any): any => {
+    if (!Array.isArray(val)) return val;
+    if (docName === 'printJobs') {
+      return val.filter((j: any) => {
+        if (!j) return false;
+        const isMockId = j.id === 'prn-demo-1';
+        const isMockJobNo = j.jobNo === 'PRN-8821' || j.jobNo === 'PRN-6065';
+        const isSampleCustomer = typeof j.customerName === 'string' && j.customerName.toLowerCase().includes('sample');
+        const hasSampleFile = Array.isArray(j.files) && j.files.some((f: any) => 
+          typeof f.fileName === 'string' && (f.fileName.toLowerCase().includes('sample document') || f.fileName.toLowerCase().includes('sample'))
+        );
+        return !(isMockId || isMockJobNo || isSampleCustomer || hasSampleFile);
+      });
+    }
+    if (docName === 'orders') {
+      return val.filter((o: any) => {
+        if (!o) return false;
+        const isMockId = o.id === 'ord-101';
+        const isMockInvoice = o.invoiceNo === 'prisha000001';
+        const isSampleCustomer = typeof o.customerName === 'string' && o.customerName.toLowerCase().includes('sample');
+        const isMockJob = typeof o.notes === 'string' && (o.notes.includes('PRN-6065') || o.notes.includes('PRN-8821') || o.notes.toLowerCase().includes('sample'));
+        const hasSampleItem = Array.isArray(o.items) && o.items.some((it: any) => 
+          typeof it.name === 'string' && (it.name.toLowerCase().includes('sample document') || it.name.toLowerCase().includes('sample'))
+        );
+        return !(isMockId || isMockInvoice || isSampleCustomer || isMockJob || hasSampleItem);
+      });
+    }
+    return val;
+  };
+
   // Load from local storage first for instant boot, but Firebase will overwrite once it connects
   const [data, setData] = useState<T>(() => {
     const saved = localStorage.getItem(localKey);
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
+      try {
+        const parsed = JSON.parse(saved);
+        const cleaned = filterMockData(parsed);
+        if (Array.isArray(parsed) && cleaned.length !== parsed.length) {
+          localStorage.setItem(localKey, JSON.stringify(cleaned));
+        }
+        return cleaned as T;
+      } catch (e) { console.error(e); }
     }
     return initialData;
   });
@@ -20,11 +58,11 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         if (!snapshot.exists()) {
             const saved = localStorage.getItem(localKey);
             // ONLY write to Firebase if this device actually has some saved data.
-            // This prevents a fresh mobile device from overwriting the cloud with empty arrays
-            // before the admin's laptop has a chance to upload the real data.
             if (saved) {
                 try {
-                    setDoc(docRef, { data: JSON.parse(saved) });
+                    const parsed = JSON.parse(saved);
+                    const cleaned = filterMockData(parsed);
+                    setDoc(docRef, { data: cleaned });
                 } catch(e) {}
             }
         }
@@ -33,10 +71,14 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     // Listen for real-time updates from Firebase
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
-        const remoteData = snapshot.data().data as T;
-        setData(remoteData);
+        const rawData = snapshot.data().data;
+        const cleaned = filterMockData(rawData);
+        if (Array.isArray(rawData) && cleaned.length !== rawData.length) {
+          setDoc(docRef, { data: cleaned }).catch(() => {});
+        }
+        setData(cleaned as T);
         // Keep localStorage in sync just in case
-        localStorage.setItem(localKey, JSON.stringify(remoteData));
+        localStorage.setItem(localKey, JSON.stringify(cleaned));
       }
     });
     

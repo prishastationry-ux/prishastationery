@@ -45,6 +45,13 @@
   }
 
   /* Hide active dashboard screen components inside root when invoice modal is active */
+  #root, #root > div {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
   #root > div > header,
   #root > div > main,
   #root > div > footer,

@@ -74,12 +74,24 @@ export default function App() {
   // Online Print Customer & Admin Print Job States
   const [showOnlinePrintModal, setShowOnlinePrintModal] = useState<boolean>(false);
   const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
-  const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS as any);
+  const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
 
-  // Ensure clean initial state (no sample mock jobs)
+  // Ensure clean initial state (no starter sample mock print jobs)
   useEffect(() => {
-    if (printJobs && printJobs.some(j => j.id === 'prn-demo-1' || j.jobNo === 'PRN-8821')) {
-      const cleaned = printJobs.filter(j => j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821');
+    if (printJobs && printJobs.some(j => 
+      j.id === 'prn-demo-1' || 
+      j.jobNo === 'PRN-8821' || 
+      j.jobNo === 'PRN-6065' || 
+      j.customerName?.toLowerCase().includes('sample') ||
+      j.files?.some(f => f.fileName?.toLowerCase().includes('sample'))
+    )) {
+      const cleaned = printJobs.filter(j => 
+        j.id !== 'prn-demo-1' && 
+        j.jobNo !== 'PRN-8821' && 
+        j.jobNo !== 'PRN-6065' && 
+        !j.customerName?.toLowerCase().includes('sample') &&
+        !j.files?.some(f => f.fileName?.toLowerCase().includes('sample'))
+      );
       setPrintJobs(cleaned);
     }
   }, [printJobs]);
@@ -117,8 +129,22 @@ export default function App() {
 
   // Clean old sample/demo orders if present
   useEffect(() => {
-    if (orders && orders.some(o => o.id === 'ord-101' || o.invoiceNo === 'prisha000001')) {
-      const cleanedOrders = orders.filter(o => o.id !== 'ord-101' && o.invoiceNo !== 'prisha000001');
+    if (orders && orders.some(o => 
+      o.id === 'ord-101' || 
+      o.invoiceNo === 'prisha000001' || 
+      o.customerName?.toLowerCase().includes('sample') ||
+      o.notes?.includes('PRN-6065') ||
+      o.notes?.toLowerCase().includes('sample') ||
+      o.items?.some(i => i.name.toLowerCase().includes('sample document') || i.name.toLowerCase().includes('sample'))
+    )) {
+      const cleanedOrders = orders.filter(o => 
+        o.id !== 'ord-101' && 
+        o.invoiceNo !== 'prisha000001' && 
+        !o.customerName?.toLowerCase().includes('sample') &&
+        !o.notes?.includes('PRN-6065') &&
+        !o.notes?.toLowerCase().includes('sample') &&
+        !o.items?.some(i => i.name.toLowerCase().includes('sample document') || i.name.toLowerCase().includes('sample'))
+      );
       setOrders(cleanedOrders);
     }
   }, [orders]);

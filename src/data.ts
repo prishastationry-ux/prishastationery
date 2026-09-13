@@ -1,16 +1,16 @@
-import { ProductItem, StoreSettings, BusinessStats, OrderRecord } from './types';
+import { ProductItem, StoreSettings, BusinessStats, OrderRecord, PrintJobRecord } from './types';
 
 export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   storeNameEn: 'PRISHA STATIONERY & ONLINE SERVICES',
-  storeNameGu: 'પ્રિષા સ્ટેશનરી અને ઓનલાઇન સર્વિસીસ',
+  storeNameGu: 'પ્રિષા સ્ટેશનરી અને ઓનલાઇન સર્વિસ',
   tagline: 'CSC ડિજિટલ સેવા કેન્દ્ર & સ્ટેશનરી માર્ટ',
-  subTagline: '• પ્રિષા સ્ટેશનરી અને ઓનલાઇન સર્વિસીસ • થરાદ',
+  subTagline: '• પ્રિષા સ્ટેશનરી અને ઓનલાઇન સર્વિસ • થરાદ',
   ownerName: 'BHARAT CHAUDHARY',
   phone: '8140430395',
   phoneDisplay: '+91 81404 30395',
   upiId: '8140430395@apl',
   payeeName: 'PRISHA STATIONERY',
-  gstNumber: '24AAAAA0000A1Z5',
+  gstNumber: '24BTQPC3756D1Z5',
   address: '106, 107 Prince Arcade, Taluka Panchayat Same, Tharad, Dist: Vav-Tharad, Gujarat - 385565',
   marqueeText: '💥 ધમાકા ઓફર: સ્કૂલ સ્ટેશનરી, નોટબુક હોલસેલ ભાવે, આધાર-પાન કાર્ડ, ઝેરોક્ષ અને લેમિનેશન પર વિશેષ છૂટ ઉપલબ્ધ! ★ પ્રિષા સ્ટેશનરી થરાદ ★ 81404 30395',
   leftLogoUrl: '',
@@ -268,4 +268,4 @@ export const INITIAL_STATS: BusinessStats = {
 
 export const INITIAL_ORDERS: OrderRecord[] = [];
 
-export const INITIAL_PRINT_JOBS = [];
+export const INITIAL_PRINT_JOBS: PrintJobRecord[] = [];
