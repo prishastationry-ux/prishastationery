@@ -47,10 +47,12 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
-      // Fire and forget save to Firebase
-      setDoc(doc(db, "store_data", docName), { data: next }).catch(console.error);
       // Keep local storage fresh immediately
       localStorage.setItem(localKey, JSON.stringify(next));
+      // Fire and forget save to Firebase with graceful error handling
+      setDoc(doc(db, "store_data", docName), { data: next }).catch(err => {
+        console.warn("Firebase sync size/network warning (saved locally):", err);
+      });
       return next;
     });
   };

@@ -51,9 +51,8 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
     if (!selectedFiles || selectedFiles.length === 0) return;
 
     Array.from(selectedFiles).forEach((file: File) => {
-      // FIREBASE FIRESTORE LIMIT: 1MB per document. We limit to ~750KB raw to allow Base64 conversion
-      if (file.size > 750 * 1024) {
-        alert(`❌ ભૂલ: ફાઈલ "${file.name}" બહુ મોટી છે (${(file.size / 1024 / 1024).toFixed(2)} MB).\n\nમોટી ફાઈલો માટે આ એપના બદલે સીધું WhatsApp પર મોકલો (8140430395) અથવા નાની સાઈઝની PDF અપલોડ કરો.`);
+      if (file.size > 2 * 1024 * 1024) {
+        alert(`❌ સૂચના: ફાઈલ "${file.name}" મોટી છે (${(file.size / 1024 / 1024).toFixed(2)} MB).\n\nકૃપા કરીને 2MB થી નાની ફાઈલ અથવા ફોટો અપલોડ કરો.`);
         return;
       }
 

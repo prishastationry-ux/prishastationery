@@ -71,27 +71,29 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <title>Invoice_${order.invoiceNo}</title>
           <style>
             @page {
-              size: A5 portrait;
-              margin: 4mm;
+              size: A4 portrait;
+              margin: 10mm;
             }
             @media print {
               html, body {
                 width: 100%;
-                height: auto !important;
+                height: 100vh !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
-                overflow: visible !important;
+                overflow: hidden !important;
               }
               .no-print {
                 display: none !important;
               }
-              .page-container {
+              .bill-wrapper {
+                height: 48vh !important;
+                max-height: 48vh !important;
+                overflow: hidden !important;
+                page-break-after: always !important;
                 page-break-inside: avoid !important;
-                page-break-after: avoid !important;
-                page-break-before: avoid !important;
               }
             }
             body {
@@ -110,7 +112,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               width: 100%;
               max-width: 800px;
               margin: 0 auto;
-              padding: 8px;
+              padding: 6px;
+              height: 48vh;
+              max-height: 48vh;
+              overflow: hidden;
+              page-break-after: always;
             }
             table {
               width: 100%;

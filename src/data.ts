@@ -256,14 +256,14 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
 ];
 
 export const INITIAL_STATS: BusinessStats = {
-  dailySales: 180.00,
-  dailyPurchase: 7750.00,
+  dailySales: 0.00,
+  dailyPurchase: 0.00,
   netProfit: 0.00,
-  totalLoss: 845.00,
+  totalLoss: 0.00,
   outOfStock: 0,
   lowStock: 0,
-  itemsSold: 13,
-  totalBills: 3
+  itemsSold: 0,
+  totalBills: 0
 };
 
 export const INITIAL_ORDERS: OrderRecord[] = [
