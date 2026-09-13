@@ -3140,6 +3140,7 @@ export default function App() {
           isOpen={showTrackingModal}
           onClose={() => setShowTrackingModal(false)}
           orders={orders}
+          printJobs={printJobs}
           onViewInvoice={order => {
             setActiveInvoiceOrder(order);
             setIsSuccessModal(false);

@@ -155,10 +155,6 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
     onSubmitPrintJob(newJob);
     setSubmittedJob(newJob);
     setIsSubmitting(false);
-    setTimeout(() => {
-      setSubmittedJob(null);
-      onClose();
-    }, 3000);
   };
 
   const handleSendWhatsAppOrder = (job: PrintJobRecord) => {

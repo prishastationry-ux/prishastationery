@@ -11,14 +11,16 @@ import {
   Phone,
   MapPin,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Printer
 } from 'lucide-react';
-import { OrderRecord, StoreSettings } from '../types';
+import { OrderRecord, StoreSettings, PrintJobRecord } from '../types';
 
 interface OrderTrackingModalProps {
   isOpen: boolean;
   onClose: () => void;
   orders: OrderRecord[];
+  printJobs?: PrintJobRecord[];
   onViewInvoice: (order: OrderRecord) => void;
   storeSettings: StoreSettings;
 }
@@ -35,11 +37,13 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   isOpen,
   onClose,
   orders,
+  printJobs,
   onViewInvoice,
   storeSettings
 }) => {
   const [searchInput, setSearchInput] = useState('');
   const [searchedOrders, setSearchedOrders] = useState<OrderRecord[] | null>(null);
+  const [searchedPrintJobs, setSearchedPrintJobs] = useState<PrintJobRecord[] | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
 
   if (!isOpen) return null;
@@ -52,14 +56,22 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
     setHasSearched(true);
     const cleanDigits = query.replace(/\D/g, '');
 
-    const matched = orders.filter(o => {
+    const matchedOrders = orders.filter(o => {
       const matchInv = o.invoiceNo.toLowerCase().includes(query) || o.id.toLowerCase().includes(query);
       const matchMobile = cleanDigits.length >= 4 && o.mobile.replace(/\D/g, '').includes(cleanDigits);
       const matchName = o.customerName.toLowerCase().includes(query);
       return matchInv || matchMobile || matchName;
     });
 
-    setSearchedOrders(matched);
+    const matchedPrintJobs = (printJobs || []).filter(j => {
+      const matchJob = j.jobNo.toLowerCase().includes(query) || j.id.toLowerCase().includes(query);
+      const matchMobile = cleanDigits.length >= 4 && j.mobile.replace(/\D/g, '').includes(cleanDigits);
+      const matchName = j.customerName.toLowerCase().includes(query);
+      return matchJob || matchMobile || matchName;
+    });
+
+    setSearchedOrders(matchedOrders);
+    setSearchedPrintJobs(matchedPrintJobs);
   };
 
   const getStageIndex = (status?: string) => {
@@ -138,8 +150,9 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                 દુકાન તરફથી ઓર્ડર મંજૂર, પેકિંગ અને ડિલિવરીનું લાઈવ સ્ટેટસ અહીં જોઈ શકાશે.
               </p>
             </div>
-          ) : searchedOrders && searchedOrders.length > 0 ? (
-            searchedOrders.map(order => {
+          ) : ((searchedOrders && searchedOrders.length > 0) || (searchedPrintJobs && searchedPrintJobs.length > 0)) ? (
+            <>
+              {searchedOrders?.map(order => {
               const currentStageIdx = getStageIndex(order.orderStatus);
               const isCancelled = order.orderStatus === 'cancelled';
 
@@ -282,7 +295,73 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
 
                 </div>
               );
-            })
+            })}
+
+              {searchedPrintJobs?.map(job => (
+                <div key={job.id} className="bg-white rounded-2xl border-2 border-orange-300 p-4 shadow-sm space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 pb-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-black text-orange-600 font-mono">
+                          {job.jobNo}
+                        </span>
+                        <span className="bg-orange-100 text-orange-800 text-[10px] font-black px-2 py-0.5 rounded-md">
+                          🖨️ ઓનલાઇન પ્રિન્ટ જોબ
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-600 font-bold mt-0.5 flex items-center gap-2">
+                        <span>👤 {job.customerName}</span>
+                        <span>•</span>
+                        <span>📞 +91 {job.mobile}</span>
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-sm font-black text-neutral-900">
+                        ₹{job.totalAmount > 0 ? job.totalAmount : 'બિલ બનવાનું બાકી'}
+                      </span>
+                      <span className="block text-[10px] font-black text-amber-700">
+                        {job.paymentStatus === 'Paid' ? 'પેમેન્ટ જમા' : 'પેમેન્ટ બાકી'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Print Files summary */}
+                  <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-200 space-y-1.5">
+                    <p className="text-[11px] font-black text-neutral-800 flex items-center gap-1">
+                      <Printer className="w-3.5 h-3.5 text-orange-600" />
+                      <span>પ્રિન્ટ ફાઇલો ({job.files.length}):</span>
+                    </p>
+                    <div className="space-y-1">
+                      {job.files.map((f, i) => (
+                        <div key={f.id} className="text-xs text-neutral-700 flex items-center justify-between bg-white px-2.5 py-1 rounded-lg border border-orange-100">
+                          <span className="font-bold">{i + 1}. {f.fileName}</span>
+                          <span className="text-[10px] font-bold text-neutral-500">{f.paperSize} | {f.colorMode === 'color' ? 'કલર' : 'B&W'} | કોપી: {f.copies}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Status Banner */}
+                  <div className="bg-orange-100 border border-orange-300 p-2.5 rounded-xl flex items-center justify-between text-xs font-black text-orange-900">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-orange-600 animate-ping" />
+                      <span>ઓર્ડર સ્ટેટસ: {
+                        job.status === 'received' ? '⏳ ઓર્ડર મળ્યો (પ્રિન્ટિંગ ચાલુ છે)' :
+                        job.status === 'printed' ? '🖨️ પ્રિન્ટ થઈ ગયું' :
+                        job.status === 'completed' ? '✅ ડિલિવરી તૈયાર / પૂર્ણ' : job.status
+                      }</span>
+                    </div>
+                    <span className="text-[10px] text-orange-700 font-bold">{job.createdAt}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-neutral-600 font-bold bg-blue-50/50 p-2.5 rounded-xl border border-blue-100">
+                    <span>ડિલિવરી: {job.deliveryType === 'pickup' ? 'દુકાનેથી પિકઅપ' : `હોમ ડિલિવરી (${job.address})`}</span>
+                    <span className="text-blue-900 font-black">હેલ્પલાઇન: +91 {storeSettings.phone}</span>
+                  </div>
+                </div>
+              ))}
+            </>
           ) : (
             <div className="text-center py-8 space-y-2 text-red-600 bg-red-50 p-4 rounded-2xl border border-red-200">
               <AlertCircle className="w-8 h-8 mx-auto" />
