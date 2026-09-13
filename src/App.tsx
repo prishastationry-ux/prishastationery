@@ -76,13 +76,13 @@ export default function App() {
   const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS as any);
 
+  // Ensure clean initial state (no sample mock jobs)
   useEffect(() => {
-    // Ensure printJobs starts clean of any demo jobs
     if (printJobs && printJobs.some(j => j.id === 'prn-demo-1' || j.jobNo === 'PRN-8821')) {
       const cleaned = printJobs.filter(j => j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821');
       setPrintJobs(cleaned);
     }
-  }, []);
+  }, [printJobs]);
 
   // Order Tracking & Admin Order Management States
   const [showTrackingModal, setShowTrackingModal] = useState(false);
@@ -114,6 +114,14 @@ export default function App() {
 
   // Orders & Invoices State
   const [orders, setOrders] = useFirebaseSync<OrderRecord[]>('orders', 'prisha_orders_v4', INITIAL_ORDERS);
+
+  // Clean old sample/demo orders if present
+  useEffect(() => {
+    if (orders && orders.some(o => o.id === 'ord-101' || o.invoiceNo === 'prisha000001')) {
+      const cleanedOrders = orders.filter(o => o.id !== 'ord-101' && o.invoiceNo !== 'prisha000001');
+      setOrders(cleanedOrders);
+    }
+  }, [orders]);
 
   // Expenses & Purchases
   const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v4', [

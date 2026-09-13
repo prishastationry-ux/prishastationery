@@ -266,28 +266,6 @@ export const INITIAL_STATS: BusinessStats = {
   totalBills: 0
 };
 
-export const INITIAL_ORDERS: OrderRecord[] = [
-  {
-    id: 'ord-101',
-    invoiceNo: 'prisha000001',
-    date: '12/09/2026 10:30 AM',
-    customerName: 'રમેશભાઈ પટેલ',
-    mobile: '9825012345',
-    address: 'ગામ: વાવ, થરાદ',
-    items: [
-      { name: 'નોટબુક (Classmate)', qty: 2, price: 50, unit: 'નંગ' },
-      { name: 'પ્રીમિયમ બોલપેન સેટ', qty: 1, price: 80, unit: 'પેકેટ' }
-    ],
-    subtotal: 180,
-    discount: 0,
-    tax: 0,
-    total: 180,
-    paymentMode: 'UPI',
-    paymentStatus: 'Paid',
-    orderType: 'online',
-    orderStatus: 'delivered',
-    statusUpdatedAt: '12/09/2026 11:15 AM'
-  }
-];
+export const INITIAL_ORDERS: OrderRecord[] = [];
 
 export const INITIAL_PRINT_JOBS = [];

@@ -232,9 +232,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  if (window.confirm('શું તમે બધા જ પ્રિન્ટ ઓર્ડર ડિલીટ કરવા માંગો છો?')) {
-                    effectiveJobs.forEach(j => onDeleteJob(j.id));
-                  }
+                  effectiveJobs.forEach(j => onDeleteJob(j.id));
                 }}
                 className="bg-red-600/30 hover:bg-red-600 text-red-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer border border-red-500/40"
               >

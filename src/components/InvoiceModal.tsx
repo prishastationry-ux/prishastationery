@@ -127,71 +127,109 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
+    <div className="invoice-modal-overlay fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
       <style>{`
         @media print {
           @page {
             size: A4 portrait;
-            margin: 5mm;
+            margin: 8mm 6mm 8mm 6mm;
           }
-          body {
-            background: #ffffff !important;
+          html, body {
             margin: 0 !important;
             padding: 0 !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 100% !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            overflow: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
           }
-          body > * {
+          /* Hide active dashboard screen, sidebar, grids, background body headers, charts, and buttons */
+          .no-print,
+          .no-print *,
+          header,
+          footer,
+          aside,
+          nav,
+          button,
+          .animate-pulse,
+          .animate-marquee,
+          body > div:not(#root) {
             display: none !important;
           }
-          div.fixed {
+          #root > div > header,
+          #root > div > main,
+          #root > div > footer,
+          #root > div > *:not(.invoice-modal-overlay) {
+            display: none !important;
+          }
+          .invoice-modal-overlay {
             position: static !important;
-            display: block !important;
+            inset: auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
             background: transparent !important;
             padding: 0 !important;
-          }
-          #printable-bill-area, #printable-bill-area * {
+            margin: 0 !important;
+            overflow: visible !important;
             display: block !important;
-            visibility: visible !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+            z-index: auto !important;
           }
-          #printable-bill-area {
-            position: absolute !important;
-            left: 0 !important;
-            top: 0 !important;
+          .invoice-modal-card {
+            position: static !important;
             width: 100% !important;
             max-width: 100% !important;
             margin: 0 !important;
-            padding: 5mm !important;
-            box-shadow: none !important;
+            padding: 0 !important;
             border: none !important;
-            background: white !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            background: #ffffff !important;
+            display: block !important;
           }
-          .no-print {
-            display: none !important;
+          #printable-bill-area {
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            background: #ffffff !important;
+            color: #000000 !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+          #printable-bill-area * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #printable-bill-area table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+          }
+          #printable-bill-area tr {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
           }
         }
 
-        body.printing-invoice-mode > *:not(.fixed) {
+        body.printing-invoice-mode #root > div > header,
+        body.printing-invoice-mode #root > div > main,
+        body.printing-invoice-mode #root > div > footer,
+        body.printing-invoice-mode #root > div > *:not(.invoice-modal-overlay) {
           display: none !important;
-        }
-        body.printing-invoice-mode .no-print {
-          display: none !important;
-        }
-        body.printing-invoice-mode #printable-bill-area {
-          display: block !important;
-          visibility: visible !important;
-          position: absolute !important;
-          left: 0 !important;
-          top: 0 !important;
-          width: 100% !important;
-          max-width: 100% !important;
-          margin: 0 !important;
-          padding: 5mm !important;
-          box-shadow: none !important;
-          border: none !important;
-          background: white !important;
-          z-index: 999999 !important;
         }
       `}</style>
-      <div className="bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-neutral-300 print:border-none print:shadow-none my-auto">
+      <div className="invoice-modal-card bg-white rounded-2xl max-w-2xl w-full shadow-2xl overflow-hidden border border-neutral-300 print:border-none print:shadow-none my-auto">
         
         {/* TOP STATUS BAR (NO-PRINT) */}
         <div className="no-print bg-[#0B1E48] text-white p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-blue-900">
@@ -247,41 +285,41 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </div>
         </div>
 
-        {/* PRINTABLE BILL CANVAS - STRICT 1-PAGE COMPACT & CRISP LAYOUT */}
+        {/* PRINTABLE BILL CANVAS - STRICT 1-PAGE COMPACT & CRISP A4 LAYOUT */}
         <div
           ref={billContentRef}
           id="printable-bill-area"
-          className="p-4 bg-white text-black text-[11px] font-sans space-y-2.5"
+          className="p-4 sm:p-5 bg-white text-black text-[11px] font-sans space-y-2.5 print:p-0 print:space-y-2 print:text-[10px] print:w-full"
         >
           
-          {/* STORE HEADER WITH LOGOS */}
-          <div className="border-b-2 border-black pb-2 flex items-center justify-between gap-2">
-            {/* Left Logo */}
+          {/* STORE HEADER WITH LOGOS OPTIMIZED FOR A4 TOP CORNER */}
+          <div className="border-b-2 border-black pb-2 flex items-start justify-between gap-2.5">
+            {/* Left Logo - Shrunk & aligned to exact top corner */}
             {storeSettings.billShowLogos !== false && (
-              <div className="w-12 h-12 shrink-0 flex items-center justify-center rounded-lg border border-neutral-300 p-0.5 bg-neutral-50 overflow-hidden">
+              <div className="w-10 h-10 shrink-0 self-start flex items-center justify-center rounded-lg border border-neutral-300 p-0.5 bg-neutral-50 overflow-hidden print:border-black">
                 {storeSettings.leftLogoUrl ? (
                   <img src={storeSettings.leftLogoUrl} alt="Logo" className="w-full h-full object-contain" />
                 ) : (
-                  <span className="text-xl">🪪</span>
+                  <span className="text-base">🪪</span>
                 )}
               </div>
             )}
 
             {/* Store Title & GST */}
             <div className="text-center flex-1 px-1">
-              <h1 className="text-sm sm:text-base font-black tracking-tight text-neutral-900 leading-tight uppercase">
+              <h1 className="text-sm sm:text-base font-black tracking-tight text-black print:text-black leading-tight uppercase">
                 {storeSettings.storeNameEn}
               </h1>
-              <h2 className="text-xs font-black text-orange-700 leading-tight">
+              <h2 className="text-xs font-black text-orange-700 print:text-black leading-tight">
                 {storeSettings.storeNameGu}
               </h2>
-              <p className="text-[9.5px] font-bold text-neutral-700 mt-0.5">
+              <p className="text-[9.5px] font-bold text-neutral-800 print:text-black mt-0.5">
                 {storeSettings.tagline} {storeSettings.ownerName ? `• સંચાલક: ${storeSettings.ownerName}` : ''}
               </p>
-              <p className="text-[9px] text-neutral-600 font-medium max-w-md mx-auto leading-tight">
+              <p className="text-[9px] text-neutral-700 print:text-black font-medium max-w-md mx-auto leading-tight">
                 {storeSettings.address}
               </p>
-              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 mt-0.5 text-[9.5px] font-black text-neutral-800">
+              <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 mt-0.5 text-[9.5px] font-black text-black print:text-black">
                 <span>📞 +91 {storeSettings.phone}</span>
                 {storeSettings.email && (
                   <>
@@ -298,13 +336,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </div>
             </div>
 
-            {/* Right Logo / Seal */}
+            {/* Right Logo / Seal - Shrunk & aligned to exact top corner */}
             {storeSettings.billShowLogos !== false && (
-              <div className="w-12 h-12 shrink-0 flex items-center justify-center rounded-lg border border-neutral-300 p-0.5 bg-neutral-50 overflow-hidden">
+              <div className="w-10 h-10 shrink-0 self-start flex items-center justify-center rounded-lg border border-neutral-300 p-0.5 bg-neutral-50 overflow-hidden print:border-black">
                 {storeSettings.rightLogoUrl ? (
-                  <img src={storeSettings.rightLogoUrl} alt="Logo" className="w-full h-full object-contain" />
+                  <img src={storeSettings.rightLogoUrl} alt="Seal" className="w-full h-full object-contain" />
                 ) : (
-                  <span className="text-xl">🏪</span>
+                  <span className="text-base">🏪</span>
                 )}
               </div>
             )}
@@ -312,54 +350,54 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
           {/* RUNNING OFFER BANNER (IF ENABLED) */}
           {storeSettings.billShowSpecialOffer !== false && storeSettings.billSpecialOffer && (
-            <div className="bg-amber-50 border border-amber-300 rounded px-2 py-0.5 text-[10px] text-amber-900 font-black text-center flex items-center justify-center gap-1">
-              <Sparkles className="w-3 h-3 text-amber-600 shrink-0" />
+            <div className="bg-amber-50 border border-amber-300 rounded px-2 py-0.5 text-[10px] text-amber-900 font-black text-center flex items-center justify-center gap-1 print:border-black print:text-black">
+              <Sparkles className="w-3 h-3 text-amber-600 print:text-black shrink-0" />
               <span>{storeSettings.billSpecialOffer}</span>
             </div>
           )}
 
           {/* INVOICE & CUSTOMER META INFO */}
-          <div className="grid grid-cols-2 gap-2 bg-neutral-50 p-2 rounded border border-neutral-200 text-[10.5px]">
+          <div className="grid grid-cols-2 gap-2 bg-neutral-50 print:bg-white p-2 rounded border border-neutral-300 print:border-black text-[10.5px]">
             <div className="space-y-0.5">
-              <p className="font-bold text-neutral-500 text-[9.5px]">ગ્રાહકની વિગત (Bill To):</p>
-              <p className="font-black text-xs text-neutral-900">{order.customerName}</p>
-              <p className="font-bold text-neutral-700">📞 +91 {order.mobile}</p>
-              <p className="text-neutral-600 truncate">📍 {order.address}</p>
+              <p className="font-bold text-neutral-600 print:text-black text-[9.5px]">ગ્રાહકની વિગત (Bill To):</p>
+              <p className="font-black text-xs text-black print:text-black">{order.customerName}</p>
+              <p className="font-bold text-black print:text-black">📞 +91 {order.mobile}</p>
+              <p className="text-neutral-800 print:text-black truncate">📍 {order.address}</p>
             </div>
             <div className="text-right space-y-0.5">
-              <p className="font-bold text-neutral-500 text-[9.5px]">ઇન્વોઇસ વિગત:</p>
-              <p className="font-black text-xs text-neutral-900">
-                બિલ નં: <span className="text-orange-700 font-mono font-black">{order.invoiceNo}</span>
+              <p className="font-bold text-neutral-600 print:text-black text-[9.5px]">ઇન્વોઇસ વિગત (Invoice Info):</p>
+              <p className="font-black text-xs text-black print:text-black">
+                બિલ નં: <span className="text-orange-700 print:text-black font-mono font-black">{order.invoiceNo}</span>
               </p>
-              <p className="text-neutral-700 font-bold">તારીખ: {order.date}</p>
-              <p className="font-extrabold text-neutral-800">
-                પદ્ધતિ: <span className="text-blue-700 font-black">{order.paymentMode}</span>
+              <p className="text-black print:text-black font-bold">તારીખ: {order.date}</p>
+              <p className="font-extrabold text-black print:text-black">
+                પેમેન્ટ: <span className="text-blue-800 print:text-black font-black">{order.paymentMode} ({order.paymentStatus})</span>
               </p>
             </div>
           </div>
 
-          {/* ITEMS TABLE */}
+          {/* ITEMS TABLE - HIGH CONTRAST BLACK TEXT SCHEMA */}
           <div className="border border-black rounded overflow-hidden">
             <table className="w-full text-left border-collapse text-[10.5px]">
               <thead>
-                <tr className="bg-neutral-100 text-black border-b border-black font-black">
-                  <th className="p-1 text-center w-7">#</th>
-                  <th className="p-1">આઇટમ વિગત (Description)</th>
-                  <th className="p-1 text-center w-14">જથ્થો (Qty)</th>
-                  <th className="p-1 text-right w-16">ભાવ (Rate)</th>
-                  <th className="p-1 text-right w-20">કુલ (Amount)</th>
+                <tr className="bg-neutral-100 print:bg-neutral-200 text-black border-b-2 border-black font-black">
+                  <th className="p-1 text-center w-7 border-r border-black">#</th>
+                  <th className="p-1 border-r border-black">આઇટમ વિગત (Item Description)</th>
+                  <th className="p-1 text-center w-16 border-r border-black">જથ્થો (Qty)</th>
+                  <th className="p-1 text-right w-20 border-r border-black">ભાવ (Rate ₹)</th>
+                  <th className="p-1 text-right w-24">કુલ (Amount ₹)</th>
                 </tr>
               </thead>
               <tbody>
                 {order.items.map((it, idx) => (
-                  <tr key={idx} className="border-b border-neutral-300 font-medium">
-                    <td className="p-1 text-center font-bold text-neutral-500">{idx + 1}</td>
-                    <td className="p-1 font-bold text-neutral-900">
+                  <tr key={idx} className="border-b border-neutral-300 print:border-black font-medium">
+                    <td className="p-1 text-center font-bold text-black border-r border-neutral-300 print:border-black">{idx + 1}</td>
+                    <td className="p-1 font-black text-black border-r border-neutral-300 print:border-black">
                       {it.name} {it.unit ? `(${it.unit})` : ''}
                     </td>
-                    <td className="p-1 text-center font-black">{it.qty}</td>
-                    <td className="p-1 text-right font-medium">₹{it.price.toFixed(2)}</td>
-                    <td className="p-1 text-right font-black">₹{(it.price * it.qty).toFixed(2)}</td>
+                    <td className="p-1 text-center font-black text-black border-r border-neutral-300 print:border-black">{it.qty}</td>
+                    <td className="p-1 text-right font-bold text-black border-r border-neutral-300 print:border-black">₹{it.price.toFixed(2)}</td>
+                    <td className="p-1 text-right font-black text-black">₹{(it.price * it.qty).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -370,56 +408,56 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <div className="flex items-center justify-between gap-3 pt-0.5">
             {/* Payment Verification QR */}
             {storeSettings.billShowQr !== false ? (
-              <div className="flex items-center gap-2 border border-neutral-200 rounded p-1.5 bg-neutral-50 max-w-[240px]">
+              <div className="flex items-center gap-2 border border-neutral-300 print:border-black rounded p-1.5 bg-neutral-50 print:bg-white max-w-[240px]">
                 {qrCodeUrl && (
-                  <img src={qrCodeUrl} alt="UPI QR" className="w-14 h-14 object-contain rounded bg-white p-0.5 border shrink-0" />
+                  <img src={qrCodeUrl} alt="UPI QR" className="w-13 h-13 object-contain rounded bg-white p-0.5 border border-black shrink-0" />
                 )}
                 <div className="text-[9.5px] space-y-0.5 leading-tight">
-                  <p className="font-black text-neutral-900">UPI પેમેન્ટ વેરિફિકેશન</p>
+                  <p className="font-black text-black print:text-black">UPI પેમેન્ટ વેરિફિકેશન</p>
                   {!storeSettings.hideUpiOnBill && (
-                    <p className="text-[8.5px] text-neutral-600 truncate">{storeSettings.upiId}</p>
+                    <p className="text-[8.5px] text-neutral-700 print:text-black truncate">{storeSettings.upiId}</p>
                   )}
-                  <p className="text-[8.5px] font-bold text-emerald-700">✓ 100% સુરક્ષિત ડિજિટલ બિલ</p>
+                  <p className="text-[8.5px] font-bold text-emerald-800 print:text-black">✓ 100% સુરક્ષિત ડિજિટલ બિલ</p>
                 </div>
               </div>
             ) : (
-              <div className="text-[10px] font-black text-emerald-700">✓ પ્રમાણિત કરાયેલ ઓર્ડર</div>
+              <div className="text-[10px] font-black text-emerald-800 print:text-black">✓ પ્રમાણિત કરાયેલ સત્તાવાર બિલ</div>
             )}
 
             {/* Price Calculations */}
-            <div className="w-52 space-y-0.5 text-right text-[10.5px]">
-              <div className="flex justify-between font-bold text-neutral-600">
+            <div className="w-56 space-y-0.5 text-right text-[10.5px]">
+              <div className="flex justify-between font-bold text-black print:text-black">
                 <span>સબટોટલ (Subtotal):</span>
                 <span>₹{order.subtotal.toFixed(2)}</span>
               </div>
               {order.discount > 0 && (
-                <div className="flex justify-between font-bold text-emerald-700">
+                <div className="flex justify-between font-bold text-black print:text-black">
                   <span>ડિસ્કાઉન્ટ (Discount):</span>
                   <span>- ₹{order.discount.toFixed(2)}</span>
                 </div>
               )}
-              <div className="flex justify-between border-t border-black pt-0.5 font-black text-xs text-neutral-900">
-                <span>કુલ રકમ (Total):</span>
-                <span className="text-sm text-orange-700">₹{order.total.toFixed(2)}</span>
+              <div className="flex justify-between border-t-2 border-black pt-1 font-black text-xs sm:text-sm text-black print:text-black">
+                <span>કુલ રકમ (Grand Total):</span>
+                <span className="text-base text-orange-700 print:text-black">₹{order.total.toFixed(2)}</span>
               </div>
-              <p className="text-[9.5px] font-bold text-neutral-500">
-                સ્થિતિ: <span className="text-emerald-700 font-black">{order.paymentStatus}</span>
+              <p className="text-[9.5px] font-bold text-neutral-700 print:text-black">
+                સ્થિતિ: <span className="font-black text-emerald-800 print:text-black">{order.paymentStatus}</span>
               </p>
             </div>
           </div>
 
           {/* FRAUD WARNING ALERT (IF ENABLED) */}
           {storeSettings.billShowFraudWarning !== false && storeSettings.billFraudWarning && (
-            <div className="bg-red-50 border border-red-200 rounded px-2 py-0.5 text-[9px] text-red-800 font-black flex items-center gap-1">
-              <ShieldAlert className="w-3 h-3 text-red-600 shrink-0" />
+            <div className="bg-red-50 border border-red-200 print:border-black rounded px-2 py-0.5 text-[9px] text-red-800 print:text-black font-black flex items-center gap-1">
+              <ShieldAlert className="w-3 h-3 text-red-600 print:text-black shrink-0" />
               <span>{storeSettings.billFraudWarning}</span>
             </div>
           )}
 
           {/* FOOTER & TERMS */}
-          <div className="border-t border-neutral-300 pt-1.5 text-center text-[9px] text-neutral-500 space-y-0.5">
-            <p className="font-bold text-neutral-800">{storeSettings.invoiceFooterNote}</p>
-            <p className="text-[8.5px]">
+          <div className="border-t border-neutral-300 print:border-black pt-1.5 text-center text-[9px] text-neutral-600 print:text-black space-y-0.5">
+            <p className="font-bold text-black print:text-black">{storeSettings.invoiceFooterNote}</p>
+            <p className="text-[8.5px] text-neutral-700 print:text-black">
               {storeSettings.billTermsNote || 'આ કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ છે. સહીની જરૂર નથી.'} • હેલ્પલાઇન: +91 {storeSettings.phone}
             </p>
           </div>
