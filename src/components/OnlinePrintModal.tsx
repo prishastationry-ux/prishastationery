@@ -25,14 +25,14 @@ interface OnlinePrintModalProps {
   isOpen: boolean;
   onClose: () => void;
   storeSettings: StoreSettings;
-  onSubmitPrintJob: (job: PrintJobRecord) => void;
+  onSubmitJob: (job: PrintJobRecord) => void;
 }
 
 export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
   isOpen,
   onClose,
   storeSettings,
-  onSubmitPrintJob
+  onSubmitJob
 }) => {
   const [filesList, setFilesList] = useState<PrintJobFile[]>([]);
   const [customerName, setCustomerName] = useState<string>('');
@@ -143,7 +143,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       paymentMode: 'UPI'
     };
 
-    onSubmitPrintJob(newJob);
+    onSubmitJob(newJob);
     setSubmittedJob(newJob);
     setIsSubmitting(false);
   };
@@ -475,108 +475,113 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                 </div>
               )}
 
-              {/* CUSTOMER CONTACT DETAILS */}
-              <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 space-y-3">
-                <h3 className="text-xs sm:text-sm font-black text-neutral-900 flex items-center gap-1.5">
-                  <User className="w-4 h-4 text-blue-700" />
-                  <span>૩. તમારી વિગત (Customer Details):</span>
-                </h3>
+              {/* CUSTOMER CONTACT DETAILS, NOTICE & SUBMIT (ONLY SHOWN AFTER FILE UPLOADED) */}
+              {filesList.length > 0 && (
+                <div className="space-y-4 animate-fade-in">
+                  {/* CUSTOMER CONTACT DETAILS */}
+                  <div className="bg-blue-50/50 rounded-2xl p-4 border border-blue-100 space-y-3">
+                    <h3 className="text-xs sm:text-sm font-black text-neutral-900 flex items-center gap-1.5">
+                      <User className="w-4 h-4 text-blue-700" />
+                      <span>૩. તમારી વિગત (Customer Details):</span>
+                    </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-black text-neutral-700 mb-1">
-                      તમારું પૂરું નામ *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="દા.ત. રમેશભાઈ પટેલ"
-                      value={customerName}
-                      onChange={e => setCustomerName(e.target.value)}
-                      className="w-full bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-700"
-                    />
-                  </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-black text-neutral-700 mb-1">
+                          તમારું પૂરું નામ *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="દા.ત. રમેશભાઈ પટેલ"
+                          value={customerName}
+                          onChange={e => setCustomerName(e.target.value)}
+                          className="w-full bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-700"
+                        />
+                      </div>
 
-                  <div>
-                    <label className="block text-[11px] font-black text-neutral-700 mb-1">
-                      મોબાઇલ નંબર (WhatsApp) *
-                    </label>
-                    <input
-                      type="tel"
-                      required
-                      maxLength={10}
-                      placeholder="૧૦ અંકનો મોબાઇલ નંબર"
-                      value={mobile}
-                      onChange={e => setMobile(e.target.value.replace(/\D/g, ''))}
-                      className="w-full bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-700"
-                    />
-                  </div>
-                </div>
-
-                {/* Delivery Option */}
-                <div className="space-y-2 pt-1">
-                  <label className="block text-[11px] font-black text-neutral-700">
-                    ડિલિવરી વિકલ્પ:
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setDeliveryType('pickup')}
-                      className={`p-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                        deliveryType === 'pickup'
-                          ? 'bg-blue-900 text-white border-blue-900'
-                          : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-50'
-                      }`}
-                    >
-                      <span>🏪 દુકાનેથી રૂબરૂ પિકઅપ</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setDeliveryType('home_delivery')}
-                      className={`p-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
-                        deliveryType === 'home_delivery'
-                          ? 'bg-blue-900 text-white border-blue-900'
-                          : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-50'
-                      }`}
-                    >
-                      <span>🛵 હોમ ડિલિવરી</span>
-                    </button>
-                  </div>
-
-                  {deliveryType === 'home_delivery' && (
-                    <div className="pt-1">
-                      <input
-                        type="text"
-                        placeholder="તમારું પૂરું સરનામું લખો"
-                        value={address}
-                        onChange={e => setAddress(e.target.value)}
-                        className="w-full bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-700"
-                      />
+                      <div>
+                        <label className="block text-[11px] font-black text-neutral-700 mb-1">
+                          મોબાઇલ નંબર (WhatsApp) *
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          maxLength={10}
+                          placeholder="૧૦ અંકનો મોબાઇલ નંબર"
+                          value={mobile}
+                          onChange={e => setMobile(e.target.value.replace(/\D/g, ''))}
+                          className="w-full bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-700"
+                        />
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
 
-              {/* NOTICE BOX */}
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-amber-900">
-                <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                <div className="space-y-0.5 text-[11.5px] leading-relaxed">
-                  <p className="font-bold">
-                    💡 <span className="font-black">બિલ અને પેમેન્ટ વિગત:</span> ફાઇલો સબમિટ થયા પછી દુકાનદાર પાનાની ચોક્કસ ગણતરી કરી બિલ બનાવી તમને WhatsApp પર મોકલશે.
-                  </p>
-                </div>
-              </div>
+                    {/* Delivery Option */}
+                    <div className="space-y-2 pt-1">
+                      <label className="block text-[11px] font-black text-neutral-700">
+                        ડિલિવરી વિકલ્પ:
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryType('pickup')}
+                          className={`p-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                            deliveryType === 'pickup'
+                              ? 'bg-blue-900 text-white border-blue-900'
+                              : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-50'
+                          }`}
+                        >
+                          <span>🏪 દુકાનેથી રૂબરૂ પિકઅપ</span>
+                        </button>
 
-              {/* SUBMIT BUTTON */}
-              <button
-                type="submit"
-                disabled={isSubmitting || filesList.length === 0}
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-black py-3.5 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 cursor-pointer transition-transform active:scale-[0.98] disabled:opacity-50"
-              >
-                <Printer className="w-5 h-5" />
-                <span>પ્રિન્ટ રિક્વેસ્ટ સબમિટ કરો ({filesList.length} ફાઇલો)</span>
-              </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeliveryType('home_delivery')}
+                          className={`p-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer transition-colors ${
+                            deliveryType === 'home_delivery'
+                              ? 'bg-blue-900 text-white border-blue-900'
+                              : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-50'
+                          }`}
+                        >
+                          <span>🛵 હોમ ડિલિવરી</span>
+                        </button>
+                      </div>
+
+                      {deliveryType === 'home_delivery' && (
+                        <div className="pt-1">
+                          <input
+                            type="text"
+                            placeholder="તમારું પૂરું સરનામું લખો"
+                            value={address}
+                            onChange={e => setAddress(e.target.value)}
+                            className="w-full bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-700"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* NOTICE BOX */}
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3 flex items-start gap-2.5 text-xs text-amber-900">
+                    <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5 text-[11.5px] leading-relaxed">
+                      <p className="font-bold">
+                        💡 <span className="font-black">બિલ અને પેમેન્ટ વિગત:</span> ફાઇલો સબમિટ થયા પછી દુકાનદાર પાનાની ચોક્કસ ગણતરી કરી બિલ બનાવી તમને WhatsApp પર મોકલશે.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* SUBMIT BUTTON */}
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || filesList.length === 0}
+                    className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-black py-3.5 rounded-2xl font-black text-sm sm:text-base flex items-center justify-center gap-2 shadow-lg shadow-orange-500/20 cursor-pointer transition-transform active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <Printer className="w-5 h-5" />
+                    <span>પ્રિન્ટ રિક્વેસ્ટ સબમિટ કરો ({filesList.length} ફાઇલો)</span>
+                  </button>
+                </div>
+              )}
 
             </form>
           )}

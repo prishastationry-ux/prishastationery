@@ -34,129 +34,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       .catch(err => console.error(err));
   }, [order, storeSettings]);
 
-  // 1. Direct PC Print using isolated iframe - Scaled specifically for EXACT 1-PAGE A4 output
+  // 1. Direct PC Print using robust window.print or iframe
   const handleDirectPrint = () => {
-    const billElement = billContentRef.current;
-    if (!billElement) {
-      window.print();
-      return;
-    }
-
     try {
-      const existingIframe = document.getElementById('prisha-print-iframe');
-      if (existingIframe) existingIframe.remove();
-
-      const printIframe = document.createElement('iframe');
-      printIframe.id = 'prisha-print-iframe';
-      printIframe.style.position = 'fixed';
-      printIframe.style.right = '0';
-      printIframe.style.bottom = '0';
-      printIframe.style.width = '0px';
-      printIframe.style.height = '0px';
-      printIframe.style.border = 'none';
-      document.body.appendChild(printIframe);
-
-      const iframeDoc = printIframe.contentDocument || printIframe.contentWindow?.document;
-      if (!iframeDoc) {
-        window.print();
-        return;
-      }
-
-      iframeDoc.open();
-      iframeDoc.write(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <title>Invoice_${order.invoiceNo}</title>
-          <style>
-            @page {
-              size: A4 portrait;
-              margin: 10mm;
-            }
-            @media print {
-              html, body {
-                width: 100%;
-                height: 297mm !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                background: #ffffff !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                overflow: hidden !important;
-              }
-              .no-print {
-                display: none !important;
-              }
-              .bill-wrapper {
-                height: 135mm !important;
-                max-height: 135mm !important;
-                overflow: hidden !important;
-                page-break-after: always !important;
-                page-break-inside: avoid !important;
-              }
-            }
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Gujarati", Helvetica, Arial, sans-serif;
-              color: #000000;
-              background: #ffffff;
-              margin: 0;
-              padding: 0;
-              font-size: 12px;
-              line-height: 1.4;
-            }
-            * {
-              box-sizing: border-box;
-            }
-            .bill-wrapper {
-              width: 100%;
-              max-width: 800px;
-              margin: 0 auto;
-              padding: 10px;
-              height: 135mm;
-              max-height: 135mm;
-              overflow: hidden;
-              page-break-after: always;
-            }
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin: 4px 0;
-            }
-            th, td {
-              border: 1px solid #222222;
-              padding: 4px 6px;
-            }
-            th {
-              background-color: #f1f3f5;
-              font-weight: 800;
-            }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .font-bold { font-weight: bold; }
-            .font-black { font-weight: 900; }
-          </style>
-        </head>
-        <body>
-          <div class="bill-wrapper page-container">
-            ${billElement.innerHTML}
-          </div>
-        </body>
-        </html>
-      `);
-      iframeDoc.close();
-
-      setTimeout(() => {
-        printIframe.contentWindow?.focus();
-        printIframe.contentWindow?.print();
-      }, 300);
+      window.print();
     } catch (e) {
       console.error('Print error:', e);
-      window.print();
     }
   };
 
-  // 2. Direct 1-Page PDF Download (.pdf file)
+  // 2. Direct A4 PDF Download with multi-page support for large orders
   const handleDownloadPdf = async () => {
     const billElement = billContentRef.current;
     if (!billElement) return;
@@ -165,7 +52,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       setIsGeneratingPdf(true);
 
       const canvas = await html2canvas(billElement, {
-        scale: 2.2,
+        scale: 2.0,
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false
@@ -181,13 +68,26 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       
-      const margin = 8; // 8mm margin
+      const margin = 10; // 10mm margin
       const printWidth = pdfWidth - (margin * 2);
       const printHeight = (canvas.height * printWidth) / canvas.width;
 
-      // Fit strictly within 1 A4 page
-      const finalHeight = Math.min(printHeight, pdfHeight - (margin * 2));
-      pdf.addImage(imgData, 'JPEG', margin, margin, printWidth, finalHeight);
+      let heightLeft = printHeight;
+      let position = margin;
+      let pageHeight = pdfHeight - (margin * 2);
+
+      // First page
+      pdf.addImage(imgData, 'JPEG', margin, position, printWidth, printHeight);
+      heightLeft -= pageHeight;
+
+      // Additional pages if bill is long (> 5-10 items)
+      while (heightLeft >= 0) {
+        position = heightLeft - printHeight + margin;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', margin, position, printWidth, printHeight);
+        heightLeft -= pageHeight;
+      }
+
       pdf.save(`Prisha_Bill_${order.invoiceNo}.pdf`);
     } catch (err) {
       console.error('PDF Generation error:', err);
