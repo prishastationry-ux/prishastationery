@@ -23,9 +23,12 @@ import {
   Loader2
 } from 'lucide-react';
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
-import { getFileFromStorage, saveFileToStorage, downloadFileSafely, openFileInNewTab } from '../lib/fileStorage';
+import {
+  getFileFromCloudStorage,
+  createBlobUrl,
+  downloadFileSafely,
+  openFileInNewTab
+} from '../lib/fileStorage';
 
 interface AdminPrintJobsModalProps {
   isOpen: boolean;
@@ -58,6 +61,11 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   const [extraChargeNote, setExtraChargeNote] = useState<string>('બાઈન્ડિંગ / અન્ય ખર્ચ');
   const [discountAmount, setDiscountAmount] = useState<number>(0);
   const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
+  const [viewingFile, setViewingFile] = useState<{
+    file: PrintJobFile;
+    blobUrl: string;
+    dataUrl: string;
+  } | null>(null);
 
   if (!isOpen) return null;
 
@@ -68,34 +76,15 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   const activeJob = effectiveJobs.find(j => j.id === selectedJobId) || filteredJobs[0] || null;
 
-  // Retrieve complete file dataUrl from memory, IndexedDB, or cloud print_files collection
+  // Retrieve complete file dataUrl from memory, IndexedDB, or chunked cloud storage
   const getFullFileDataUrl = async (file: PrintJobFile): Promise<string | null> => {
     if (file.fileDataUrl && file.fileDataUrl.length > 50) {
       return file.fileDataUrl;
     }
-
-    // 1. Check IndexedDB
-    try {
-      const local = await getFileFromStorage(file.id);
-      if (local && local.length > 50) return local;
-    } catch (e) {}
-
-    // 2. Check Firestore print_files collection
-    try {
-      const snap = await getDoc(doc(db, "print_files", file.id));
-      if (snap.exists() && snap.data()?.fileDataUrl) {
-        const cloudData = snap.data()?.fileDataUrl;
-        saveFileToStorage(file.id, cloudData, file.fileName, file.fileType);
-        return cloudData;
-      }
-    } catch (e) {
-      console.warn('Firestore print_files fetch error:', e);
-    }
-
-    return null;
+    return await getFileFromCloudStorage(file.id);
   };
 
-  // Safe File Download using Blob & ObjectURL (bypasses Chrome data-uri network errors)
+  // Safe File Download using Blob & ObjectURL (exact original size, never 0 KB)
   const handleDownloadFile = async (file: PrintJobFile) => {
     setLoadingFileId(file.id);
     try {
@@ -107,8 +96,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
       const success = downloadFileSafely(dataUrl, file.fileName || `Print_Document_${Date.now()}`);
       if (!success) {
-        // Fallback open in new tab
-        openFileInNewTab(dataUrl, file.fileName);
+        alert('ફાઇલ ડાઉનલોડ કરવામાં અસમર્થ: ફાઇલ કરપ્ટ અથવા ખાલી છે.');
       }
     } catch (e) {
       console.error('Download error:', e);
@@ -118,18 +106,23 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     }
   };
 
-  // Open file in new browser tab for instant preview or direct printing
-  const handleOpenFile = async (file: PrintJobFile) => {
+  // Open file in-screen document viewer (view right there without automatic download)
+  const handleViewFileOnScreen = async (file: PrintJobFile) => {
     setLoadingFileId(file.id);
     try {
       const dataUrl = await getFullFileDataUrl(file);
       if (!dataUrl) {
-        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા મળ્યો નથી.`);
+        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ઉપલબ્ધ નથી.`);
         return;
       }
-      openFileInNewTab(dataUrl, file.fileName);
+      const blobUrl = createBlobUrl(dataUrl);
+      if (!blobUrl) {
+        alert('ફાઇલ ખોલવામાં સમસ્યા આવી. ફાઇલ કરપ્ટ હોઈ શકે છે.');
+        return;
+      }
+      setViewingFile({ file, blobUrl, dataUrl });
     } catch (e) {
-      console.error('Open file error:', e);
+      console.error('Error opening file on screen:', e);
     } finally {
       setLoadingFileId(null);
     }
@@ -532,31 +525,31 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Action: Open in Tab, Download to PC & Price Input */}
+                          {/* Action: View on Screen, Download to PC & Price Input */}
                           <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
                             <button
                               type="button"
-                              onClick={() => handleOpenFile(file)}
+                              onClick={() => handleViewFileOnScreen(file)}
                               disabled={loadingFileId === file.id}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs disabled:opacity-50"
-                              title="નવી ટેબમાં ફાઇલ ઓપન કરો અને જુઓ"
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs disabled:opacity-50 transition"
+                              title="સ્ક્રીન પર જ આ ફાઇલ જુઓ (View On Screen)"
                             >
-                              <Eye className="w-3.5 h-3.5" />
-                              <span>ઓપન</span>
+                              {loadingFileId === file.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5" />
+                              )}
+                              <span>જુઓ</span>
                             </button>
 
                             <button
                               type="button"
                               onClick={() => handleDownloadFile(file)}
                               disabled={loadingFileId === file.id}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs disabled:opacity-50"
-                              title="આ ફાઇલ PC માં ડાઉનલોડ કરો"
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs disabled:opacity-50 transition"
+                              title="આ ઓરિજનલ ફાઇલ PC માં ડાઉનલોડ કરો"
                             >
-                              {loadingFileId === file.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <FileDown className="w-3.5 h-3.5" />
-                              )}
+                              <FileDown className="w-3.5 h-3.5" />
                               <span>ડાઉનલોડ</span>
                             </button>
 
@@ -707,6 +700,105 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         </div>
 
       </div>
+
+      {/* IN-APP DOCUMENT VIEWER MODAL (Screen Viewer - No Auto-Download) */}
+      {viewingFile && (
+        <div className="fixed inset-0 z-70 bg-black/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-neutral-300">
+            {/* Viewer Top Bar */}
+            <div className="bg-neutral-900 text-white px-4 py-3 flex items-center justify-between gap-3 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-neutral-800 flex items-center justify-center shrink-0">
+                  {getFileIcon(viewingFile.file.fileType, viewingFile.file.fileName)}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-black truncate">{viewingFile.file.fileName}</h3>
+                  <p className="text-[11px] text-neutral-400 font-medium">
+                    {viewingFile.file.paperSize} • {viewingFile.file.colorMode === 'black_white' ? '⚪⚫ B&W' : '🌈 કલર'} • {viewingFile.file.copies} કોપી
+                    {viewingFile.file.fileSize ? ` • ${(viewingFile.file.fileSize / 1024).toFixed(1)} KB` : ''}
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons: Print, Download, Close */}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const printWin = window.open(viewingFile.blobUrl, '_blank');
+                    if (printWin) {
+                      setTimeout(() => printWin.print(), 500);
+                    }
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition"
+                  title="આ ફાઇલ પ્રિન્ટ કરો"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span className="hidden sm:inline">પ્રિન્ટ કરો</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => downloadFileSafely(viewingFile.dataUrl, viewingFile.file.fileName)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition"
+                  title="ઓરિજનલ ફાઇલ PC માં ડાઉનલોડ કરો"
+                >
+                  <FileDown className="w-4 h-4" />
+                  <span>ડાઉનલોડ</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    URL.revokeObjectURL(viewingFile.blobUrl);
+                    setViewingFile(null);
+                  }}
+                  className="bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white p-1.5 rounded-xl cursor-pointer transition"
+                  title="બંધ કરો"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Viewer Content Body */}
+            <div className="flex-1 bg-neutral-100 p-2 sm:p-4 overflow-auto flex items-center justify-center">
+              {viewingFile.file.fileType.includes('pdf') || viewingFile.file.fileName.toLowerCase().endsWith('.pdf') ? (
+                <iframe
+                  src={`${viewingFile.blobUrl}#toolbar=1`}
+                  className="w-full h-full rounded-2xl border border-neutral-300 bg-white shadow-inner"
+                  title={viewingFile.file.fileName}
+                />
+              ) : viewingFile.file.fileType.includes('image') ||
+                ['jpg', 'jpeg', 'png', 'webp', 'bmp'].some(ext => viewingFile.file.fileName.toLowerCase().endsWith(ext)) ? (
+                <div className="w-full h-full flex items-center justify-center bg-neutral-900 rounded-2xl p-2 overflow-auto">
+                  <img
+                    src={viewingFile.blobUrl}
+                    alt={viewingFile.file.fileName}
+                    className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+                  />
+                </div>
+              ) : (
+                <div className="text-center p-8 bg-white rounded-2xl border border-neutral-300 max-w-md shadow-sm">
+                  <FileText className="w-16 h-16 text-neutral-400 mx-auto mb-3" />
+                  <h4 className="font-black text-neutral-900 mb-1">{viewingFile.file.fileName}</h4>
+                  <p className="text-xs text-neutral-600 mb-4">
+                    આ ફાઇલનું પ્રિવ્યૂ સીધું સ્ક્રીન પર જોઈ શકાય તેમ નથી. તમે નીચે આપેલ બટનથી તેને ડાઉનલોડ કરી શકો છો.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => downloadFileSafely(viewingFile.dataUrl, viewingFile.file.fileName)}
+                    className="bg-emerald-600 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-2 mx-auto cursor-pointer"
+                  >
+                    <FileDown className="w-4 h-4" />
+                    <span>ડાઉનલોડ કરો</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

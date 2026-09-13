@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
-import { saveFileToStorage } from '../lib/fileStorage';
+import { saveFileToStorage, saveFileToCloudStorage } from '../lib/fileStorage';
 
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
   // Helper to filter out any legacy sample / starter mock printing requests or test invoices
@@ -154,21 +154,20 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         } catch (e) {}
       }
 
-      // 3. Save to Firebase: Upload individual file docs to print_files/{id} for cross-device access
+      // 3. Save to Firebase: Upload files with chunking so files of ANY size never fail
       try {
         if (docName === 'printJobs' && Array.isArray(next)) {
           next.forEach((job: any) => {
             if (Array.isArray(job.files)) {
               job.files.forEach((f: any) => {
-                if (f.fileDataUrl && f.fileDataUrl.length > 100) {
-                  // Upload to print_files/{f.id} without truncating
-                  setDoc(doc(db, "print_files", f.id), {
-                    id: f.id,
-                    fileName: f.fileName,
-                    fileType: f.fileType,
-                    fileDataUrl: f.fileDataUrl,
-                    createdAt: Date.now()
-                  }).catch(e => console.warn("print_files individual sync error:", e));
+                if (f.fileDataUrl && f.fileDataUrl.length > 50) {
+                  saveFileToCloudStorage(
+                    f.id,
+                    f.fileDataUrl,
+                    f.fileName || 'file',
+                    f.fileType || '',
+                    f.fileSize || 0
+                  );
                 }
               });
             }

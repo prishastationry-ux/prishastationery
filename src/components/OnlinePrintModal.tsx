@@ -20,9 +20,7 @@ import {
   Info
 } from 'lucide-react';
 import { PrintJobFile, PrintJobRecord, StoreSettings } from '../types';
-import { saveFileToStorage } from '../lib/fileStorage';
-import { doc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { saveFileToStorage, saveFileToCloudStorage } from '../lib/fileStorage';
 
 interface OnlinePrintModalProps {
   isOpen: boolean;
@@ -72,17 +70,14 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
           notes: ''
         };
 
-        // Cache in IndexedDB locally
-        saveFileToStorage(fileId, base64Result, file.name, file.type || 'application/octet-stream');
-
-        // Cache in Firestore print_files collection for cross-device access
-        setDoc(doc(db, "print_files", fileId), {
-          id: fileId,
-          fileName: file.name,
-          fileType: file.type || 'application/octet-stream',
-          fileDataUrl: base64Result,
-          createdAt: Date.now()
-        }).catch(err => console.warn('Firestore print_files save warning:', err));
+        // Cache in IndexedDB locally and upload to chunked cloud storage in background
+        saveFileToCloudStorage(
+          fileId,
+          base64Result,
+          file.name,
+          file.type || 'application/octet-stream',
+          file.size
+        );
 
         setFilesList(prev => [...prev, newFileItem]);
       };
@@ -124,7 +119,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
     return <FileCheck className="w-7 h-7 text-orange-600" />;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (filesList.length === 0) {
       alert('કૃપા કરીને ઓછામાં ઓછી એક ફાઇલ અપલોડ કરો.');
@@ -140,6 +135,26 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
     }
 
     setIsSubmitting(true);
+
+    try {
+      // Ensure all files are uploaded and saved to chunked cloud storage
+      await Promise.all(
+        filesList.map(f => {
+          if (f.fileDataUrl && f.fileDataUrl.length > 50) {
+            return saveFileToCloudStorage(
+              f.id,
+              f.fileDataUrl,
+              f.fileName,
+              f.fileType,
+              f.fileSize
+            );
+          }
+          return Promise.resolve(true);
+        })
+      );
+    } catch (err) {
+      console.warn('Cloud storage sync warning:', err);
+    }
 
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
