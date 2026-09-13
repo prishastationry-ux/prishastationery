@@ -58,6 +58,7 @@ import { BillSettingsModal } from './components/BillSettingsModal';
 import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDeleteModal';
 import { OnlinePrintModal } from './components/OnlinePrintModal';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
+import { useFirebaseSync } from './hooks/useFirebaseSync';
 
 export default function App() {
   // Navigation View: Default to 'customer' for all visitors
@@ -73,13 +74,7 @@ export default function App() {
   // Online Print Customer & Admin Print Job States
   const [showOnlinePrintModal, setShowOnlinePrintModal] = useState<boolean>(false);
   const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
-  const [printJobs, setPrintJobs] = useState<PrintJobRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_print_jobs_v1');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_PRINT_JOBS as any;
-  });
+  const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS as any);
 
   // Order Tracking & Admin Order Management States
   const [showTrackingModal, setShowTrackingModal] = useState(false);
@@ -89,13 +84,7 @@ export default function App() {
 
   // Trash / Recycle Bin State
   const [showTrashModal, setShowTrashModal] = useState<boolean>(false);
-  const [trashList, setTrashList] = useState<TrashRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_trash_v4');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [];
-  });
+  const [trashList, setTrashList] = useFirebaseSync<TrashRecord[]>('trash', 'prisha_trash_v4', []);
 
   // Dhamaka Offer Edit Modal State
   const [showDhamakaEditModal, setShowDhamakaEditModal] = useState<boolean>(false);
@@ -107,62 +96,26 @@ export default function App() {
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<DeleteTargetInfo | null>(null);
 
   // Store Settings (Full editable from Admin)
-  const [storeSettings, setStoreSettings] = useState<StoreSettings>(() => {
-    const saved = localStorage.getItem('prisha_store_settings_v4');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return DEFAULT_STORE_SETTINGS;
-  });
+  const [storeSettings, setStoreSettings] = useFirebaseSync<StoreSettings>('storeSettings', 'prisha_store_settings_v4', DEFAULT_STORE_SETTINGS);
 
   // Products & Inventory state
-  const [posItems, setPosItems] = useState<ProductItem[]>(() => {
-    const saved = localStorage.getItem('prisha_products_v4');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_PRODUCTS;
-  });
+  const [posItems, setPosItems] = useFirebaseSync<ProductItem[]>('products', 'prisha_products_v4', INITIAL_PRODUCTS);
 
   // Business Statistics State
-  const [stats, setStats] = useState<BusinessStats>(() => {
-    const saved = localStorage.getItem('prisha_stats_v4');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_STATS;
-  });
+  const [stats, setStats] = useFirebaseSync<BusinessStats>('stats', 'prisha_stats_v4', INITIAL_STATS);
 
   // Orders & Invoices State
-  const [orders, setOrders] = useState<OrderRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_orders_v4');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return INITIAL_ORDERS;
-  });
+  const [orders, setOrders] = useFirebaseSync<OrderRecord[]>('orders', 'prisha_orders_v4', INITIAL_ORDERS);
 
   // Expenses & Purchases
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_expenses_v4');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      { id: 'exp-1', title: 'દુકાન ચા-નાસ્તો', amount: 120, category: 'દૈનિક ખર્ચ', date: '12/09/2026' },
-      { id: 'exp-2', title: 'લાઇટ બિલ / ઇન્ટરનેટ', amount: 450, category: 'યુટિલિટી', date: '11/09/2026' }
-    ];
-  });
+  const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v4', [
+    { id: 'exp-1', title: 'દુકાન ચા-નાસ્તો', amount: 120, category: 'દૈનિક ખર્ચ', date: '12/09/2026' },
+    { id: 'exp-2', title: 'લાઇટ બિલ / ઇન્ટરનેટ', amount: 450, category: 'યુટિલિટી', date: '11/09/2026' }
+  ]);
 
-  const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
-    const saved = localStorage.getItem('prisha_purchases_v4');
-    if (saved) {
-      try { return JSON.parse(saved); } catch (e) { console.error(e); }
-    }
-    return [
-      { id: 'pur-1', supplierName: 'અમદાવાદ સ્ટેશનરી માર્ટ', billNo: 'ASM-8821', date: '10/09/2026', totalAmount: 7750, itemsCount: 45, paymentStatus: 'Paid' }
-    ];
-  });
+  const [purchases, setPurchases] = useFirebaseSync<PurchaseRecord[]>('purchases', 'prisha_purchases_v4', [
+    { id: 'pur-1', supplierName: 'અમદાવાદ સ્ટેશનરી માર્ટ', billNo: 'ASM-8821', date: '10/09/2026', totalAmount: 7750, itemsCount: 45, paymentStatus: 'Paid' }
+  ]);
 
   // Search & Filter Category
   const [searchQuery, setSearchQuery] = useState('');
@@ -251,37 +204,7 @@ export default function App() {
   });
 
   // Local Storage synchronization
-  useEffect(() => {
-    localStorage.setItem('prisha_store_settings_v4', JSON.stringify(storeSettings));
-  }, [storeSettings]);
 
-  useEffect(() => {
-    localStorage.setItem('prisha_products_v4', JSON.stringify(posItems));
-  }, [posItems]);
-
-  useEffect(() => {
-    localStorage.setItem('prisha_trash_v4', JSON.stringify(trashList));
-  }, [trashList]);
-
-  useEffect(() => {
-    localStorage.setItem('prisha_stats_v4', JSON.stringify(stats));
-  }, [stats]);
-
-  useEffect(() => {
-    localStorage.setItem('prisha_orders_v4', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('prisha_expenses_v4', JSON.stringify(expenses));
-  }, [expenses]);
-
-  useEffect(() => {
-    localStorage.setItem('prisha_purchases_v4', JSON.stringify(purchases));
-  }, [purchases]);
-
-  useEffect(() => {
-    localStorage.setItem('prisha_print_jobs_v1', JSON.stringify(printJobs));
-  }, [printJobs]);
 
   // Recalculate out of stock / low stock count
   useEffect(() => {

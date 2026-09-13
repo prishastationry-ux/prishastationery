@@ -1,0 +1,130 @@
+{
+  "collections": [
+    {
+      "name": "products",
+      "description": "Store products/items available for POS and catalog",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "printJobs",
+      "description": "Customer print requests",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "orders",
+      "description": "Customer and POS orders",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "storeSettings",
+      "description": "Admin store configuration",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "stats",
+      "description": "Store statistics",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "expenses",
+      "description": "Store expenses",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "purchases",
+      "description": "Store purchases",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "trash",
+      "description": "Deleted items",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "visitorCount",
+      "description": "Store visitor count tracking",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    }
+  ]
+}
