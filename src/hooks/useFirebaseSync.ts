@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { saveFileToStorage } from '../lib/fileStorage';
 
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
   // Helper to filter out any legacy sample / starter mock printing requests or test invoices
@@ -76,9 +77,37 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         if (Array.isArray(rawData) && cleaned.length !== rawData.length) {
           setDoc(docRef, { data: cleaned }).catch(() => {});
         }
-        setData(cleaned as T);
-        // Keep localStorage in sync just in case
-        localStorage.setItem(localKey, JSON.stringify(cleaned));
+
+        setData((prevData) => {
+          // If this is printJobs, preserve existing local full fileDataUrls so cloud updates never wipe them
+          if (docName === 'printJobs' && Array.isArray(cleaned) && Array.isArray(prevData)) {
+            const merged = cleaned.map((newJob: any) => {
+              const existingJob = (prevData as any[]).find(j => j.id === newJob.id);
+              if (existingJob && Array.isArray(existingJob.files)) {
+                return {
+                  ...newJob,
+                  files: newJob.files?.map((nf: any) => {
+                    const ef = existingJob.files.find((f: any) => f.id === nf.id);
+                    if (ef && ef.fileDataUrl && !nf.fileDataUrl) {
+                      return { ...nf, fileDataUrl: ef.fileDataUrl };
+                    }
+                    return nf;
+                  })
+                };
+              }
+              return newJob;
+            });
+            try {
+              localStorage.setItem(localKey, JSON.stringify(merged));
+            } catch (e) {}
+            return merged as unknown as T;
+          }
+
+          try {
+            localStorage.setItem(localKey, JSON.stringify(cleaned));
+          } catch (e) {}
+          return cleaned as T;
+        });
       }
     });
     
@@ -89,37 +118,79 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
+
+      // 1. If this contains files (printJobs), save full uncorrupted files into IndexedDB
+      if (docName === 'printJobs' && Array.isArray(next)) {
+        next.forEach((job: any) => {
+          if (Array.isArray(job.files)) {
+            job.files.forEach((file: any) => {
+              if (file.id && file.fileDataUrl && file.fileDataUrl.length > 50) {
+                saveFileToStorage(file.id, file.fileDataUrl, file.fileName || 'file', file.fileType || '');
+              }
+            });
+          }
+        });
+      }
+
+      // 2. Save locally
       try {
         localStorage.setItem(localKey, JSON.stringify(next));
       } catch (err) {
-        console.warn("LocalStorage save warning (size limit reached):", err);
+        console.warn("LocalStorage save warning (preserving metadata):", err);
         try {
-          // If quota exceeded, attempt to save without massive data URLs
           if (Array.isArray(next)) {
             const lightNext = next.map((item: any) => ({
               ...item,
-              files: item.files?.map((f: any) => ({ ...f, fileDataUrl: f.fileDataUrl?.length > 100000 ? f.fileDataUrl.substring(0, 100000) : f.fileDataUrl }))
+              files: item.files?.map((f: any) => {
+                // If local storage is full, keep metadata and rely on IndexedDB
+                if (f.fileDataUrl && f.fileDataUrl.length > 300000) {
+                  return { ...f, fileDataUrl: '' };
+                }
+                return f;
+              })
             }));
             localStorage.setItem(localKey, JSON.stringify(lightNext));
           }
         } catch (e) {}
       }
 
-      // Fire and forget save to Firebase with graceful error handling and size limits
+      // 3. Save to Firebase: Upload individual file docs to print_files/{id} for cross-device access
       try {
-        const firestoreData = (docName === 'printJobs' && Array.isArray(next))
-          ? next.map((item: any) => ({
-              ...item,
-              files: item.files?.map((f: any) => ({
-                ...f,
-                fileDataUrl: f.fileDataUrl && f.fileDataUrl.length > 50000 ? f.fileDataUrl.substring(0, 50000) : f.fileDataUrl
-              }))
-            }))
-          : next;
+        if (docName === 'printJobs' && Array.isArray(next)) {
+          next.forEach((job: any) => {
+            if (Array.isArray(job.files)) {
+              job.files.forEach((f: any) => {
+                if (f.fileDataUrl && f.fileDataUrl.length > 100) {
+                  // Upload to print_files/{f.id} without truncating
+                  setDoc(doc(db, "print_files", f.id), {
+                    id: f.id,
+                    fileName: f.fileName,
+                    fileType: f.fileType,
+                    fileDataUrl: f.fileDataUrl,
+                    createdAt: Date.now()
+                  }).catch(e => console.warn("print_files individual sync error:", e));
+                }
+              });
+            }
+          });
 
-        setDoc(doc(db, "store_data", docName), { data: firestoreData }).catch(err => {
-          console.warn("Firebase sync size/network warning (saved locally):", err);
-        });
+          // In the main printJobs collection list, omit huge inline base64 if it exceeds 300KB to stay safely under 1MB
+          const firestoreData = next.map((item: any) => ({
+            ...item,
+            files: item.files?.map((f: any) => ({
+              ...f,
+              fileDataUrl: f.fileDataUrl && f.fileDataUrl.length < 300000 ? f.fileDataUrl : ''
+            }))
+          }));
+
+          setDoc(doc(db, "store_data", docName), { data: firestoreData }).catch(err => {
+            console.warn("Firebase sync size/network warning (saved locally):", err);
+          });
+        } else {
+          setDoc(doc(db, "store_data", docName), { data: next }).catch(err => {
+            console.warn("Firebase sync warning:", err);
+          });
+        }
       } catch (err) {
         console.warn("Firebase sync preparation error:", err);
       }

@@ -18,9 +18,14 @@ import {
   Plus,
   ArrowRight,
   ExternalLink,
-  DollarSign
+  DollarSign,
+  Eye,
+  Loader2
 } from 'lucide-react';
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { getFileFromStorage, saveFileToStorage, downloadFileSafely, openFileInNewTab } from '../lib/fileStorage';
 
 interface AdminPrintJobsModalProps {
   isOpen: boolean;
@@ -52,6 +57,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   const [extraCharge, setExtraCharge] = useState<number>(0);
   const [extraChargeNote, setExtraChargeNote] = useState<string>('બાઈન્ડિંગ / અન્ય ખર્ચ');
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+  const [loadingFileId, setLoadingFileId] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
@@ -62,33 +68,80 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   const activeJob = effectiveJobs.find(j => j.id === selectedJobId) || filteredJobs[0] || null;
 
-  // File Download Helper with direct anchor download for mobile & PC files of any size (100% offline/online reliable)
-  const handleDownloadFile = (file: PrintJobFile) => {
-    if (!file.fileDataUrl) {
-      alert('ફાઇલ ડેટા ઉપલબ્ધ નથી.');
-      return;
+  // Retrieve complete file dataUrl from memory, IndexedDB, or cloud print_files collection
+  const getFullFileDataUrl = async (file: PrintJobFile): Promise<string | null> => {
+    if (file.fileDataUrl && file.fileDataUrl.length > 50) {
+      return file.fileDataUrl;
     }
 
+    // 1. Check IndexedDB
     try {
-      const link = document.createElement('a');
-      link.href = file.fileDataUrl;
-      link.download = file.fileName || `Print_Document_${Date.now()}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const local = await getFileFromStorage(file.id);
+      if (local && local.length > 50) return local;
+    } catch (e) {}
+
+    // 2. Check Firestore print_files collection
+    try {
+      const snap = await getDoc(doc(db, "print_files", file.id));
+      if (snap.exists() && snap.data()?.fileDataUrl) {
+        const cloudData = snap.data()?.fileDataUrl;
+        saveFileToStorage(file.id, cloudData, file.fileName, file.fileType);
+        return cloudData;
+      }
+    } catch (e) {
+      console.warn('Firestore print_files fetch error:', e);
+    }
+
+    return null;
+  };
+
+  // Safe File Download using Blob & ObjectURL (bypasses Chrome data-uri network errors)
+  const handleDownloadFile = async (file: PrintJobFile) => {
+    setLoadingFileId(file.id);
+    try {
+      const dataUrl = await getFullFileDataUrl(file);
+      if (!dataUrl) {
+        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો સંપૂર્ણ ડેટા મળ્યો નથી.\nકૃપા કરીને ગ્રાહકને નીચે આપેલા 'WhatsApp' બટન દ્વારા ફાઇલ મોકલવા કહો.`);
+        return;
+      }
+
+      const success = downloadFileSafely(dataUrl, file.fileName || `Print_Document_${Date.now()}`);
+      if (!success) {
+        // Fallback open in new tab
+        openFileInNewTab(dataUrl, file.fileName);
+      }
     } catch (e) {
       console.error('Download error:', e);
-      window.open(file.fileDataUrl, '_blank');
+      alert('ફાઇલ ડાઉનલોડ કરવામાં ભૂલ આવી.');
+    } finally {
+      setLoadingFileId(null);
+    }
+  };
+
+  // Open file in new browser tab for instant preview or direct printing
+  const handleOpenFile = async (file: PrintJobFile) => {
+    setLoadingFileId(file.id);
+    try {
+      const dataUrl = await getFullFileDataUrl(file);
+      if (!dataUrl) {
+        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા મળ્યો નથી.`);
+        return;
+      }
+      openFileInNewTab(dataUrl, file.fileName);
+    } catch (e) {
+      console.error('Open file error:', e);
+    } finally {
+      setLoadingFileId(null);
     }
   };
 
   // Download All Files for Active Job
-  const handleDownloadAllFiles = (job: PrintJobRecord) => {
-    job.files.forEach((file, index) => {
-      setTimeout(() => {
-        handleDownloadFile(file);
-      }, index * 250);
-    });
+  const handleDownloadAllFiles = async (job: PrintJobRecord) => {
+    for (let i = 0; i < job.files.length; i++) {
+      await handleDownloadFile(job.files[i]);
+      // brief delay between browser downloads
+      await new Promise(res => setTimeout(res, 350));
+    }
   };
 
   // Calculate live total based on edited prices
@@ -479,15 +532,31 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Action: Download to PC & Price Input */}
-                          <div className="flex items-center gap-2 shrink-0">
+                          {/* Action: Open in Tab, Download to PC & Price Input */}
+                          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenFile(file)}
+                              disabled={loadingFileId === file.id}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs disabled:opacity-50"
+                              title="નવી ટેબમાં ફાઇલ ઓપન કરો અને જુઓ"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>ઓપન</span>
+                            </button>
+
                             <button
                               type="button"
                               onClick={() => handleDownloadFile(file)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs"
+                              disabled={loadingFileId === file.id}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs disabled:opacity-50"
                               title="આ ફાઇલ PC માં ડાઉનલોડ કરો"
                             >
-                              <FileDown className="w-3.5 h-3.5" />
+                              {loadingFileId === file.id ? (
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              ) : (
+                                <FileDown className="w-3.5 h-3.5" />
+                              )}
                               <span>ડાઉનલોડ</span>
                             </button>
 

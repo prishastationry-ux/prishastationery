@@ -20,6 +20,9 @@ import {
   Info
 } from 'lucide-react';
 import { PrintJobFile, PrintJobRecord, StoreSettings } from '../types';
+import { saveFileToStorage } from '../lib/fileStorage';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 
 interface OnlinePrintModalProps {
   isOpen: boolean;
@@ -54,8 +57,9 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       const reader = new FileReader();
       reader.onload = (uploadEvent) => {
         const base64Result = uploadEvent.target?.result as string;
+        const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
         const newFileItem: PrintJobFile = {
-          id: `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          id: fileId,
           fileName: file.name,
           fileSize: file.size,
           fileType: file.type || 'application/octet-stream',
@@ -67,6 +71,18 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
           lamination: false,
           notes: ''
         };
+
+        // Cache in IndexedDB locally
+        saveFileToStorage(fileId, base64Result, file.name, file.type || 'application/octet-stream');
+
+        // Cache in Firestore print_files collection for cross-device access
+        setDoc(doc(db, "print_files", fileId), {
+          id: fileId,
+          fileName: file.name,
+          fileType: file.type || 'application/octet-stream',
+          fileDataUrl: base64Result,
+          createdAt: Date.now()
+        }).catch(err => console.warn('Firestore print_files save warning:', err));
 
         setFilesList(prev => [...prev, newFileItem]);
       };

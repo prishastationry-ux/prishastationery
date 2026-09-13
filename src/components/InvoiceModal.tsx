@@ -271,21 +271,40 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 </html>`;
   };
 
-  // 1. Direct Print using dedicated invisible iframe (Guaranteed 100% non-blank print in all browsers)
+  // 1. Direct Print: Opens dedicated print window or full-sized A4 frame (100% non-blank guaranteed)
   const handleDirectPrint = () => {
+    try {
+      const printWin = window.open('', '_blank', 'width=850,height=1000');
+      if (printWin) {
+        printWin.document.open();
+        printWin.document.write(getInvoiceHtmlString());
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => {
+          try {
+            printWin.print();
+          } catch (e) {
+            console.error('Print window error:', e);
+          }
+        }, 350);
+        return;
+      }
+    } catch (e) {
+      console.warn('Popup blocked, falling back to hidden A4 frame');
+    }
+
     try {
       let iframe = document.getElementById('prisha-direct-print-frame') as HTMLIFrameElement;
       if (!iframe) {
         iframe = document.createElement('iframe');
         iframe.id = 'prisha-direct-print-frame';
         iframe.style.position = 'fixed';
-        iframe.style.right = '0';
-        iframe.style.bottom = '0';
-        iframe.style.width = '0';
-        iframe.style.height = '0';
-        iframe.style.border = '0';
-        iframe.style.opacity = '0';
-        iframe.style.pointerEvents = 'none';
+        iframe.style.left = '-9999px';
+        iframe.style.top = '0';
+        iframe.style.width = '794px';
+        iframe.style.height = '1123px';
+        iframe.style.border = 'none';
+        iframe.style.zIndex = '-9999';
         document.body.appendChild(iframe);
       }
 
@@ -303,7 +322,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             console.error('Iframe print failed, using window.print fallback', e);
             window.print();
           }
-        }, 300);
+        }, 350);
       } else {
         window.print();
       }
@@ -313,20 +332,38 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   };
 
-  // 2. Direct A4 PDF Download with high-resolution canvas
+  // 2. Direct A4 PDF Download with offscreen zero-scroll canvas (never blank)
   const handleDownloadPdf = async () => {
-    const billElement = billContentRef.current;
-    if (!billElement) return;
-
     try {
       setIsGeneratingPdf(true);
 
-      const canvas = await html2canvas(billElement, {
-        scale: 2.5,
+      const offscreenDiv = document.createElement('div');
+      offscreenDiv.id = 'prisha-pdf-render-div';
+      offscreenDiv.style.position = 'fixed';
+      offscreenDiv.style.left = '-9999px';
+      offscreenDiv.style.top = '0';
+      offscreenDiv.style.width = '794px';
+      offscreenDiv.style.backgroundColor = '#ffffff';
+      offscreenDiv.style.color = '#000000';
+      offscreenDiv.style.padding = '12px 16px';
+      offscreenDiv.style.zIndex = '-9999';
+
+      offscreenDiv.innerHTML = getInvoiceHtmlString();
+      document.body.appendChild(offscreenDiv);
+
+      const billWrapper = (offscreenDiv.querySelector('.bill-wrapper') as HTMLElement) || offscreenDiv;
+
+      const canvas = await html2canvas(billWrapper, {
+        scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
-        logging: false
+        logging: false,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: 850
       });
+
+      document.body.removeChild(offscreenDiv);
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF({
@@ -338,7 +375,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
 
-      const margin = 10;
+      const margin = 8;
       const printWidth = pdfWidth - margin * 2;
       const printHeight = (canvas.height * printWidth) / canvas.width;
 

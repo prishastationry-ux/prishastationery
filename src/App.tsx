@@ -600,13 +600,9 @@ export default function App() {
     setCart([]);
     setIsCartDrawerOpen(false);
 
-    // Open Instant Order Success & Printable Bill Modal on Customer Screen!
+    // Open Instant Order Success & Printable Bill Modal on Screen!
     setActiveInvoiceOrder(newOrder);
     setIsSuccessModal(true);
-    setTimeout(() => {
-      setActiveInvoiceOrder(null);
-      setIsSuccessModal(false);
-    }, 3000);
     showToast(`🎉 ઓર્ડર #${orderId} કન્ફર્મ થઈ ગયો! નીચેથી બિલ પ્રિન્ટ કે સેવ કરો.`);
   };
 
