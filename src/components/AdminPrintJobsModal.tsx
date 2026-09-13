@@ -218,7 +218,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
               <h2 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
                 <span>🖨️ ઓનલાઇન પ્રિન્ટિંગ ઓર્ડર્સ મેનેજર</span>
                 <span className="bg-orange-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full">
-                  {printJobs.length} રિક્વેસ્ટ
+                  {effectiveJobs.length} રિક્વેસ્ટ
                 </span>
               </h2>
               <p className="text-xs text-blue-200 font-medium">
@@ -227,13 +227,29 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 text-neutral-300 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {effectiveJobs.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('શું તમે બધા જ પ્રિન્ટ ઓર્ડર ડિલીટ કરવા માંગો છો?')) {
+                    effectiveJobs.forEach(j => onDeleteJob(j.id));
+                  }
+                }}
+                className="bg-red-600/30 hover:bg-red-600 text-red-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer border border-red-500/40"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>બધા ડીલીટ કરો</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-neutral-300 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* MAIN SPLIT VIEW: JOBS LIST (LEFT) + JOB DETAILS & BILL EDITOR (RIGHT) */}
@@ -388,14 +404,13 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm(`શું તમે જોબ #${activeJob.jobNo} ડિલીટ કરવા માંગો છો?`)) {
-                        onDeleteJob(activeJob.id);
-                      }
+                      onDeleteJob(activeJob.id);
                     }}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-xl border border-red-200 cursor-pointer"
+                    className="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-xl border border-red-200 text-xs font-black flex items-center gap-1.5 cursor-pointer"
                     title="આ જોબ ડિલીટ કરો"
                   >
                     <Trash2 className="w-4 h-4" />
+                    <span>ડિલીટ</span>
                   </button>
                 </div>
               </div>
