@@ -63,7 +63,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   const activeJob = effectiveJobs.find(j => j.id === selectedJobId) || filteredJobs[0] || null;
 
-  // File Download Helper
+  // File Download Helper with robust Blob conversion & New Tab fallback
   const handleDownloadFile = (file: PrintJobFile) => {
     if (!file.fileDataUrl) {
       alert('ફાઇલ ડેટા ઉપલબ્ધ નથી.');
@@ -71,12 +71,32 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     }
 
     try {
-      const link = document.createElement('a');
-      link.href = file.fileDataUrl;
-      link.download = file.fileName || `Print_Doc_${Date.now()}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      if (file.fileDataUrl.startsWith('data:')) {
+        const arr = file.fileDataUrl.split(',');
+        const mimeMatch = arr[0].match(/:(.*?);/);
+        const mime = mimeMatch ? mimeMatch[1] : (file.fileType || 'application/octet-stream');
+        const bstr = atob(arr[1]);
+        let n = bstr.length;
+        const u8arr = new Uint8Array(n);
+        while (n--) {
+          u8arr[n] = bstr.charCodeAt(n);
+        }
+        const blob = new Blob([u8arr], { type: mime });
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // Open directly in new tab (guaranteed to work in all browsers without security blocking)
+        window.open(blobUrl, '_blank');
+
+        // Also trigger download
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = file.fileName || `Print_Doc_${Date.now()}`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } else {
+        window.open(file.fileDataUrl, '_blank');
+      }
     } catch (e) {
       console.error('Download error:', e);
       window.open(file.fileDataUrl, '_blank');
