@@ -1872,6 +1872,50 @@ export default function App() {
             </div>
           </div>
 
+          {/* LIVE STOCK & CATEGORY ANALYTICS BAR */}
+          {(() => {
+            const totalCategories = new Set(posItems.map(p => p.category)).size;
+            const totalItemsCount = posItems.length;
+            const totalStockUnits = posItems.reduce((acc, p) => acc + Number(p.stock || 0), 0);
+            const totalSellingPriceValue = posItems.reduce((acc, p) => acc + (Number(p.stock || 0) * Number(p.price || 0)), 0);
+            return (
+              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-[#0B1E48] text-white p-4 rounded-2xl shadow-md flex flex-wrap items-center justify-between gap-4 border border-blue-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-orange-500 text-black flex items-center justify-center font-black">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-black text-white">
+                      📊 દુકાન લાઈવ સ્ટોક અને કેટેગરી ટ્રેકિંગ (Live Stock Summary)
+                    </h3>
+                    <p className="text-[11px] text-blue-200 font-bold">
+                      દુકાનની તમામ આઇટમ્સ, કેટેગરી અને વેચાણ કિંમતનું રિયલ-ટાઇમ ટ્રેકિંગ
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs w-full sm:w-auto">
+                  <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
+                    <span className="block text-[10px] text-blue-200 font-bold">કુલ કેટેગરી</span>
+                    <span className="text-base font-black text-orange-400">{totalCategories}</span>
+                  </div>
+                  <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
+                    <span className="block text-[10px] text-blue-200 font-bold">કુલ વસ્તુઓ (Items)</span>
+                    <span className="text-base font-black text-white">{totalItemsCount}</span>
+                  </div>
+                  <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
+                    <span className="block text-[10px] text-blue-200 font-bold">હાજર સ્ટોક (નંગ)</span>
+                    <span className="text-base font-black text-emerald-400">{totalStockUnits} નંગ</span>
+                  </div>
+                  <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
+                    <span className="block text-[10px] text-blue-200 font-bold">કુલ વેચાણ મૂલ્ય</span>
+                    <span className="text-base font-black text-amber-300">₹{totalSellingPriceValue.toFixed(2)}</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
                     {/* REAL-TIME ERP DASHBOARD */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div
