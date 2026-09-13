@@ -47,12 +47,40 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
-      // Keep local storage fresh immediately
-      localStorage.setItem(localKey, JSON.stringify(next));
-      // Fire and forget save to Firebase with graceful error handling
-      setDoc(doc(db, "store_data", docName), { data: next }).catch(err => {
-        console.warn("Firebase sync size/network warning (saved locally):", err);
-      });
+      try {
+        localStorage.setItem(localKey, JSON.stringify(next));
+      } catch (err) {
+        console.warn("LocalStorage save warning (size limit reached):", err);
+        try {
+          // If quota exceeded, attempt to save without massive data URLs
+          if (Array.isArray(next)) {
+            const lightNext = next.map((item: any) => ({
+              ...item,
+              files: item.files?.map((f: any) => ({ ...f, fileDataUrl: f.fileDataUrl?.length > 100000 ? f.fileDataUrl.substring(0, 100000) : f.fileDataUrl }))
+            }));
+            localStorage.setItem(localKey, JSON.stringify(lightNext));
+          }
+        } catch (e) {}
+      }
+
+      // Fire and forget save to Firebase with graceful error handling and size limits
+      try {
+        const firestoreData = (docName === 'printJobs' && Array.isArray(next))
+          ? next.map((item: any) => ({
+              ...item,
+              files: item.files?.map((f: any) => ({
+                ...f,
+                fileDataUrl: f.fileDataUrl && f.fileDataUrl.length > 50000 ? f.fileDataUrl.substring(0, 50000) : f.fileDataUrl
+              }))
+            }))
+          : next;
+
+        setDoc(doc(db, "store_data", docName), { data: firestoreData }).catch(err => {
+          console.warn("Firebase sync size/network warning (saved locally):", err);
+        });
+      } catch (err) {
+        console.warn("Firebase sync preparation error:", err);
+      }
       return next;
     });
   };
