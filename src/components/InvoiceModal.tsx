@@ -34,12 +34,112 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       .catch(err => console.error(err));
   }, [order, storeSettings]);
 
-  // 1. Direct PC Print using robust window.print or iframe
+  // 1. Direct PC Print using isolated iframe - Scaled specifically for EXACT 1-PAGE A4 output with logo
   const handleDirectPrint = () => {
-    try {
+    const billElement = billContentRef.current;
+    if (!billElement) {
       window.print();
+      return;
+    }
+
+    try {
+      const existingIframe = document.getElementById('prisha-print-iframe');
+      if (existingIframe) existingIframe.remove();
+
+      const printIframe = document.createElement('iframe');
+      printIframe.id = 'prisha-print-iframe';
+      printIframe.style.position = 'fixed';
+      printIframe.style.right = '0';
+      printIframe.style.bottom = '0';
+      printIframe.style.width = '0px';
+      printIframe.style.height = '0px';
+      printIframe.style.border = 'none';
+      document.body.appendChild(printIframe);
+
+      const iframeDoc = printIframe.contentDocument || printIframe.contentWindow?.document;
+      if (!iframeDoc) {
+        window.print();
+        return;
+      }
+
+      iframeDoc.open();
+      iframeDoc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Invoice_${order.invoiceNo}</title>
+          <style>
+            @page {
+              size: A4 portrait;
+              margin: 8mm;
+            }
+            @media print {
+              html, body {
+                width: 100%;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              .no-print {
+                display: none !important;
+              }
+            }
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans Gujarati", Helvetica, Arial, sans-serif;
+              color: #000000;
+              background: #ffffff;
+              margin: 0;
+              padding: 0;
+              font-size: 11px;
+              line-height: 1.35;
+            }
+            * {
+              box-sizing: border-box;
+            }
+            .bill-wrapper {
+              width: 100%;
+              max-width: 100%;
+              margin: 0 auto;
+              padding: 4px;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 4px 0;
+            }
+            th, td {
+              border: 1px solid #222222;
+              padding: 4px 6px;
+            }
+            th {
+              background-color: #f1f3f5 !important;
+              font-weight: 800;
+            }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .font-bold { font-weight: bold; }
+            .font-black { font-weight: 900; }
+          </style>
+        </head>
+        <body>
+          <div class="bill-wrapper">
+            ${billElement.innerHTML}
+          </div>
+        </body>
+        </html>
+      `);
+      iframeDoc.close();
+
+      setTimeout(() => {
+        printIframe.contentWindow?.focus();
+        printIframe.contentWindow?.print();
+      }, 400);
     } catch (e) {
       console.error('Print error:', e);
+      window.print();
     }
   };
 
