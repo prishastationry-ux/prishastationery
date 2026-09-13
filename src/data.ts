@@ -290,4 +290,38 @@ export const INITIAL_ORDERS: OrderRecord[] = [
   }
 ];
 
-export const INITIAL_PRINT_JOBS = [];
+export const INITIAL_PRINT_JOBS = [
+  {
+    id: 'prn-demo-1',
+    jobNo: 'PRN-8821',
+    customerName: 'દિનેશભાઈ ચૌધરી',
+    mobile: '9876543210',
+    address: 'ગામ: નાગલા, તા. થરાદ',
+    deliveryType: 'pickup' as const,
+    files: [
+      {
+        id: 'file-demo-1',
+        fileName: 'Aadhaar_Card_Update.pdf',
+        fileSize: 1048576,
+        fileType: 'application/pdf',
+        fileDataUrl: 'data:application/pdf;base64,JVBERi0xLjQKJcfsj6IKMSAwIG9iago8PAovVHlwZSAvQ2F0YWxvZwovUGFnZXMgMiAwIFIKPj4KZW5kb2JqCg==',
+        copies: 2,
+        colorMode: 'color' as const,
+        sideOption: 'single_side' as const,
+        paperSize: 'A4' as const,
+        lamination: true,
+        notes: 'ગ્લોસી કાગળ પર પ્રિન્ટ અને લેમિનેશન કરવું',
+        pricePerUnit: 30
+      }
+    ],
+    createdAt: '12/09/2026 11:20 AM',
+    status: 'received' as const,
+    subtotal: 30,
+    extraCharges: 10,
+    extraChargesNote: 'ફાઇલ કવર',
+    discount: 0,
+    totalAmount: 40,
+    paymentStatus: 'Pending' as const,
+    paymentMode: 'UPI' as const
+  }
+];

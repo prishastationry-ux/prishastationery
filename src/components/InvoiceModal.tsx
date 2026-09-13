@@ -77,7 +77,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             @media print {
               html, body {
                 width: 100%;
-                height: 100vh !important;
+                height: 297mm !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
@@ -89,8 +89,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 display: none !important;
               }
               .bill-wrapper {
-                height: 48vh !important;
-                max-height: 48vh !important;
+                height: 135mm !important;
+                max-height: 135mm !important;
                 overflow: hidden !important;
                 page-break-after: always !important;
                 page-break-inside: avoid !important;
@@ -102,8 +102,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               background: #ffffff;
               margin: 0;
               padding: 0;
-              font-size: 11px;
-              line-height: 1.35;
+              font-size: 12px;
+              line-height: 1.4;
             }
             * {
               box-sizing: border-box;
@@ -112,9 +112,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               width: 100%;
               max-width: 800px;
               margin: 0 auto;
-              padding: 6px;
-              height: 48vh;
-              max-height: 48vh;
+              padding: 10px;
+              height: 135mm;
+              max-height: 135mm;
               overflow: hidden;
               page-break-after: always;
             }

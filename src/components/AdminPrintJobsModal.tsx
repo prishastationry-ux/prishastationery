@@ -42,8 +42,9 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   onDeleteJob,
   onConvertToInvoice
 }) => {
+  const effectiveJobs = printJobs && printJobs.length > 0 ? printJobs : INITIAL_PRINT_JOBS;
   const [selectedJobId, setSelectedJobId] = useState<string | null>(
-    printJobs && printJobs.length > 0 ? printJobs[0].id : null
+    effectiveJobs.length > 0 ? effectiveJobs[0].id : null
   );
   const [filterStatus, setFilterStatus] = useState<string>('all');
   
@@ -55,12 +56,12 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   if (!isOpen) return null;
 
-  const filteredJobs = (printJobs || []).filter(j => {
+  const filteredJobs = effectiveJobs.filter(j => {
     if (filterStatus === 'all') return true;
     return j.status === filterStatus;
   });
 
-  const activeJob = (printJobs || []).find(j => j.id === selectedJobId) || filteredJobs[0] || null;
+  const activeJob = effectiveJobs.find(j => j.id === selectedJobId) || filteredJobs[0] || null;
 
   // File Download Helper
   const handleDownloadFile = (file: PrintJobFile) => {
