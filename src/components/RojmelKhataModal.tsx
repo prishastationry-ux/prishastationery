@@ -58,6 +58,7 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
   const [rojmelMode, setRojmelMode] = useState<'Cash' | 'UPI' | 'Bank' | 'બાકી (Credit)'>('Cash');
   const [rojmelPerson, setRojmelPerson] = useState<string>('');
   const [rojmelNotes, setRojmelNotes] = useState<string>('');
+  const [editingRojmelId, setEditingRojmelId] = useState<string | null>(null);
 
   // KHATA FORM STATE
   const [newAccName, setNewAccName] = useState<string>('');
@@ -116,6 +117,11 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
       return;
     }
 
+    if (editingRojmelId) {
+      onDeleteRojmelEntry(editingRojmelId);
+      setEditingRojmelId(null);
+    }
+
     onAddRojmelEntry({
       date: formattedSelectedDate,
       type: rojmelType,
@@ -129,7 +135,25 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
     setRojmelAmount('');
     setRojmelPerson('');
     setRojmelNotes('');
-    showToast(`✅ ${rojmelType === 'aavak' ? 'આવક' : 'જાવક'} રોજમેળમાં નોંધાઈ ગઈ!`);
+    showToast(`✅ ${rojmelType === 'aavak' ? 'આવક' : 'જાવક'} રોજમેળમાં ${editingRojmelId ? 'એડિટ' : 'નોંધાઈ'} ગઈ!`);
+  };
+
+  const handleEditRojmel = (entry: RojmelEntry) => {
+    setRojmelType(entry.type);
+    setRojmelCategory(entry.category);
+    setRojmelAmount(entry.amount.toString());
+    setRojmelMode(entry.paymentMode as any);
+    setRojmelPerson(entry.personName || '');
+    setRojmelNotes(entry.notes || '');
+    setEditingRojmelId(entry.id);
+    
+    // Parse date for input field format YYYY-MM-DD
+    if (entry.date.includes('/')) {
+      const [d, m, y] = entry.date.split('/');
+      setSelectedDate(`${y}-${m}-${d}`);
+    } else {
+      setSelectedDate(entry.date);
+    }
   };
 
   const handleCreateKhataAccount = (type: 'customer' | 'supplier') => {
@@ -330,7 +354,7 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="font-black text-neutral-900 text-xs flex items-center gap-1.5">
                     <Plus className="w-4 h-4 text-orange-600" />
-                    <span>નવી રોજમેળ એન્ટ્રી ઉમેરો ({formattedSelectedDate}):</span>
+                    <span>{editingRojmelId ? 'રોજમેળ એન્ટ્રી એડિટ કરો:' : `નવી રોજમેળ એન્ટ્રી ઉમેરો (${formattedSelectedDate}):`}</span>
                   </h3>
                   <div className="flex items-center gap-1.5">
                     <button
@@ -370,22 +394,28 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                     >
                       {rojmelType === 'aavak' ? (
                         <>
-                          <option value="રોકડ વેચાણ">રોકડ વેચાણ (Counter Sale)</option>
-                          <option value="UPI / QR વેચાણ">UPI / QR ઓનલાઇન વેચાણ</option>
+                          <option value="રોકડ વેચાણ">રોકડ વેચાણ (Cash Sales)</option>
+                          <option value="ઓનલાઇન પેમેન્ટ">ઓનલાઇન પેમેન્ટ (Online Payment)</option>
                           <option value="ગ્રાહક ઉધારી જમા">ગ્રાહક ઉધારી જમા (Khata Recovery)</option>
-                          <option value="ઓનલાઇન સર્વિસ / ફોર્મ">ઓનલાઇન સર્વિસ / ફોર્મ આવક</option>
-                          <option value="અન્ય આવક">અન્ય આવક</option>
+                          <option value="ઉછીના લીધા">ઉછીના લીધા (Borrowing)</option>
+                          <option value="ડિપોઝિટ મળી">ડિપોઝિટ મળી (Deposit Received)</option>
+                          <option value="કંપની પેમેન્ટ મળ્યું">કંપની પેમેન્ટ મળ્યું (Company Payment)</option>
+                          <option value="અન્ય આવક">અન્ય આવક (Other Income)</option>
                         </>
                       ) : (
                         <>
-                          <option value="દુકાન માલ ખરીદી">દુકાન માલ ખરીદી (Stock Purchase)</option>
+                          <option value="ચા-પાણી / નાસ્તો">ચા-પાણી / નાસ્તો (Tea/Snacks)</option>
+                          <option value="ગાડી ખર્ચ / પેટ્રોલ">ગાડી ખર્ચ / પેટ્રોલ (Vehicle Expense)</option>
+                          <option value="ઘર ખર્ચ">ઘર ખર્ચ (Home Expense)</option>
                           <option value="દુકાન ભાડું">દુકાન ભાડું (Shop Rent)</option>
-                          <option value="લાઇટબિલ & ઇન્ટરનેટ">લાઇટબિલ & ઇન્ટરનેટ</option>
-                          <option value="ચા-પાણી નાસ્તો">ચા-પાણી નાસ્તો / સ્ટેશનરી ખર્ચ</option>
+                          <option value="લાઇટ બિલ">લાઇટ બિલ (Light Bill)</option>
+                          <option value="ડિપોઝિટ આપી">ડિપોઝિટ આપી (Deposit Given)</option>
                           <option value="કર્મચારી પગાર">કર્મચારી પગાર (Staff Salary)</option>
-                          <option value="ઝેરોક્ષ શાહી & કાગળ">ઝેરોક્ષ શાહી & કાગળ ખરીદી</option>
-                          <option value="અંગત ઉપાડ / ખર્ચ">અંગત ઉપાડ / ઘર ખર્ચ</option>
-                          <option value="અન્ય જાવક">અન્ય જાવક</option>
+                          <option value="દુકાન માલ ખરીદી">દુકાન માલ ખરીદી (Stock Purchase)</option>
+                          <option value="અંગત ઉપાડ">અંગત ઉપાડ (Personal Withdrawal)</option>
+                          <option value="ઉછીના આપ્યા">ઉછીના આપ્યા (Lent Money)</option>
+                          <option value="કંપની પેમેન્ટ ચૂકવ્યું">કંપની પેમેન્ટ ચૂકવ્યું (Company Payment)</option>
+                          <option value="અન્ય જાવક">અન્ય જાવક (Other Expense)</option>
                         </>
                       )}
                     </select>
@@ -442,8 +472,17 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                       rojmelType === 'aavak' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'
                     }`}
                   >
-                    + એન્ટ્રી સેવ કરો
+                    {editingRojmelId ? 'એડિટ સેવ કરો' : '+ એન્ટ્રી સેવ કરો'}
                   </button>
+                  {editingRojmelId && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingRojmelId(null)}
+                      className="px-4 py-2 bg-neutral-200 text-neutral-800 rounded-xl font-bold text-xs"
+                    >
+                      રદ કરો
+                    </button>
+                  )}
                 </div>
               </form>
 
@@ -505,7 +544,16 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                             <td className="p-2 text-right font-mono font-black text-rose-700">
                               {entry.type === 'javak' ? `₹${entry.amount.toFixed(2)}` : '-'}
                             </td>
-                            <td className="p-2 text-center">
+                            <td className="p-2 text-center flex items-center justify-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleEditRojmel(entry)}
+                                className="text-blue-500 hover:text-blue-700 p-1 cursor-pointer"
+                                title="એન્ટ્રી એડિટ કરો"
+                              >
+                                <Plus className="w-3.5 h-3.5 rotate-45" /> {/* Just a quick edit icon fallback */}
+                                <span className="sr-only">Edit</span>
+                              </button>
                               <button
                                 type="button"
                                 onClick={() => onDeleteRojmelEntry(entry.id)}

@@ -55,9 +55,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   // Form Fields
   const [customerName, setCustomerName] = useState('');
   const [mobile, setMobile] = useState('');
-  const [address, setAddress] = useState('');
+  const [address1, setAddress1] = useState('');
+  const [address2, setAddress2] = useState('');
+  const [address3, setAddress3] = useState('');
+  const [address4, setAddress4] = useState('');
+  const [address5, setAddress5] = useState('');
   const isUpiAllowed = !storeSettings.hideUpiOnBill && storeSettings.billShowUpi !== false;
-  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Cash'>('Cash');
+  const paymentMode = 'UPI'; // Enforce UPI
   const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
   const [upiQrUrl, setUpiQrUrl] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
@@ -122,21 +126,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setFormError('⚠️ કૃપા કરીને માન્ય ૧૦ આંકડાનો મોબાઇલ નંબર દાખલ કરો.');
       return;
     }
-    if (!address.trim()) {
-      setFormError('⚠️ કૃપા કરીને તમારું ગામ અથવા સરનામું દાખલ કરો.');
+    if (!address1.trim() || !address2.trim() || !address3.trim() || !address4.trim() || !address5.trim()) {
+      setFormError('⚠️ કૃપા કરીને સરનામાની તમામ વિગતો (ઘર નંબર, ગામ, તાલુકો, જિલ્લો, પિનકોડ) દાખલ કરો.');
       return;
     }
-    if (paymentMode === 'UPI' && !paymentScreenshot) {
-      setFormError('⚠️ ઓર્ડર કન્ફર્મ કરવા માટે UPI પેમેન્ટનો સ્ક્રીનશોટ અપલોડ કરવો ફરજિયાત છે!');
+    if (!paymentScreenshot) {
+      setFormError('⚠️ ઓર્ડર કન્ફર્મ કરવા માટે ઓનલાઇન પેમેન્ટ (QR સ્કેન) કરી સ્ક્રીનશોટ અપલોડ કરવો ફરજિયાત છે!');
       return;
     }
 
     setFormError('');
+    const fullAddress = `${address1.trim()}, મુ/પો: ${address2.trim()}, તા: ${address3.trim()}, જિ: ${address4.trim()}, પિનકોડ: ${address5.trim()}`;
+    
     onConfirmOrder({
       customerName: customerName.trim(),
       mobile: mobile.trim(),
-      address: address.trim(),
-      paymentMode,
+      address: fullAddress,
+      paymentMode: 'Online',
       paymentScreenshot: paymentScreenshot || undefined
     });
   };
@@ -364,159 +370,171 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="text-[11px] font-bold text-neutral-700 block mb-1">
-                    સરનામું / ગામ (Address / Village) *
-                  </label>
-                  <textarea
-                    rows={2}
-                    placeholder="દા.ત. મુ. વાવ, તા. થરાદ, જિ. બનાસકાંઠા"
-                    value={address}
-                    onChange={e => setAddress(e.target.value)}
-                    className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none resize-none"
-                    required
-                  />
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                      ઘર નંબર / મહોલ્લો / શેરી (House No / Street) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="દા.ત. ૧૦૧, પટેલ વાસ"
+                      value={address1}
+                      onChange={e => setAddress1(e.target.value)}
+                      className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                      ગામ / શહેર (Village / City) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="દા.ત. વાવ"
+                      value={address2}
+                      onChange={e => setAddress2(e.target.value)}
+                      className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-neutral-700 block mb-1">તાલુકો *</label>
+                      <input
+                        type="text"
+                        placeholder="દા.ત. થરાદ"
+                        value={address3}
+                        onChange={e => setAddress3(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-neutral-700 block mb-1">જિલ્લો *</label>
+                      <input
+                        type="text"
+                        placeholder="દા.ત. બનાસકાંઠા"
+                        value={address4}
+                        onChange={e => setAddress4(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                      પિનકોડ (Pincode) *
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="દા.ત. 385565"
+                      value={address5}
+                      maxLength={6}
+                      onChange={e => setAddress5(e.target.value.replace(/\D/g, ''))}
+                      className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Payment Mode Selection */}
+              {/* Mandatory Payment Section */}
               <div className="space-y-2.5 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
                 <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
-                  <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>પેમેન્ટ પદ્ધતિ (Payment Mode)</span>
+                  <QrCode className="w-4 h-4 text-orange-600" />
+                  <span>ફરજિયાત ઓનલાઇન પેમેન્ટ (Online Payment)</span>
                 </h4>
 
-                {isUpiAllowed ? (
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="p-3 bg-red-50 rounded-xl border border-red-200 flex flex-col items-center text-center space-y-2.5">
+                  <p className="text-[11px] font-black text-red-700">
+                    ⚠️ રોકડ (Cash on Delivery) સુવિધા ઉપલબ્ધ નથી. ઓર્ડર માટે ફરજિયાત પેમેન્ટ કરવાનું રહેશે.
+                  </p>
+                  <p className="text-[11px] font-black text-neutral-800">
+                    📱 નીચેનો QR કોડ સ્કેન કરીને <span className="text-orange-600">₹{cartTotal}/-</span> ચૂકવો
+                  </p>
+                  
+                  {upiQrUrl && (
+                    <div className="p-2 bg-white rounded-lg border shadow-xs">
+                      <img src={upiQrUrl} alt="UPI QR" className="w-36 h-36 object-contain" />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-1 text-[11px] font-black bg-neutral-100 px-2.5 py-1 rounded-md border border-neutral-200">
+                    <span>UPI ID: <strong className="text-blue-800 font-mono">{storeSettings.upiId}</strong></span>
                     <button
                       type="button"
-                      onClick={() => setPaymentMode('Cash')}
-                      className={`p-2.5 rounded-xl text-xs font-black border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                        paymentMode === 'Cash'
-                          ? 'bg-[#0B1E48] text-white border-blue-900 shadow-xs'
-                          : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
-                      }`}
+                      onClick={handleCopyUpi}
+                      className="text-neutral-500 hover:text-black p-0.5 ml-1 cursor-pointer"
+                      title="Copy UPI ID"
                     >
-                      <Banknote className="w-4 h-4 text-emerald-400" />
-                      <span>રોકડ (Cash on Counter)</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMode('UPI')}
-                      className={`p-2.5 rounded-xl text-xs font-black border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                        paymentMode === 'UPI'
-                          ? 'bg-[#0B1E48] text-white border-blue-900 shadow-xs'
-                          : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
-                      }`}
-                    >
-                      <QrCode className="w-4 h-4 text-orange-400" />
-                      <span>UPI / QR સ્કેન</span>
+                      {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                     </button>
                   </div>
-                ) : (
-                  <div className="p-3 bg-white rounded-xl border border-emerald-300 flex items-center gap-2.5 text-xs font-bold text-neutral-800">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-black shrink-0">
-                      💵
-                    </div>
-                    <div>
-                      <div className="font-black text-emerald-900">રોકડ / કાઉન્ટર બિલિંગ (Cash on Delivery)</div>
-                      <div className="text-[11px] text-neutral-500 font-medium">માલ મેળવતી વખતે દુકાન પર અથવા ડિલિવરી સમયે રોકડ ચૂકવો.</div>
-                    </div>
-                  </div>
-                )}
 
-                {/* Instant Dynamic QR Box */}
-                {paymentMode === 'UPI' && (
-                  <div className="bg-white p-3 rounded-xl border-2 border-dashed border-blue-300 flex flex-col items-center text-center space-y-2.5">
-                    <p className="text-[11px] font-black text-neutral-800">
-                      📱 નીચેનો QR કોડ સ્કેન કરીને <span className="text-orange-600">₹{cartTotal}/-</span> ચૂકવો
-                    </p>
-                    
-                    {upiQrUrl && (
-                      <div className="p-2 bg-white rounded-lg border shadow-xs">
-                        <img src={upiQrUrl} alt="UPI QR" className="w-36 h-36 object-contain" />
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-1 text-[11px] font-black bg-neutral-100 px-2.5 py-1 rounded-md border border-neutral-200">
-                      <span>UPI ID: <strong className="text-blue-800 font-mono">{storeSettings.upiId}</strong></span>
-                      <button
-                        type="button"
-                        onClick={handleCopyUpi}
-                        className="text-neutral-500 hover:text-black p-0.5 ml-1 cursor-pointer"
-                        title="Copy UPI ID"
-                      >
-                        {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-
-                    {/* MANDATORY SCREENSHOT UPLOAD SECTION */}
-                    <div className="w-full pt-2 border-t border-dashed border-neutral-300 text-left">
-                      <label className="text-[11px] font-black text-neutral-800 flex items-center justify-between mb-1.5">
-                        <span className="flex items-center gap-1 text-red-600">
-                          <Camera className="w-3.5 h-3.5 text-orange-600" />
-                          <span>પેમેન્ટ સ્ક્રીનશોટ (ફરજિયાત *)</span>
+                  {/* MANDATORY SCREENSHOT UPLOAD SECTION */}
+                  <div className="w-full pt-2 border-t border-dashed border-red-300 text-left">
+                    <label className="text-[11px] font-black text-neutral-800 flex items-center justify-between mb-1.5">
+                      <span className="flex items-center gap-1 text-red-600">
+                        <Camera className="w-3.5 h-3.5 text-orange-600" />
+                        <span>પેમેન્ટ સ્ક્રીનશોટ (ફરજિયાત *)</span>
+                      </span>
+                      {paymentScreenshot && (
+                        <span className="text-emerald-700 text-[10px] font-black flex items-center gap-0.5">
+                          <Check className="w-3 h-3" /> અપલોડ થઈ ગયું
                         </span>
-                        {paymentScreenshot && (
-                          <span className="text-emerald-700 text-[10px] font-black flex items-center gap-0.5">
-                            <Check className="w-3 h-3" /> અપલોડ થઈ ગયું
-                          </span>
-                        )}
-                      </label>
-
-                      {paymentScreenshot ? (
-                        <div className="flex items-center gap-3 p-2 bg-emerald-50 rounded-xl border border-emerald-200">
-                          <img
-                            src={paymentScreenshot}
-                            alt="Payment Proof"
-                            className="w-14 h-14 object-cover rounded-lg border border-emerald-300"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[11px] font-black text-emerald-900 truncate">
-                              ✅ સ્ક્રીનશોટ સિલેક્ટ થઈ ગયો
-                            </p>
-                            <label className="text-[10px] font-bold text-blue-700 hover:underline cursor-pointer block mt-0.5">
-                              <span>ફોટો બદલો</span>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleScreenshotUpload}
-                                className="hidden"
-                              />
-                            </label>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setPaymentScreenshot('')}
-                            className="p-1 text-neutral-400 hover:text-red-600"
-                            title="Remove Screenshot"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-orange-400 hover:border-orange-600 rounded-xl bg-orange-50/50 hover:bg-orange-50 transition-colors cursor-pointer text-center">
-                          <Upload className="w-6 h-6 text-orange-600 mb-1" />
-                          <span className="text-xs font-black text-orange-950">
-                            પેમેન્ટ કરેલ સ્ક્રીનશોટ અહીં અપલોડ કરો *
-                          </span>
-                          <span className="text-[10px] text-neutral-500 font-bold mt-0.5">
-                            (Google Pay / PhonePe / Paytm માંથી સ્ક્રીનશોટ સિલેક્ટ કરો)
-                          </span>
-                          <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handleScreenshotUpload}
-                            className="hidden"
-                            required
-                          />
-                        </label>
                       )}
-                    </div>
+                    </label>
 
+                    {paymentScreenshot ? (
+                      <div className="flex items-center gap-3 p-2 bg-emerald-50 rounded-xl border border-emerald-200">
+                        <img
+                          src={paymentScreenshot}
+                          alt="Payment Proof"
+                          className="w-14 h-14 object-cover rounded-lg border border-emerald-300"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] font-black text-emerald-900 truncate">
+                            ✅ સ્ક્રીનશોટ સિલેક્ટ થઈ ગયો
+                          </p>
+                          <label className="text-[10px] font-bold text-blue-700 hover:underline cursor-pointer block mt-0.5">
+                            <span>ફોટો બદલો</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              onChange={handleScreenshotUpload}
+                              className="hidden"
+                            />
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentScreenshot('')}
+                          className="p-1 text-neutral-400 hover:text-red-600"
+                          title="Remove Screenshot"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-orange-400 hover:border-orange-600 rounded-xl bg-orange-50/50 hover:bg-orange-50 transition-colors cursor-pointer text-center">
+                        <Upload className="w-6 h-6 text-orange-600 mb-1" />
+                        <span className="text-xs font-black text-orange-950">
+                          પેમેન્ટ કરેલ સ્ક્રીનશોટ અહીં અપલોડ કરો *
+                        </span>
+                        <span className="text-[10px] text-neutral-500 font-bold mt-0.5">
+                          (Google Pay / PhonePe / Paytm માંથી સ્ક્રીનશોટ સિલેક્ટ કરો)
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleScreenshotUpload}
+                          className="hidden"
+                          required
+                        />
+                      </label>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
 
             </form>

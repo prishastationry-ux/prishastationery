@@ -57,6 +57,32 @@ export interface OrderRecord {
   notes?: string;
 }
 
+export interface StoryWidget {
+  id: string;
+  mediaUrl: string; // Image or video URL
+  type: 'image' | 'video';
+  title?: string;
+  createdAt: number;
+}
+
+export interface StoreStory {
+  id: string;
+  title: string;
+  mediaUrl: string;
+  type: 'image' | 'video';
+  caption?: string;
+  date?: string;
+  active: boolean;
+}
+
+export interface BannerSlide {
+  id: string;
+  imageUrl: string;
+  title: string;
+  subtitle?: string;
+  linkUrl?: string;
+}
+
 export interface StoreSettings {
   storeNameEn: string;
   storeNameGu: string;

@@ -162,33 +162,15 @@ export default function App() {
   }, [orders]);
 
   // Expenses & Purchases
-  const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v4', [
-    { id: 'exp-1', title: 'દુકાન ચા-નાસ્તો', amount: 120, category: 'દૈનિક ખર્ચ', date: '12/09/2026' },
-    { id: 'exp-2', title: 'લાઇટ બિલ / ઇન્ટરનેટ', amount: 450, category: 'યુટિલિટી', date: '11/09/2026' }
-  ]);
-
-  const [purchases, setPurchases] = useFirebaseSync<PurchaseRecord[]>('purchases', 'prisha_purchases_v4', [
-    { id: 'pur-1', supplierName: 'અમદાવાદ સ્ટેશનરી માર્ટ', billNo: 'ASM-8821', date: '10/09/2026', totalAmount: 7750, itemsCount: 45, paymentStatus: 'Paid' }
-  ]);
+  const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v5', []);
+  const [purchases, setPurchases] = useFirebaseSync<PurchaseRecord[]>('purchases', 'prisha_purchases_v5', []);
 
   // Rojmel (Daily Income/Expense) & Khata (Customer & Supplier Ledger) ERP States
   const [showRojmelModal, setShowRojmelModal] = useState<boolean>(false);
   const [showStoreSettingsModal, setShowStoreSettingsModal] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
   const [rojmelEntries, setRojmelEntries] = useFirebaseSync<RojmelEntry[]>('rojmel', 'prisha_rojmel_v1', []);
-  const [khataAccounts, setKhataAccounts] = useFirebaseSync<KhataAccount[]>('khata_accounts', 'prisha_khata_accounts_v1', [
-    {
-      id: 'khata-demo-1',
-      type: 'customer',
-      name: 'રમેશભાઈ પટેલ',
-      phone: '9876543210',
-      balance: 450,
-      totalGiven: 1200,
-      totalReceived: 750,
-      lastTransactionDate: '12/09/2026',
-      notes: 'નિયમિત ગ્રાહક'
-    }
-  ]);
+  const [khataAccounts, setKhataAccounts] = useFirebaseSync<KhataAccount[]>('khata_accounts', 'prisha_khata_accounts_v2', []);
   const [khataTransactions, setKhataTransactions] = useFirebaseSync<KhataTransaction[]>('khata_tx', 'prisha_khata_tx_v1', []);
 
   // Search & Filter Category
@@ -1685,15 +1667,21 @@ export default function App() {
           {/* ========================================================================= */}
           {/* 4. AMAZON / FLIPKART STYLE PRODUCT GRID (Large High-Res Photos) */}
           {/* ========================================================================= */}
-          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4.5">
+          <div className={
+            storeSettings.productLayoutMode === 'list' 
+            ? "flex flex-col gap-3" 
+            : "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4.5"
+          }>
             {filteredItems.map(item => {
               const inCart = cart.find(c => c.product.id === item.id);
               const isOutOfStock = typeof item.stock === 'number' && item.stock <= 0;
+              const isListView = storeSettings.productLayoutMode === 'list';
 
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-2xl border border-neutral-300 hover:border-orange-500 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group relative"
+                  className={`bg-white rounded-2xl border border-neutral-300 hover:border-orange-500 shadow-2xs hover:shadow-md transition-all flex justify-between overflow-hidden group relative ${isListView ? 'flex-row items-center p-2 gap-3' : 'flex-col'}`}
+                  onClick={() => setSelectedProductForModal(item)}
                 >
                   {/* Top Badge */}
                   {item.badge && (
@@ -1724,8 +1712,8 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Product Image / Icon Area - Large Edge-to-Edge Above Line */}
-                  <div className="h-44 sm:h-52 w-full bg-slate-100 flex items-center justify-center border-b border-neutral-200 overflow-hidden relative group/img">
+                  {/* Product Image / Icon Area */}
+                  <div className={`${isListView ? 'w-24 h-24 sm:w-32 sm:h-32 rounded-xl shrink-0' : 'h-44 sm:h-52 w-full border-b border-neutral-200'} bg-slate-100 flex items-center justify-center overflow-hidden relative group/img`}>
                     {item.imageUrl ? (
                       <img
                         src={item.imageUrl}
@@ -1779,9 +1767,9 @@ export default function App() {
                   </div>
 
                   {/* Product Info */}
-                  <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
-                    <div>
-                      <h3 className="text-xs sm:text-sm font-black text-neutral-900 leading-snug line-clamp-2">
+                  <div className={`flex-1 flex flex-col justify-between space-y-2 ${isListView ? 'py-1' : 'p-3'}`}>
+                    <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectedProductForModal(item); }}>
+                      <h3 className={`${storeSettings.productCardSize === 'small' ? 'text-xs' : storeSettings.productCardSize === 'large' ? 'text-base sm:text-lg' : 'text-xs sm:text-sm'} font-black text-neutral-900 leading-snug line-clamp-2`}>
                         {item.nameGu}
                       </h3>
                       <p className="text-[10px] text-neutral-500 font-bold truncate mt-0.5">
@@ -1797,8 +1785,8 @@ export default function App() {
                     </div>
 
                     {/* Price and Cart Control */}
-                    <div className="pt-2 border-t border-neutral-100 flex items-center justify-between gap-1">
-                      <div>
+                    <div className={`pt-2 border-t border-neutral-100 flex items-center justify-between gap-1 ${isListView ? 'border-t border-neutral-200 mt-2' : ''}`}>
+                      <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectedProductForModal(item); }}>
                         {/* Show MRP if exists and greater than price */}
                         {storeSettings.showMrpOnStore !== false && item.mrp && item.mrp > item.price && (
                           <div className="text-[10px] sm:text-[11px] text-neutral-400 font-bold line-through">
@@ -1820,7 +1808,7 @@ export default function App() {
 
                       {inCart ? (
                         /* In Cart Stepper */
-                        <div className="flex items-center gap-1 bg-neutral-100 rounded-lg p-0.5 border border-neutral-300">
+                        <div className="flex items-center gap-1 bg-neutral-100 rounded-lg p-0.5 border border-neutral-300" onClick={(e) => e.stopPropagation()}>
                           <button
                             onClick={() => updateCartQty(item.id, -1)}
                             className="w-5 h-5 bg-white text-black font-black rounded flex items-center justify-center hover:bg-neutral-200 text-xs shadow-2xs"
@@ -1831,7 +1819,7 @@ export default function App() {
                             {inCart.quantity}
                           </span>
                           <button
-                            onClick={() => updateCartQty(item.id, 1)}
+                            onClick={(e) => { e.stopPropagation(); updateCartQty(item.id, 1); }}
                             className="w-5 h-5 bg-orange-500 text-black font-black rounded flex items-center justify-center hover:bg-orange-600 text-xs shadow-2xs"
                           >
                             <Plus className="w-3 h-3" />
@@ -1840,7 +1828,7 @@ export default function App() {
                       ) : (
                         /* Add Button */
                         <button
-                          onClick={() => addToCart(item)}
+                          onClick={(e) => { e.stopPropagation(); addToCart(item); }}
                           disabled={isOutOfStock}
                           className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 shadow-2xs transition-transform active:scale-95 cursor-pointer ${
                             isOutOfStock
@@ -1978,10 +1966,20 @@ export default function App() {
                 type="button"
                 onClick={() => setShowBillSettingsModal(true)}
                 className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                title="દુકાન નામ, પાસપોર્ટ લોગો, QR કોડ, અધિકૃત સહી અને બિલ કસ્ટમાઇઝેશન"
+                title="પાસપોર્ટ લોગો, QR કોડ, અધિકૃત સહી અને બિલ કસ્ટમાઇઝેશન"
               >
-                <Settings className="w-4 h-4 text-orange-400" />
-                <span>દુકાન & બિલ સેટિંગ્સ</span>
+                <FileText className="w-4 h-4 text-orange-400" />
+                <span>બિલ / ઇન્વોઇસ સેટિંગ્સ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowStoreSettingsModal(true)}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="બેનર, સ્ટોરી, કલર, ફોન્ટ અને લેઆઉટ કસ્ટમાઇઝેશન"
+              >
+                <Settings className="w-4 h-4 text-emerald-200" />
+                <span>વેબસાઇટ / દુકાન સેટિંગ્સ</span>
               </button>
             </div>
           </div>
@@ -2875,7 +2873,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="font-bold block mb-1">પ્રોડક્ટ ફોટો (ક્રોપ & ઝૂમ સપોર્ટ):</label>
+                <label className="font-bold block mb-1">મુખ્ય ફોટો (Main Photo):</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="file"
@@ -3040,7 +3038,7 @@ export default function App() {
               </div>
 
               <div>
-                <label className="font-bold block mb-1">પ્રોડક્ટ ફોટો (ક્રોપ & ઝૂમ સપોર્ટ):</label>
+                <label className="font-bold block mb-1">મુખ્ય ફોટો (Main Photo):</label>
                 <div className="flex items-center gap-2">
                   <input
                     type="file"
@@ -3069,6 +3067,54 @@ export default function App() {
                 {editingItem.imageUrl && (
                   <div className="mt-2 w-16 h-16 rounded-lg border border-neutral-300 overflow-hidden bg-slate-100">
                     <img src={editingItem.imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1 text-neutral-600">વધારાના ફોટા (Product Gallery):</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={async (e) => {
+                    const files = e.target.files;
+                    if (!files || files.length === 0) return;
+                    const urls: string[] = [];
+                    for (let i = 0; i < files.length; i++) {
+                      try {
+                        const reader = new FileReader();
+                        const base64 = await new Promise<string>((resolve) => {
+                          reader.onload = (ev) => resolve(ev.target?.result as string);
+                          reader.readAsDataURL(files[i]);
+                        });
+                        urls.push(base64);
+                      } catch (err) { }
+                    }
+                    setEditingItem({
+                      ...editingItem,
+                      galleryImages: [...(editingItem.galleryImages || []), ...urls]
+                    });
+                  }}
+                  className="w-full font-bold p-1 border border-neutral-300 rounded-lg text-xs"
+                />
+                {(editingItem.galleryImages && editingItem.galleryImages.length > 0) && (
+                  <div className="mt-2 flex gap-2 overflow-x-auto no-scrollbar">
+                    {editingItem.galleryImages.map((img, idx) => (
+                      <div key={idx} className="relative w-12 h-12 rounded-lg border overflow-hidden shrink-0 group">
+                        <img src={img} alt={`Gallery ${idx}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({
+                            ...editingItem,
+                            galleryImages: editingItem.galleryImages?.filter((_, i) => i !== idx)
+                          })}
+                          className="absolute inset-0 bg-black/50 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-all"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>

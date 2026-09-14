@@ -1,9 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { saveFileToStorage, saveFileToCloudStorage } from '../lib/fileStorage';
 
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
+  const initialDataRef = useRef(initialData);
+  initialDataRef.current = initialData;
+
   // Helper to filter out any legacy sample / starter mock printing requests or test invoices
   const filterMockData = (val: any): any => {
     if (!Array.isArray(val)) return val;
@@ -56,70 +59,73 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     
     // Migration check: If Firebase is empty, upload what we have in localStorage
     getDoc(docRef).then(snapshot => {
-        if (!snapshot.exists()) {
-            const saved = localStorage.getItem(localKey);
-            // ONLY write to Firebase if this device actually has some saved data.
-            if (saved) {
-                try {
-                    const parsed = JSON.parse(saved);
-                    const cleaned = filterMockData(parsed);
-                    setDoc(docRef, { data: cleaned });
-                } catch(e) {}
-            }
+      if (!snapshot.exists()) {
+        const saved = localStorage.getItem(localKey);
+        // ONLY write to Firebase if this device actually has some saved data.
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            const cleaned = filterMockData(parsed);
+            setDoc(docRef, { data: cleaned }).catch(() => {});
+          } catch(e) {}
         }
-    });
+      }
+    }).catch(() => {});
 
     // Listen for real-time updates from Firebase
-    const unsubscribe = onSnapshot(docRef, (snapshot) => {
-      if (snapshot.exists()) {
-        const rawData = snapshot.data().data;
-        if (rawData === undefined || rawData === null) return;
-        const rawCleaned = filterMockData(rawData);
-        if (rawCleaned === undefined || rawCleaned === null) return;
+    const unsubscribe = onSnapshot(docRef, {
+      next: (snapshot) => {
+        if (snapshot.exists()) {
+          const rawData = snapshot.data().data;
+          if (rawData === undefined || rawData === null) return;
+          const rawCleaned = filterMockData(rawData);
+          if (rawCleaned === undefined || rawCleaned === null) return;
 
-        const cleaned = (typeof initialData === 'object' && initialData !== null && !Array.isArray(initialData))
-          ? { ...initialData, ...rawCleaned }
-          : rawCleaned;
+          const currentInit = initialDataRef.current;
+          const cleaned = (typeof currentInit === 'object' && currentInit !== null && !Array.isArray(currentInit))
+            ? { ...currentInit, ...rawCleaned }
+            : rawCleaned;
 
-        if (Array.isArray(rawData) && cleaned.length !== rawData.length) {
-          setDoc(docRef, { data: cleaned }).catch(() => {});
-        }
+          setData((prevData) => {
+            // If this is printJobs, preserve existing local full fileDataUrls so cloud updates never wipe them
+            if (docName === 'printJobs' && Array.isArray(cleaned) && Array.isArray(prevData)) {
+              const merged = cleaned.map((newJob: any) => {
+                const existingJob = (prevData as any[]).find(j => j.id === newJob.id);
+                if (existingJob && Array.isArray(existingJob.files)) {
+                  return {
+                    ...newJob,
+                    files: newJob.files?.map((nf: any) => {
+                      const ef = existingJob.files.find((f: any) => f.id === nf.id);
+                      if (ef && ef.fileDataUrl && !ef.fileDataUrl.startsWith('blob:') && !nf.fileDataUrl) {
+                        return { ...nf, fileDataUrl: ef.fileDataUrl };
+                      }
+                      return nf;
+                    })
+                  };
+                }
+                return newJob;
+              });
+              try {
+                localStorage.setItem(localKey, JSON.stringify(merged));
+              } catch (e) {}
+              return merged as unknown as T;
+            }
 
-        setData((prevData) => {
-          // If this is printJobs, preserve existing local full fileDataUrls so cloud updates never wipe them
-          if (docName === 'printJobs' && Array.isArray(cleaned) && Array.isArray(prevData)) {
-            const merged = cleaned.map((newJob: any) => {
-              const existingJob = (prevData as any[]).find(j => j.id === newJob.id);
-              if (existingJob && Array.isArray(existingJob.files)) {
-                return {
-                  ...newJob,
-                  files: newJob.files?.map((nf: any) => {
-                    const ef = existingJob.files.find((f: any) => f.id === nf.id);
-                    if (ef && ef.fileDataUrl && !ef.fileDataUrl.startsWith('blob:') && !nf.fileDataUrl) {
-                      return { ...nf, fileDataUrl: ef.fileDataUrl };
-                    }
-                    return nf;
-                  })
-                };
-              }
-              return newJob;
-            });
             try {
-              localStorage.setItem(localKey, JSON.stringify(merged));
+              localStorage.setItem(localKey, JSON.stringify(cleaned));
             } catch (e) {}
-            return merged as unknown as T;
-          }
-
-          try {
-            localStorage.setItem(localKey, JSON.stringify(cleaned));
-          } catch (e) {}
-          return cleaned as T;
-        });
+            return cleaned as T;
+          });
+        }
+      },
+      error: (err) => {
+        // Handle Firestore quota / network issues gracefully without breaking UI
+        console.warn(`Firestore sync note for ${docName} (using local persistence):`, err.message || err);
       }
     });
     
     return () => unsubscribe();
-  }, [docName, localKey, initialData]);
+  }, [docName, localKey]);
 
   // Provide a wrapped setter that also saves to Firebase immediately
   const setSyncData = (value: T | ((val: T) => T)) => {

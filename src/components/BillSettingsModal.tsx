@@ -931,7 +931,7 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
               <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-neutral-700">
                 <input
                   type="checkbox"
-                  checked={formData.billShowLogos}
+                  checked={formData.billShowLogos !== false}
                   onChange={e => setFormData({ ...formData, billShowLogos: e.target.checked })}
                   className="rounded accent-blue-600"
                 />
@@ -1052,7 +1052,7 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
               <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-emerald-800">
                 <input
                   type="checkbox"
-                  checked={formData.billShowQr}
+                  checked={formData.billShowQr !== false}
                   onChange={e => setFormData({ ...formData, billShowQr: e.target.checked })}
                   className="rounded accent-emerald-600"
                 />
@@ -1167,7 +1167,7 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
               <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-blue-900">
                 <input
                   type="checkbox"
-                  checked={formData.billShowSignature}
+                  checked={formData.billShowSignature !== false}
                   onChange={e => setFormData({ ...formData, billShowSignature: e.target.checked })}
                   className="rounded accent-blue-600"
                 />
