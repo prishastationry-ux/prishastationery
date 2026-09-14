@@ -21,11 +21,14 @@ import {
   DollarSign,
   Eye,
   Loader2,
-  Zap
+  Zap,
+  UploadCloud
 } from 'lucide-react';
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
 import {
   getFileFromCloudStorage,
+  uploadFileObjectInChunks,
+  isForeignBlobUrl,
   createBlobUrl,
   createBlobUrlAsync,
   downloadFileSafely,
@@ -101,8 +104,8 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'શરૂ થઈ રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      // If fileUrl is missing, or is a dead blob URL from another device, fetch fresh from cloud
-      if (!fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:')) {
+      // If fileUrl is missing, or is a dead blob URL from another device/session, fetch fresh from cloud
+      if (!fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl) || fileUrl.startsWith('blob:')) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
             fileId: file.id,
@@ -115,14 +118,20 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       }
 
       if (!fileUrl) {
-        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા મળ્યો નથી.\nકૃપા કરીને ગ્રાહકને નીચે આપેલા 'WhatsApp' બટન દ્વારા ફાઇલ મોકલવા કહો.`);
+        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ક્લાઉડ સ્ટોરેજમાં મળ્યો નથી.\n\nગ્રાહકે જૂના સત્રમાંથી મોકલેલ હોવાથી નીચે આપેલા 'WhatsApp રિક્વેસ્ટ' બટનથી ગ્રાહક પાસેથી ફાઇલ મંગાવો અથવા 'ફાઇલ જોડો' બટન દ્વારા અહીં PC માંથી અપલોડ કરી દો.`);
         return;
       }
 
       setDownloadProgress({ fileId: file.id, percent: 100, speed: 'સાચવી રહ્યા છીએ...' });
       const success = await downloadFileSafely(fileUrl, file.fileName || `Print_Document_${Date.now()}`);
       if (!success) {
-        alert('ફાઇલ ડાઉનલોડ કરવામાં અસમર્થ: ફાઇલ કરપ્ટ અથવા ખાલી છે.');
+        // Retry fetching fresh from cloud chunks if direct URL failed
+        const freshUrl = await getFileFromCloudStorage(file.id);
+        if (freshUrl) {
+          await downloadFileSafely(freshUrl, file.fileName || `Print_Document_${Date.now()}`);
+        } else {
+          alert('ફાઇલ ડાઉનલોડ કરવામાં અસમર્થ: ફાઇલ કરપ્ટ અથવા ખાલી છે.');
+        }
       }
     } catch (e) {
       console.error('Download error:', e);
@@ -139,7 +148,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'લોડ થઈ રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      if (!fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:')) {
+      if (!fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl) || fileUrl.startsWith('blob:')) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
             fileId: file.id,
@@ -152,7 +161,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       }
 
       if (!fileUrl) {
-        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ઉપલબ્ધ નથી.\nકૃપા કરીને ગ્રાહકને WhatsApp પર મોકલવા કહો.`);
+        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ઉપલબ્ધ નથી.\nકૃપા કરીને 'WhatsApp રિક્વેસ્ટ' દ્વારા ગ્રાહક પાસેથી ફાઇલ મંગાવી લો અથવા 'ફાઇલ જોડો' થી અપલોડ કરો.`);
         return;
       }
 
@@ -167,6 +176,62 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     } finally {
       setLoadingFileId(null);
       setDownloadProgress(null);
+    }
+  };
+
+  // Admin attach or replace file directly from PC (e.g. file received on WhatsApp Web)
+  const handleAttachFileToJob = async (jobId: string, fileId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (!selected) return;
+
+    setLoadingFileId(fileId);
+    setDownloadProgress({ fileId, percent: 0, speed: 'અપલોડ શરૂ...' });
+
+    try {
+      const success = await uploadFileObjectInChunks(
+        selected,
+        fileId,
+        selected.name,
+        selected.type || 'application/octet-stream',
+        (prog) => {
+          setDownloadProgress({
+            fileId,
+            percent: prog.percent,
+            speed: prog.speed,
+            loadedBytes: prog.loadedBytes,
+            totalBytes: prog.totalBytes
+          });
+        }
+      );
+
+      if (success) {
+        const job = effectiveJobs.find(j => j.id === jobId);
+        if (job) {
+          const updatedFiles = job.files.map(f =>
+            f.id === fileId
+              ? {
+                  ...f,
+                  fileName: selected.name,
+                  fileSize: selected.size,
+                  fileType: selected.type || 'application/octet-stream',
+                  uploadedToCloud: true,
+                  fileDataUrl: ''
+                }
+              : f
+          );
+          onUpdateJob(jobId, { files: updatedFiles });
+        }
+        alert(`✅ ફાઇલ "${selected.name}" સફળતાપૂર્વક ક્લાઉડમાં સેવ થઈ ગઈ! હવે તમે તેને ડાઉનલોડ કે જોઈ શકો છો.`);
+      } else {
+        alert('ફાઇલ અપલોડ કરવામાં નિષ્ફળતા મળી.');
+      }
+    } catch (err) {
+      console.error('Attach file error:', err);
+      alert('ફાઇલ અપલોડ કરવામાં ભૂલ આવી.');
+    } finally {
+      setLoadingFileId(null);
+      setDownloadProgress(null);
+      e.target.value = '';
     }
   };
 
@@ -598,6 +663,34 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                             >
                               <FileDown className="w-3.5 h-3.5" />
                               <span>ડાઉનલોડ</span>
+                            </button>
+
+                            {/* Attach or replace file directly from PC */}
+                            <label
+                              className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer shadow-2xs transition"
+                              title="આ ફાઇલ PC માંથી અપલોડ / રિપ્લેસ કરો"
+                            >
+                              <UploadCloud className="w-3.5 h-3.5" />
+                              <span>ફાઇલ જોડો</span>
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={(e) => handleAttachFileToJob(activeJob.id, file.id, e)}
+                              />
+                            </label>
+
+                            {/* Quick WhatsApp request for this file */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const msg = `નમસ્તે ${activeJob.customerName}જી, પ્રીશા સ્ટેશનરીમાંથી.\nતમારા ઓર્ડર #${activeJob.jobNo} માટેની પ્રિન્ટ ફાઇલ (${file.fileName}) અહીં WhatsApp પર Document તરીકે મોકલી આપવા વિનંતી.`;
+                                window.open(`https://wa.me/91${activeJob.mobile}?text=${encodeURIComponent(msg)}`, '_blank');
+                              }}
+                              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 cursor-pointer transition"
+                              title="ગ્રાહક પાસેથી WhatsApp પર આ ફાઇલ મંગાવો"
+                            >
+                              <Share2 className="w-3.5 h-3.5" />
+                              <span>WhatsApp</span>
                             </button>
 
                             {/* Price field */}

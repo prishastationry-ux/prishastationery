@@ -53,18 +53,18 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Stream-upload files up to 1 GB directly in chunks with real-time speed & progress
+  // Stream-upload files up to 5 GB directly in chunks with real-time speed & progress
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
     if (!selectedFiles || selectedFiles.length === 0) return;
 
     const filesArray: File[] = Array.from(selectedFiles);
 
-    // Validate 1 GB size limit
+    // Validate 5 GB size limit
     for (const file of filesArray) {
       if (file.size > MAX_FILE_SIZE) {
         alert(
-          `⚠️ ફાઇલ "${file.name}" 1 GB કરતાં મોટી છે (${formatFileSize(file.size)}).\nમહત્તમ 1 GB સુધીની ફાઇલ અપલોડ કરી શકાય છે.`
+          `⚠️ ફાઇલ "${file.name}" 5 GB કરતાં મોટી છે (${formatFileSize(file.size)}).\nમહત્તમ 5 GB સુધીની 4K પ્રિન્ટ ફાઇલો અને PDF અપલોડ કરી શકાય છે.`
         );
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
@@ -118,6 +118,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
             item.id === fileId
               ? {
                   ...item,
+                  uploadedToCloud: success,
                   uploadStatus: success ? 'completed' : 'error',
                   uploadProgress: success ? 100 : item.uploadProgress,
                   uploadSpeed: success ? 'પૂર્ણ' : 'ભૂલ'
@@ -265,7 +266,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-blue-200">
-                ઘેરબેઠાં PDF કે ફોટો અપલોડ કરો (1 GB સુધી) • અમે તાત્કાલિક પ્રિન્ટ કરી આપીશું
+                ઘેરબેઠાં PDF કે 4K ફોટો અપલોડ કરો (5 GB સુધી) • અમે તાત્કાલિક પ્રિન્ટ કરી આપીશું
               </p>
             </div>
           </div>
@@ -361,7 +362,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                   </p>
                   <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
                     <span className="text-xs text-orange-800 font-black bg-orange-100/80 px-2 py-0.5 rounded-full">
-                      🚀 ૧ GB સુધીની ફાઇલ સપોર્ટેડ છે (PDF & Image Limit 1 GB)
+                      🚀 ૫ GB (5 GB) સુધીની 4K પ્રિન્ટ ફાઇલ સપોર્ટેડ છે (Zero Quality Loss)
                     </span>
                     <span className="text-xs text-neutral-500 font-medium">
                       PDF, JPG/PNG ફોટો, Word, Excel વગેરે

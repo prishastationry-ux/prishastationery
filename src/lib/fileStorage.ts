@@ -1,16 +1,31 @@
 // Utility to store and retrieve large files (PDFs, images, docs) using IndexedDB & Chunked Firestore
-// Supports files up to 1 GB with chunk streaming, zero-byte prevention, real-time speed & progress tracking.
+// Supports files up to 1 GB with native Firestore Bytes, zero bit-loss, real-time speed & progress tracking.
 
-import { doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, Bytes } from 'firebase/firestore';
 import { db } from './firebase';
 
 const DB_NAME = 'PrishaStationeryFilesDB';
 const STORE_NAME = 'uploaded_files';
 const DB_VERSION = 1;
 
-// 500 KB per chunk (binary) => Base64 size ~667 KB, well below Firestore 1 MB document limit
-export const BINARY_CHUNK_SIZE = 500 * 1024;
-export const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1 GB maximum limit
+// 450 KB per chunk (binary) => Native Firestore Bytes without Base64 overhead
+export const BINARY_CHUNK_SIZE = 450 * 1024;
+export const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5 GB maximum limit for high-res 4K & large files
+
+// In-memory registry of live Blob URLs created within the current active browser session
+const activeLocalBlobUrls = new Set<string>();
+
+export function registerLocalBlobUrl(url: string): string {
+  if (url && url.startsWith('blob:')) {
+    activeLocalBlobUrls.add(url);
+  }
+  return url;
+}
+
+export function isLocalBlobValid(url?: string): boolean {
+  if (!url || !url.startsWith('blob:')) return false;
+  return activeLocalBlobUrls.has(url);
+}
 
 export interface StorageProgress {
   percent: number;
@@ -54,6 +69,14 @@ function openDB(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+}
+
+// Check if a string is a dead foreign blob URL (e.g. from mobile or another session)
+export function isForeignBlobUrl(url?: string): boolean {
+  if (!url || typeof url !== 'string') return false;
+  if (!url.startsWith('blob:')) return false;
+  // If it was not created in this current runtime session, it is a dead/foreign blob URL
+  return !activeLocalBlobUrls.has(url);
 }
 
 // 1. Save dataUrl to local browser IndexedDB
@@ -146,6 +169,7 @@ export async function getFileFromStorage(fileId: string): Promise<string | null>
 }
 
 // 4. Stream upload File/Blob in chunks with real-time speed and progress (Supports up to 1 GB!)
+// Uses native Firestore Bytes to prevent bit corruption and minimize bandwidth.
 export async function uploadFileObjectInChunks(
   file: File | Blob,
   fileId: string,
@@ -163,46 +187,52 @@ export async function uploadFileObjectInChunks(
 
   const totalChunks = Math.ceil(totalBytes / BINARY_CHUNK_SIZE);
   const startTime = Date.now();
+  let uploadedBytes = 0;
 
   try {
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * BINARY_CHUNK_SIZE;
-      const end = Math.min(start + BINARY_CHUNK_SIZE, totalBytes);
-      const slice = file.slice(start, end);
+    // Process in batches of 2 for fast, non-blocking upload
+    const BATCH_SIZE = 2;
+    for (let i = 0; i < totalChunks; i += BATCH_SIZE) {
+      const batchPromises = [];
+      for (let j = i; j < Math.min(i + BATCH_SIZE, totalChunks); j++) {
+        const start = j * BINARY_CHUNK_SIZE;
+        const end = Math.min(start + BINARY_CHUNK_SIZE, totalBytes);
+        const slice = file.slice(start, end);
 
-      const sliceBase64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          const res = reader.result as string;
-          const commaIdx = res.indexOf(',');
-          resolve(commaIdx !== -1 ? res.substring(commaIdx + 1) : res);
-        };
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(slice);
-      });
+        const task = (async (chunkIdx: number, sliceBlob: Blob, sliceSize: number) => {
+          const arrayBuffer = await sliceBlob.arrayBuffer();
+          const uint8 = new Uint8Array(arrayBuffer);
+          const chunkBytes = Bytes.fromUint8Array(uint8);
 
-      await setDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${i}`), {
-        fileId,
-        chunkIndex: i,
-        totalChunks,
-        chunkData: sliceBase64,
-        createdAt: Date.now()
-      });
+          await setDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${chunkIdx}`), {
+            fileId,
+            chunkIndex: chunkIdx,
+            totalChunks,
+            chunkBytes,
+            chunkSize: sliceSize,
+            createdAt: Date.now()
+          });
 
-      const elapsedSec = (Date.now() - startTime) / 1000;
-      const loadedBytes = end;
-      const bytesPerSec = elapsedSec > 0 ? (loadedBytes / elapsedSec) : 0;
-      const percent = Math.min(99, Math.round((loadedBytes / totalBytes) * 100));
+          uploadedBytes += sliceSize;
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          const bytesPerSec = elapsedSec > 0 ? (uploadedBytes / elapsedSec) : 0;
+          const percent = Math.min(99, Math.round((uploadedBytes / totalBytes) * 100));
 
-      if (onProgress) {
-        onProgress({
-          percent,
-          loadedBytes,
-          totalBytes,
-          speed: formatSpeed(bytesPerSec),
-          bytesPerSec
-        });
+          if (onProgress) {
+            onProgress({
+              percent,
+              loadedBytes: uploadedBytes,
+              totalBytes,
+              speed: formatSpeed(bytesPerSec),
+              bytesPerSec
+            });
+          }
+        })(j, slice, end - start);
+
+        batchPromises.push(task);
       }
+
+      await Promise.all(batchPromises);
     }
 
     // Save final metadata document
@@ -256,50 +286,11 @@ export async function saveFileToCloudStorage(
   await saveFileToStorage(fileId, dataUrl, fileName, fileType);
 
   try {
-    const CHUNK_CHAR_SIZE = 650000;
-    if (dataUrl.length <= CHUNK_CHAR_SIZE) {
-      await setDoc(doc(db, 'print_files', fileId), {
-        id: fileId,
-        fileName,
-        fileType,
-        fileSize: fileSize || dataUrl.length,
-        isChunked: false,
-        totalChunks: 1,
-        fileDataUrl: dataUrl,
-        createdAt: Date.now()
-      });
-      return true;
+    const blob = dataUrlToBlob(dataUrl);
+    if (blob) {
+      return await uploadFileObjectInChunks(blob, fileId, fileName, fileType);
     }
-
-    const totalChunks = Math.ceil(dataUrl.length / CHUNK_CHAR_SIZE);
-    for (let i = 0; i < totalChunks; i += 3) {
-      const batch = [];
-      for (let j = i; j < Math.min(i + 3, totalChunks); j++) {
-        const chunkData = dataUrl.substring(j * CHUNK_CHAR_SIZE, (j + 1) * CHUNK_CHAR_SIZE);
-        batch.push(
-          setDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${j}`), {
-            fileId,
-            chunkIndex: j,
-            totalChunks,
-            chunkData,
-            createdAt: Date.now()
-          })
-        );
-      }
-      await Promise.all(batch);
-    }
-
-    await setDoc(doc(db, 'print_files', fileId), {
-      id: fileId,
-      fileName,
-      fileType,
-      fileSize: fileSize || dataUrl.length,
-      isChunked: true,
-      totalChunks,
-      createdAt: Date.now()
-    });
-
-    return true;
+    return false;
   } catch (err) {
     console.error('saveFileToCloudStorage error:', err);
     return false;
@@ -335,19 +326,13 @@ export async function getFileFromCloudStorage(
 
     const data = metaSnap.data();
 
-    // Check for dead blob URL
+    // Check for legacy inline dataUrl
     const inlineData = data.fileDataUrl || data.dataUrl;
-    if (inlineData && typeof inlineData === 'string') {
-      if (inlineData.startsWith('blob:')) {
-        console.warn(`File ${fileId} in Firestore contains dead blob URL from previous upload.`);
-        return null;
+    if (inlineData && typeof inlineData === 'string' && !inlineData.startsWith('blob:')) {
+      if (onProgress) {
+        onProgress({ percent: 100, loadedBytes: data.fileSize || inlineData.length, totalBytes: data.fileSize || inlineData.length, speed: 'Done', bytesPerSec: 0 });
       }
-      if (!data.isChunked && inlineData.length > 50) {
-        if (onProgress) {
-          onProgress({ percent: 100, loadedBytes: data.fileSize || inlineData.length, totalBytes: data.fileSize || inlineData.length, speed: 'Done', bytesPerSec: 0 });
-        }
-        return inlineData;
-      }
+      return inlineData;
     }
 
     // Chunked file: download chunks with real-time speed & progress
@@ -355,41 +340,64 @@ export async function getFileFromCloudStorage(
     const totalBytes = (data.fileSize as number) || 0;
     if (!totalChunks || totalChunks <= 0) return null;
 
-    const byteArrays: Uint8Array[] = [];
+    const byteArrays: Uint8Array[] = new Array(totalChunks);
     let downloadedBytes = 0;
     const startTime = Date.now();
 
-    for (let i = 0; i < totalChunks; i++) {
-      const chunkDoc = await getDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${i}`));
-      if (!chunkDoc.exists() || !chunkDoc.data()?.chunkData) {
-        console.warn(`Missing chunk ${i} for file ${fileId}`);
-        return null;
+    // Download in parallel batches of 3
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < totalChunks; i += BATCH_SIZE) {
+      const batchPromises = [];
+      for (let j = i; j < Math.min(i + BATCH_SIZE, totalChunks); j++) {
+        const task = (async (chunkIdx: number) => {
+          const chunkDoc = await getDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${chunkIdx}`));
+          if (!chunkDoc.exists()) {
+            throw new Error(`Missing chunk ${chunkIdx}`);
+          }
+          const cData = chunkDoc.data();
+          let chunkBytesArray: Uint8Array | null = null;
+
+          if (cData.chunkBytes && typeof cData.chunkBytes.toUint8Array === 'function') {
+            // Native Firestore Bytes
+            chunkBytesArray = cData.chunkBytes.toUint8Array();
+          } else if (cData.chunkData) {
+            // Legacy Base64 string fallback
+            const chunkBase64 = cData.chunkData.trim().replace(/[\r\n\s]+/g, '');
+            const binaryStr = window.atob(chunkBase64);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let b = 0; b < len; b++) {
+              bytes[b] = binaryStr.charCodeAt(b);
+            }
+            chunkBytesArray = bytes;
+          }
+
+          if (!chunkBytesArray) {
+            throw new Error(`Chunk ${chunkIdx} contains no byte data`);
+          }
+
+          byteArrays[chunkIdx] = chunkBytesArray;
+          downloadedBytes += chunkBytesArray.length;
+
+          const elapsedSec = (Date.now() - startTime) / 1000;
+          const bytesPerSec = elapsedSec > 0 ? (downloadedBytes / elapsedSec) : 0;
+          const percent = Math.min(99, Math.round((downloadedBytes / (totalBytes || 1)) * 100));
+
+          if (onProgress) {
+            onProgress({
+              percent,
+              loadedBytes: downloadedBytes,
+              totalBytes: totalBytes || downloadedBytes,
+              speed: formatSpeed(bytesPerSec),
+              bytesPerSec
+            });
+          }
+        })(j);
+
+        batchPromises.push(task);
       }
 
-      const chunkBase64 = chunkDoc.data().chunkData.trim();
-      const cleanBase64 = chunkBase64.replace(/[\r\n\s]+/g, '');
-      const binaryStr = window.atob(cleanBase64);
-      const len = binaryStr.length;
-      const bytes = new Uint8Array(len);
-      for (let b = 0; b < len; b++) {
-        bytes[b] = binaryStr.charCodeAt(b);
-      }
-      byteArrays.push(bytes);
-      downloadedBytes += len;
-
-      const elapsedSec = (Date.now() - startTime) / 1000;
-      const bytesPerSec = elapsedSec > 0 ? (downloadedBytes / elapsedSec) : 0;
-      const percent = Math.min(99, Math.round(((i + 1) / totalChunks) * 100));
-
-      if (onProgress) {
-        onProgress({
-          percent,
-          loadedBytes: downloadedBytes,
-          totalBytes: totalBytes || downloadedBytes,
-          speed: formatSpeed(bytesPerSec),
-          bytesPerSec
-        });
-      }
+      await Promise.all(batchPromises);
     }
 
     const mime = data.fileType || 'application/octet-stream';
@@ -411,7 +419,7 @@ export async function getFileFromCloudStorage(
       });
     }
 
-    return URL.createObjectURL(finalBlob);
+    return registerLocalBlobUrl(URL.createObjectURL(finalBlob));
   } catch (err) {
     console.error('getFileFromCloudStorage error:', err);
     return null;
@@ -517,18 +525,25 @@ export async function dataUrlToBlobAsync(input: string): Promise<Blob | null> {
 // Create a safe Object URL for in-app viewing or printing
 export async function createBlobUrlAsync(input: string): Promise<string | null> {
   if (!input) return null;
-  if (input.startsWith('blob:')) return input;
+  if (input.startsWith('blob:')) {
+    if (isLocalBlobValid(input)) return input;
+    // Foreign or dead blob: do not use directly
+    return null;
+  }
   const blob = await dataUrlToBlobAsync(input);
   if (!blob || blob.size === 0) return null;
-  return URL.createObjectURL(blob);
+  return registerLocalBlobUrl(URL.createObjectURL(blob));
 }
 
 export function createBlobUrl(input: string): string | null {
   if (!input) return null;
-  if (input.startsWith('blob:')) return input;
+  if (input.startsWith('blob:')) {
+    if (isLocalBlobValid(input)) return input;
+    return null;
+  }
   const blob = dataUrlToBlob(input);
   if (!blob || blob.size === 0) return null;
-  return URL.createObjectURL(blob);
+  return registerLocalBlobUrl(URL.createObjectURL(blob));
 }
 
 // Download file safely as original binary Blob (works for PDFs, images, docs without 0KB corruption)
@@ -538,9 +553,9 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     return false;
   }
 
-  // Reject dead foreign blob URLs
-  if (dataUrlOrBlobUrl.startsWith('blob:http') && typeof window !== 'undefined' && !dataUrlOrBlobUrl.startsWith(window.location.origin)) {
-    console.error('Cannot download: Blob URL originates from a different domain/session');
+  // Reject dead foreign blob URLs before attempting to trigger browser navigation
+  if (isForeignBlobUrl(dataUrlOrBlobUrl)) {
+    console.error('Cannot download: Stale or foreign Blob URL detected. Use getFileFromCloudStorage to retrieve fresh chunks.');
     return false;
   }
 
@@ -548,7 +563,19 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     let directBlobUrl: string | null = null;
     let shouldRevoke = false;
 
-    if (dataUrlOrBlobUrl.startsWith('blob:') || dataUrlOrBlobUrl.startsWith('http:') || dataUrlOrBlobUrl.startsWith('https:')) {
+    if (dataUrlOrBlobUrl.startsWith('blob:')) {
+      // Test accessibility of the blob
+      try {
+        const testRes = await fetch(dataUrlOrBlobUrl);
+        if (!testRes.ok) throw new Error('Blob not reachable');
+        const testBlob = await testRes.blob();
+        if (!testBlob || testBlob.size === 0) throw new Error('Blob is empty');
+        directBlobUrl = dataUrlOrBlobUrl;
+      } catch (e) {
+        console.error('Blob URL failed accessibility test:', e);
+        return false;
+      }
+    } else if (dataUrlOrBlobUrl.startsWith('http:') || dataUrlOrBlobUrl.startsWith('https:')) {
       directBlobUrl = dataUrlOrBlobUrl;
     } else {
       const blob = await dataUrlToBlobAsync(dataUrlOrBlobUrl);
@@ -556,7 +583,7 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
         console.error('Cannot download: Blob is empty or corrupted');
         return false;
       }
-      directBlobUrl = URL.createObjectURL(blob);
+      directBlobUrl = registerLocalBlobUrl(URL.createObjectURL(blob));
       shouldRevoke = true;
     }
 

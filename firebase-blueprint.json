@@ -125,6 +125,34 @@
           "condition": "true"
         }
       ]
+    },
+    {
+      "name": "print_files",
+      "description": "Metadata for uploaded print files",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
+    },
+    {
+      "name": "print_file_chunks",
+      "description": "Binary chunk storage for large print files up to 5GB",
+      "rules": [
+        {
+          "access": "read",
+          "condition": "true"
+        },
+        {
+          "access": "write",
+          "condition": "true"
+        }
+      ]
     }
   ]
 }
