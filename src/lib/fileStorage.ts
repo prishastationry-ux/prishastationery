@@ -24,11 +24,7 @@ export function registerLocalBlobUrl(url: string): string {
 
 export function isLocalBlobValid(url?: string): boolean {
   if (!url || !url.startsWith('blob:')) return false;
-  if (activeLocalBlobUrls.has(url)) return true;
-  if (typeof window !== 'undefined' && url.startsWith(`blob:${window.location.origin}`)) {
-    return true;
-  }
-  return false;
+  return activeLocalBlobUrls.has(url);
 }
 
 export interface StorageProgress {
@@ -79,11 +75,7 @@ function openDB(): Promise<IDBDatabase> {
 export function isForeignBlobUrl(url?: string): boolean {
   if (!url || typeof url !== 'string') return false;
   if (!url.startsWith('blob:')) return false;
-  if (activeLocalBlobUrls.has(url)) return false;
-  if (typeof window !== 'undefined' && !url.startsWith(`blob:${window.location.origin}`)) {
-    return true;
-  }
-  return false;
+  return !activeLocalBlobUrls.has(url);
 }
 
 // 1. Save dataUrl to local browser IndexedDB
@@ -211,14 +203,30 @@ export async function uploadFileObjectInChunks(
           const uint8 = new Uint8Array(arrayBuffer);
           const chunkBytes = Bytes.fromUint8Array(uint8);
 
-          await setDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${chunkIdx}`), {
-            fileId,
-            chunkIndex: chunkIdx,
-            totalChunks,
-            chunkBytes,
-            chunkSize: sliceSize,
-            createdAt: Date.now()
-          });
+          // Retry up to 3 times for bulletproof upload over mobile/slow connections
+          let writeSuccess = false;
+          let lastErr: any = null;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              await setDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${chunkIdx}`), {
+                fileId,
+                chunkIndex: chunkIdx,
+                totalChunks,
+                chunkBytes,
+                chunkSize: sliceSize,
+                createdAt: Date.now()
+              });
+              writeSuccess = true;
+              break;
+            } catch (err) {
+              lastErr = err;
+              await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+            }
+          }
+
+          if (!writeSuccess) {
+            throw lastErr || new Error(`Failed to upload chunk ${chunkIdx}`);
+          }
 
           uploadedBytes += sliceSize;
           const elapsedSec = (Date.now() - startTime) / 1000;

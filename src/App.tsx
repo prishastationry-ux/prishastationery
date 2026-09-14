@@ -43,7 +43,8 @@ import {
   CheckCircle2,
   ExternalLink,
   Filter,
-  Server
+  Server,
+  Share2
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
@@ -435,19 +436,20 @@ export default function App() {
   // Handle Image Uploads with Interactive Crop & Zoom Modal for Admin
   const handleImageFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
-    target: 'leftLogo' | 'rightLogo' | 'bannerImage' | 'customQr' | 'editingProduct' | 'newProduct'
+    target: 'leftLogo' | 'rightLogo' | 'bannerImage' | 'customQr' | 'editingProduct' | 'newProduct' | 'signature'
   ) => {
     const file = e.target.files?.[0];
     if (file) {
       try {
         const base64 = await fileToBase64(file);
-        const titleMap = {
+        const titleMap: Record<string, string> = {
           leftLogo: 'ડાબો લોગો ફોટો ક્રોપ અને ઝૂમ કરો (Left Logo)',
           rightLogo: 'જમણો લોગો ફોટો ક્રોપ અને ઝૂમ કરો (Right Logo)',
           bannerImage: 'દુકાન પ્રોમો બેનર ક્રોપ અને ઝૂમ કરો (Banner)',
           customQr: 'કસ્ટમ QR કોડ ફોટો ક્રોપ કરો (UPI QR)',
           editingProduct: 'પ્રોડક્ટ ફોટો ક્રોપ અને ઝૂમ કરો',
-          newProduct: 'નવી પ્રોડક્ટ ફોટો ક્રોપ અને ઝૂમ કરો'
+          newProduct: 'નવી પ્રોડક્ટ ફોટો ક્રોપ અને ઝૂમ કરો',
+          signature: 'અધિકૃત સહી / સ્ટેમ્પ ક્રોપ અને ઝૂમ કરો (Signature)'
         };
 
         setCropModalData({
@@ -482,6 +484,9 @@ export default function App() {
     } else if (target === 'customQr') {
       setStoreSettings(prev => ({ ...prev, customQrUrl: croppedBase64 }));
       showToast('✅ કસ્ટમ QR કોડ અપડેટ થયો!');
+    } else if (target === 'signature') {
+      setStoreSettings(prev => ({ ...prev, signatureUrl: croppedBase64 }));
+      showToast('✅ અધિકૃત સહી / સ્ટેમ્પ અપડેટ થયો!');
     } else if (target === 'editingProduct' && editingItem) {
       setEditingItem({ ...editingItem, imageUrl: croppedBase64 });
       showToast('✅ પ્રોડક્ટ ફોટો ક્રોપ અને અપલોડ થયો!');
@@ -1329,6 +1334,23 @@ export default function App() {
               <Truck className="w-3.5 h-3.5 text-white" />
               <span>ઓર્ડર ટ્રેક કરો (Track)</span>
             </button>
+
+            {/* STORE SHARE LINK BUTTON */}
+            <button
+              onClick={() => {
+                const url = typeof window !== 'undefined' && window.location.origin.includes('netlify')
+                  ? window.location.origin
+                  : 'https://prishastationery.netlify.app';
+                navigator.clipboard.writeText(url);
+                setToastMessage('✅ દુકાનની લિંક કોપી થઈ ગઈ: ' + url);
+                setTimeout(() => setToastMessage(''), 3500);
+              }}
+              className="bg-blue-900 hover:bg-blue-800 text-amber-300 border border-blue-700 px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+              title="ગ્રાહકોને મોકલવા માટે Prisha Stationery ની લિંક કોપી કરો"
+            >
+              <Share2 className="w-3.5 h-3.5 text-amber-400" />
+              <span>🔗 લિંક શેર કરો</span>
+            </button>
           </div>
 
           <div className="flex-1 overflow-hidden mx-3 text-[11px] sm:text-xs">
@@ -1915,8 +1937,9 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => setShowSettingsModal(true)}
+                onClick={() => setShowBillSettingsModal(true)}
                 className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="દુકાન નામ, પાસપોર્ટ લોગો, QR કોડ, અધિકૃત સહી અને બિલ કસ્ટમાઇઝેશન"
               >
                 <Settings className="w-4 h-4 text-orange-400" />
                 <span>દુકાન & બિલ સેટિંગ્સ</span>
@@ -2654,168 +2677,22 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 8. ADMIN STORE & BILL SETTINGS MODAL */}
+      {/* 8. ADMIN STORE & BILL SETTINGS MODAL (Now unified in BillSettingsModal) */}
       {/* ========================================================================= */}
       {showSettingsModal && (
-        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-3 overflow-y-auto">
-          <div className="bg-white rounded-2xl p-5 max-w-xl w-full border-2 border-black shadow-2xl space-y-4 my-auto">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h3 className="font-black text-sm text-neutral-900 flex items-center gap-1.5">
-                <Settings className="w-4 h-4 text-orange-600" />
-                <span>દુકાન, લોગો & બિલ સેટિંગ્સ (Store & Invoice Settings)</span>
-              </h3>
-              <button onClick={() => setShowSettingsModal(false)} className="text-neutral-400 hover:text-black">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">દુકાન નામ (English):</label>
-                <input
-                  type="text"
-                  value={storeSettings.storeNameEn}
-                  onChange={e => setStoreSettings({ ...storeSettings, storeNameEn: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">દુકાન નામ (ગુજરાતી):</label>
-                <input
-                  type="text"
-                  value={storeSettings.storeNameGu}
-                  onChange={e => setStoreSettings({ ...storeSettings, storeNameGu: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">સંચાલક નામ (Owner):</label>
-                <input
-                  type="text"
-                  value={storeSettings.ownerName}
-                  onChange={e => setStoreSettings({ ...storeSettings, ownerName: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">મોબાઇલ નંબર (Mobile):</label>
-                <input
-                  type="text"
-                  value={storeSettings.phone}
-                  onChange={e => setStoreSettings({ ...storeSettings, phone: e.target.value, phoneDisplay: `+91 ${e.target.value}` })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">UPI ID (QR પેમેન્ટ માટે):</label>
-                <input
-                  type="text"
-                  value={storeSettings.upiId}
-                  onChange={e => setStoreSettings({ ...storeSettings, upiId: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">GSTIN નંબર:</label>
-                <input
-                  type="text"
-                  value={storeSettings.gstNumber}
-                  onChange={e => setStoreSettings({ ...storeSettings, gstNumber: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="font-bold block mb-0.5 text-neutral-700">દુકાન સરનામું (Address):</label>
-                <input
-                  type="text"
-                  value={storeSettings.address}
-                  onChange={e => setStoreSettings({ ...storeSettings, address: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="font-bold block mb-0.5 text-neutral-700">બિલ ફૂટર નોંધ (Invoice Footer Note):</label>
-                <input
-                  type="text"
-                  value={storeSettings.invoiceFooterNote}
-                  onChange={e => setStoreSettings({ ...storeSettings, invoiceFooterNote: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                />
-              </div>
-
-              <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
-                <label className="font-black block mb-1 text-amber-900 flex items-center justify-between">
-                  <span>🔐 એડમિન પાસવર્ડ (સુરક્ષિત બદલો)</span>
-                </label>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-white px-2.5 py-1.5 rounded-lg border border-amber-300 font-mono text-xs font-bold text-neutral-600 truncate">
-                    {'•'.repeat(storeSettings.adminPassword.length || 8)}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowChangePasswordModal(true)}
-                    className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded-lg text-xs font-black shadow-xs whitespace-nowrap cursor-pointer"
-                  >
-                    બદલો
-                  </button>
-                </div>
-                <p className="text-[10px] text-amber-700 font-bold mt-1">
-                  * વેરિફિકેશન નંબર 8140430395 અને જૂનો પાસવર્ડ દાખલ કર્યા પછી જ બદલાશે.
-                </p>
-              </div>
-
-              {/* Photo Upload Triggers inside Settings */}
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">ડાબો લોગો ફોટો (ક્રોપ & ઝૂમ):</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={e => handleImageFileUpload(e, 'leftLogo')}
-                  className="w-full text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">જમણો લોગો ફોટો (ક્રોપ & ઝૂમ):</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={e => handleImageFileUpload(e, 'rightLogo')}
-                  className="w-full text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold block mb-0.5 text-neutral-700">કસ્ટમ પેમેન્ટ QR કોડ (ક્રોપ & ઝૂમ):</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={e => handleImageFileUpload(e, 'customQr')}
-                  className="w-full text-xs"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2 flex justify-end gap-2 border-t">
-              <button
-                onClick={() => {
-                  setShowSettingsModal(false);
-                  showToast('✅ સેટિંગ્સ સફળતાપૂર્વક સાચવી લીધા!');
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl text-xs font-black shadow"
-              >
-                સાચવો (Save Settings)
-              </button>
-            </div>
-          </div>
-        </div>
+        <BillSettingsModal
+          isOpen={showSettingsModal}
+          onClose={() => setShowSettingsModal(false)}
+          settings={storeSettings}
+          onSave={updatedSettings => {
+            setStoreSettings(prev => ({
+              ...prev,
+              ...updatedSettings
+            }));
+            showToast('✅ બિલ સેટિંગ્સ & કસ્ટમાઇઝેશન સાચવાઈ ગયું!');
+          }}
+          onUploadImage={handleImageFileUpload}
+        />
       )}
 
       {/* ========================================================================= */}
@@ -3479,7 +3356,7 @@ export default function App() {
             }));
             showToast('✅ બિલ સેટિંગ્સ & કસ્ટમાઇઝેશન સાચવાઈ ગયું!');
           }}
-          onUploadLogo={handleImageFileUpload}
+          onUploadImage={handleImageFileUpload}
         />
       )}
 

@@ -36,7 +36,12 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   showDiscountOnStore: true,
   billShowFraudWarning: true,
   billShowSpecialOffer: true,
-  billTermsNote: 'કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ. ખરીદેલ માલ પરત લેવાશે નહિ.'
+  billTermsNote: 'કમ્પ્યુટર જનરેટેડ ટેક્સ ઇન્વોઇસ. ખરીદેલ માલ પરત લેવાશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે. વિવાદનું સ્થળ: થરાદ કોર્ટ.',
+  signatureUrl: '',
+  billShowSignature: true,
+  signatoryTitle: 'For, PRISHA STATIONERY & ONLINE SERVICES',
+  signatoryName: 'Authorized Signatory / અધિકૃત સહી',
+  panNumber: 'BTQPC3756D'
 };
 
 export const INITIAL_PRODUCTS: ProductItem[] = [

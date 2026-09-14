@@ -13,6 +13,7 @@ import {
   Clock,
   Send,
   AlertCircle,
+  AlertTriangle,
   Edit3,
   Save,
   Plus,
@@ -81,6 +82,16 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     blobUrl: string;
     dataUrl: string;
   } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string>('');
+  const [missingFileData, setMissingFileData] = useState<{
+    file: PrintJobFile;
+    job: PrintJobRecord;
+  } | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 4500);
+  };
 
   if (!isOpen) return null;
 
@@ -93,20 +104,20 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   // Retrieve complete file dataUrl from memory, IndexedDB, or chunked cloud storage
   const getFullFileDataUrl = async (file: PrintJobFile): Promise<string | null> => {
-    if (file.fileDataUrl && file.fileDataUrl.length > 50) {
+    if (file.fileDataUrl && file.fileDataUrl.length > 50 && !isForeignBlobUrl(file.fileDataUrl)) {
       return file.fileDataUrl;
     }
     return await getFileFromCloudStorage(file.id);
   };
 
-  // Safe File Download using Blob & ObjectURL (exact original size, never 0 KB, with real-time speed)
+  // Safe File Download directly to PC using Blob & ObjectURL
   const handleDownloadFile = async (file: PrintJobFile) => {
     setLoadingFileId(file.id);
-    setDownloadProgress({ fileId: file.id, percent: 0, speed: 'શરૂ થઈ રહ્યું છે...' });
+    setDownloadProgress({ fileId: file.id, percent: 0, speed: 'શોધી રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      // If fileUrl is missing or dead/foreign, fetch fresh from cloud storage
-      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl);
+      const isDeadBlob = isForeignBlobUrl(fileUrl);
+      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isDeadBlob;
       if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
@@ -124,30 +135,37 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         fileUrl = await getFileFromStorage(file.id);
       }
 
-      if (!fileUrl && file.fileDataUrl && file.fileDataUrl.length > 50) {
-        // Fallback: try raw existing fileDataUrl if available
-        fileUrl = file.fileDataUrl;
-      }
-
-      if (!fileUrl) {
-        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ક્લાઉડ સ્ટોરેજમાં મળ્યો નથી.\n\nગ્રાહકે જૂના સત્રમાંથી મોકલેલ હોવાથી નીચે આપેલા 'WhatsApp રિક્વેસ્ટ' બટનથી ગ્રાહક પાસેથી ફાઇલ મંગાવો અથવા 'ફાઇલ જોડો' બટન દ્વારા અહીં PC માંથી અપલોડ કરી દો.`);
+      if (!fileUrl || isForeignBlobUrl(fileUrl)) {
+        if (activeJob) {
+          setMissingFileData({ file, job: activeJob });
+        } else {
+          showToast(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ક્લાઉડમાં મળ્યો નથી.`);
+        }
         return;
       }
 
-      setDownloadProgress({ fileId: file.id, percent: 100, speed: 'સાચવી રહ્યા છીએ...' });
+      setDownloadProgress({ fileId: file.id, percent: 100, speed: 'PC માં સાચવી રહ્યા છીએ...' });
       const success = await downloadFileSafely(fileUrl, file.fileName || `Print_Document_${Date.now()}`);
-      if (!success) {
-        // Retry fetching fresh from cloud chunks if direct URL failed
+      if (success) {
+        showToast(`✅ ફાઇલ "${file.fileName}" તમારા PC માં ડાઉનલોડ થઈ ગઈ!`);
+      } else {
         const freshUrl = await getFileFromCloudStorage(file.id);
         if (freshUrl) {
           await downloadFileSafely(freshUrl, file.fileName || `Print_Document_${Date.now()}`);
+          showToast(`✅ ફાઇલ "${file.fileName}" ડાઉનલોડ થઈ ગઈ!`);
         } else {
-          alert('ફાઇલ ડાઉનલોડ કરવામાં અસમર્થ: ફાઇલ કરપ્ટ અથવા ખાલી છે.');
+          const blobUrl = await createBlobUrlAsync(fileUrl);
+          if (blobUrl) {
+            setViewingFile({ file, blobUrl, dataUrl: fileUrl });
+            showToast(`ℹ️ પ્રિવ્યૂ સ્ક્રીન ખુલી છે, ત્યાંથી ડાઉનલોડ અથવા પ્રિન્ટ કરો.`);
+          } else {
+            showToast('⚠️ ફાઇલ ડાઉનલોડ કરવામાં સમસ્યા આવી.');
+          }
         }
       }
     } catch (e) {
       console.error('Download error:', e);
-      alert('ફાઇલ ડાઉનલોડ કરવામાં ભૂલ આવી.');
+      showToast('⚠️ ફાઇલ ડાઉનલોડ કરવામાં ભૂલ આવી.');
     } finally {
       setLoadingFileId(null);
       setDownloadProgress(null);
@@ -160,7 +178,8 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'લોડ થઈ રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl);
+      const isDeadBlob = isForeignBlobUrl(fileUrl);
+      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isDeadBlob;
       if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
@@ -178,23 +197,24 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         fileUrl = await getFileFromStorage(file.id);
       }
 
-      if (!fileUrl && file.fileDataUrl && file.fileDataUrl.length > 50) {
-        fileUrl = file.fileDataUrl;
-      }
-
-      if (!fileUrl) {
-        alert(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ઉપલબ્ધ નથી.\nકૃપા કરીને 'WhatsApp રિક્વેસ્ટ' દ્વારા ગ્રાહક પાસેથી ફાઇલ મંગાવી લો અથવા 'ફાઇલ જોડો' થી અપલોડ કરો.`);
+      if (!fileUrl || isForeignBlobUrl(fileUrl)) {
+        if (activeJob) {
+          setMissingFileData({ file, job: activeJob });
+        } else {
+          showToast(`⚠️ આ ફાઇલ (${file.fileName}) નો ડેટા ક્લાઉડમાં મળ્યો નથી.`);
+        }
         return;
       }
 
       const blobUrl = await createBlobUrlAsync(fileUrl);
       if (!blobUrl) {
-        alert('ફાઇલ ખોલવામાં સમસ્યા આવી. ફાઇલ કરપ્ટ હોઈ શકે છે.');
+        showToast('⚠️ ફાઇલ ખોલવામાં સમસ્યા આવી.');
         return;
       }
       setViewingFile({ file, blobUrl, dataUrl: fileUrl });
     } catch (e) {
       console.error('Error opening file on screen:', e);
+      showToast('⚠️ ફાઇલ સ્ક્રીન પર ખોલવામાં ભૂલ આવી.');
     } finally {
       setLoadingFileId(null);
       setDownloadProgress(null);
@@ -243,13 +263,13 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
           );
           onUpdateJob(jobId, { files: updatedFiles });
         }
-        alert(`✅ ફાઇલ "${selected.name}" સફળતાપૂર્વક ક્લાઉડમાં સેવ થઈ ગઈ! હવે તમે તેને ડાઉનલોડ કે જોઈ શકો છો.`);
+        showToast(`✅ ફાઇલ "${selected.name}" ક્લાઉડમાં સેવ થઈ ગઈ! હવે તમે તેને ડાઉનલોડ કે જોઈ શકો છો.`);
       } else {
-        alert('ફાઇલ અપલોડ કરવામાં નિષ્ફળતા મળી.');
+        showToast('⚠️ ફાઇલ અપલોડ કરવામાં નિષ્ફળતા મળી.');
       }
     } catch (err) {
       console.error('Attach file error:', err);
-      alert('ફાઇલ અપલોડ કરવામાં ભૂલ આવી.');
+      showToast('⚠️ ફાઇલ અપલોડ કરવામાં ભૂલ આવી.');
     } finally {
       setLoadingFileId(null);
       setDownloadProgress(null);
@@ -655,6 +675,17 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                                   </span>
                                 )}
                                 <span className="font-black text-neutral-900">• કોપી: {file.copies}</span>
+                                {file.uploadedToCloud ? (
+                                  <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                    ક્લાઉડ તૈયાર
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-amber-900 bg-amber-100 px-1.5 py-0.5 rounded flex items-center gap-1">
+                                    <AlertCircle className="w-3 h-3 text-amber-600" />
+                                    ક્લાઉડ ડેટા બાકી
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -885,7 +916,84 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
       </div>
 
-      {/* IN-APP DOCUMENT VIEWER MODAL (Screen Viewer - No Auto-Download) */}
+      {/* IN-APP TOAST NOTIFICATION */}
+      {toastMessage && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-90 bg-neutral-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm font-black border border-neutral-700 animate-in fade-in slide-in-from-top-4 duration-200">
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage('')}
+            className="text-neutral-400 hover:text-white p-0.5 rounded cursor-pointer ml-2"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* MODAL: MISSING CLOUD FILE ACTION DIALOG (1-Click WhatsApp Request or Attach from PC) */}
+      {missingFileData && (
+        <div className="fixed inset-0 z-80 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-5 sm:p-6 shadow-2xl border border-neutral-200 animate-in zoom-in-95 duration-150">
+            <div className="w-14 h-14 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-inner">
+              <AlertTriangle className="w-7 h-7" />
+            </div>
+
+            <h3 className="text-base sm:text-lg font-black text-neutral-900 text-center mb-1">
+              ફાઇલ ક્લાઉડમાં ઉપલબ્ધ નથી
+            </h3>
+            <p className="text-xs text-neutral-600 text-center mb-4 leading-relaxed">
+              ઓર્ડર <span className="font-bold text-neutral-800">#{missingFileData.job.jobNo}</span> ({missingFileData.job.customerName}) ની ફાઇલ <span className="font-bold text-neutral-800">"{missingFileData.file.fileName}"</span> ગ્રાહકના જૂના સત્રમાંથી આવેલી હોવાથી તેનો ડેટા ક્લાઉડમાં સેવ થઈ શક્યો નથી.
+            </p>
+
+            <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3 mb-4 text-xs text-amber-900">
+              <p className="font-black mb-1">👉 નીચેનામાંથી કોઈપણ ૧ વિકલ્પ પસંદ કરો:</p>
+              <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
+                <li>ગ્રાહકને ૧ ક્લિકમાં WhatsApp મેસેજ મોકલી ફાઇલ મંગાવો.</li>
+                <li>અથવા WhatsApp Web માંથી ફાઇલ ડાઉનલોડ કરી અહીં સીધી જોડી દો.</li>
+              </ul>
+            </div>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  const msg = `નમસ્તે ${missingFileData.job.customerName}જી, પ્રીશા સ્ટેશનરીમાંથી.\nતમારા પ્રિન્ટ ઓર્ડર #${missingFileData.job.jobNo} માટેની ફાઇલ (${missingFileData.file.fileName}) અહીં WhatsApp પર Document તરીકે મોકલી આપવા વિનંતી જેથી અમે પ્રિન્ટ કરી શકીએ.`;
+                  window.open(`https://wa.me/91${missingFileData.job.mobile}?text=${encodeURIComponent(msg)}`, '_blank');
+                  showToast('📲 WhatsApp ખુલી ગયું છે!');
+                  setMissingFileData(null);
+                }}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+              >
+                <Share2 className="w-4 h-4" />
+                <span>૧. ગ્રાહક પાસેથી WhatsApp પર ફાઇલ મંગાવો</span>
+              </button>
+
+              <label className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer transition">
+                <UploadCloud className="w-4 h-4" />
+                <span>૨. PC માંથી આ ફાઇલ જોડો (Attach File)</span>
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const f = missingFileData.file;
+                    const j = missingFileData.job;
+                    setMissingFileData(null);
+                    await handleAttachFileToJob(j.id, f.id, e);
+                  }}
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setMissingFileData(null)}
+                className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-black py-2 px-4 rounded-xl text-xs transition cursor-pointer"
+              >
+                બંધ કરો (Cancel)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {viewingFile && (
         <div className="fixed inset-0 z-70 bg-black/85 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-5xl w-full h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-neutral-300">

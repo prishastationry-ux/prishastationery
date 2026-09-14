@@ -95,7 +95,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
                   ...newJob,
                   files: newJob.files?.map((nf: any) => {
                     const ef = existingJob.files.find((f: any) => f.id === nf.id);
-                    if (ef && ef.fileDataUrl && !nf.fileDataUrl) {
+                    if (ef && ef.fileDataUrl && !ef.fileDataUrl.startsWith('blob:') && !nf.fileDataUrl) {
                       return { ...nf, fileDataUrl: ef.fileDataUrl };
                     }
                     return nf;
@@ -131,7 +131,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         next.forEach((job: any) => {
           if (Array.isArray(job.files)) {
             job.files.forEach((file: any) => {
-              if (file.id && file.fileDataUrl && file.fileDataUrl.length > 50) {
+              if (file.id && file.fileDataUrl && !file.fileDataUrl.startsWith('blob:') && file.fileDataUrl.length > 50) {
                 saveFileToStorage(file.id, file.fileDataUrl, file.fileName || 'file', file.fileType || '');
               }
             });
@@ -150,7 +150,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
               ...item,
               files: item.files?.map((f: any) => {
                 // If local storage is full, keep metadata and rely on IndexedDB
-                if (f.fileDataUrl && f.fileDataUrl.length > 300000) {
+                if (f.fileDataUrl && (f.fileDataUrl.startsWith('blob:') || f.fileDataUrl.length > 300000)) {
                   return { ...f, fileDataUrl: '' };
                 }
                 return f;
@@ -167,7 +167,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           next.forEach((job: any) => {
             if (Array.isArray(job.files)) {
               job.files.forEach((f: any) => {
-                if (f.fileDataUrl && f.fileDataUrl.length > 50) {
+                if (f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length > 50) {
                   saveFileToCloudStorage(
                     f.id,
                     f.fileDataUrl,
@@ -181,11 +181,12 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           });
 
           // In the main printJobs collection list, omit huge inline base64 if it exceeds 300KB to stay safely under 1MB
+          // Also NEVER save client-side blob URLs to Firestore
           const firestoreData = next.map((item: any) => ({
             ...item,
             files: item.files?.map((f: any) => ({
               ...f,
-              fileDataUrl: f.fileDataUrl && f.fileDataUrl.length < 300000 ? f.fileDataUrl : ''
+              fileDataUrl: f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length < 300000 ? f.fileDataUrl : ''
             }))
           }));
 

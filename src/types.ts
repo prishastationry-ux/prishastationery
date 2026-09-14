@@ -92,6 +92,15 @@ export interface StoreSettings {
   billShowFraudWarning?: boolean;
   billShowSpecialOffer?: boolean;
   billTermsNote?: string;
+  // Government Recognized & Authorized Signatory Fields
+  signatureUrl?: string; // Digital signature / Stamp image base64
+  billShowSignature?: boolean; // Whether to display signature box on bill
+  signatoryTitle?: string; // e.g. "For, PRISHA STATIONERY & ONLINE SERVICES"
+  signatoryName?: string; // e.g. "Authorized Signatory / અધિકૃત સહી"
+  panNumber?: string; // PAN Number e.g. "BTQPC3756D"
+  bankName?: string; // Optional Bank details for official invoices
+  accountNumber?: string;
+  ifscCode?: string;
 }
 
 export interface TrashRecord {

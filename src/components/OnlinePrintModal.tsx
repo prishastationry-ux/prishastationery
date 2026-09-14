@@ -19,7 +19,9 @@ import {
   FileDown,
   Info,
   Loader2,
-  Zap
+  Zap,
+  RefreshCw,
+  AlertTriangle
 } from 'lucide-react';
 import { PrintJobFile, PrintJobRecord, StoreSettings } from '../types';
 import {
@@ -144,6 +146,57 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
     setFilesList(prev => prev.filter(f => f.id !== id));
   };
 
+  const handleRetryUpload = (fileItem: PrintJobFile) => {
+    if (!fileItem.fileBlob) return;
+    setFilesList(prev =>
+      prev.map(f =>
+        f.id === fileItem.id
+          ? {
+              ...f,
+              uploadStatus: 'uploading',
+              uploadProgress: 0,
+              uploadSpeed: 'ફરી શરૂ...'
+            }
+          : f
+      )
+    );
+
+    uploadFileObjectInChunks(
+      fileItem.fileBlob,
+      fileItem.id,
+      fileItem.fileName,
+      fileItem.fileType,
+      (prog) => {
+        setFilesList(prev =>
+          prev.map(item =>
+            item.id === fileItem.id
+              ? {
+                  ...item,
+                  uploadProgress: prog.percent,
+                  uploadSpeed: prog.speed,
+                  uploadStatus: prog.percent >= 100 ? 'completed' : 'uploading'
+                }
+              : item
+          )
+        );
+      }
+    ).then(success => {
+      setFilesList(prev =>
+        prev.map(item =>
+          item.id === fileItem.id
+            ? {
+                ...item,
+                uploadedToCloud: success,
+                uploadStatus: success ? 'completed' : 'error',
+                uploadProgress: success ? 100 : item.uploadProgress,
+                uploadSpeed: success ? 'પૂર્ણ' : 'ભૂલ'
+              }
+            : item
+        )
+      );
+    });
+  };
+
   const getFileIcon = (fileType: string, fileName: string) => {
     const ext = fileName.split('.').pop()?.toLowerCase();
     if (fileType.includes('pdf') || ext === 'pdf') {
@@ -167,7 +220,13 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
     const stillUploading = filesList.some(f => f.uploadStatus === 'uploading');
     if (stillUploading) {
-      alert('⚠️ ફાઇલ હજી ક્લાઉડમાં અપલોડ થઈ રહી છે. કૃપા કરીને અપલોડ પૂર્ણ થવા દો.');
+      alert('⚠️ ફાઇલ હજી ક્લાઉડમાં અપલોડ થઈ રહી છે. કૃપા કરીને ૧૦૦% અપલોડ પૂર્ણ થવા દો.');
+      return;
+    }
+
+    const failedFiles = filesList.filter(f => f.uploadStatus === 'error' || !f.uploadedToCloud);
+    if (failedFiles.length > 0) {
+      alert(`⚠️ "${failedFiles[0].fileName}" ક્લાઉડમાં અપલોડ થઈ નથી. કૃપા કરીને 'ફરી પ્રયાસ કરો' બટન દબાવી અપલોડ પૂર્ણ કરો.`);
       return;
     }
 
@@ -448,6 +507,24 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                                 style={{ width: `${Math.max(5, file.uploadProgress || 0)}%` }}
                               />
                             </div>
+                          </div>
+                        )}
+
+                        {/* Upload Failed / Error Retry Banner */}
+                        {file.uploadStatus === 'error' && (
+                          <div className="bg-red-50 p-2.5 rounded-xl border border-red-200 flex items-center justify-between gap-2">
+                            <span className="text-xs font-bold text-red-700 flex items-center gap-1.5">
+                              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                              ક્લાઉડ અપલોડ નિષ્ફળ થયું.
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRetryUpload(file)}
+                              className="bg-red-600 hover:bg-red-700 text-white text-xs font-black px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition"
+                            >
+                              <RefreshCw className="w-3 h-3" />
+                              <span>ફરી પ્રયાસ કરો</span>
+                            </button>
                           </div>
                         )}
 
