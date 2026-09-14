@@ -9,7 +9,8 @@ export interface ProductItem {
   isService?: boolean;
   unit: string;
   icon?: string;
-  imageUrl?: string;
+  imageUrl?: string; // Main display photo
+  galleryImages?: string[]; // Multiple photos (ક્લિક કરવાથી બધા ફોટા દેખાય)
   badge?: string;
   isSpecial?: boolean;
   description?: string;
@@ -18,6 +19,8 @@ export interface ProductItem {
   isHidden?: boolean; // છુપાવો (ગ્રાહકને ન દેખાય)
   mrp?: number; // છાપેલી કિંમત (Cross-out)
   bulkPricing?: string; // હોલસેલ ભાવ (e.g. "5 નંગ: ₹200")
+  hsnCode?: string;
+  minStockAlert?: number;
 }
 
 export interface CartItem {
@@ -80,18 +83,35 @@ export interface StoreSettings {
   adminPassword: string;
   developerCredit: string;
   // Bill / Invoice Customization & Security Fields
+  whatsappNumber?: string;
+  email?: string;
   billFraudWarning?: string;
   billSpecialOffer?: string;
-  billShowGst?: boolean;
-  billShowQr?: boolean;
-  billShowLogos?: boolean;
-  email?: string;
+  billShowPan?: boolean; // Toggle PAN number on bill
+  billShowGst?: boolean; // Toggle GST number on bill
+  billShowQr?: boolean; // Toggle UPI QR Code on bill
+  billShowUpi?: boolean; // Toggle UPI ID text on bill
+  billShowAddress?: boolean; // Toggle Store Address on bill
+  billShowHelpline?: boolean; // Toggle Helpline & Email on bill
+  billShowLogos?: boolean; // Toggle Logos on bill
+  billShowTerms?: boolean; // Toggle Terms and conditions on bill
+  billShowTagline?: boolean; // Toggle Tagline/Sub-services on bill
+  billShowOwnerName?: boolean; // Toggle Owner name on bill
+  billShowHsnColumn?: boolean; // Toggle HSN/SAC column in items table
+  billShowWords?: boolean; // Toggle Amount in Words on bill
+  billShowBankDetails?: boolean; // Toggle Bank Account info on bill
+  // Watermark Security (પાછળ વોટરમાર્ક સિક્યોરિટી)
+  billShowWatermark?: boolean; // Toggle Watermark on bill
+  billWatermarkType?: 'name' | 'logo' | 'both'; // Text, Logo or Both
+  billWatermarkOpacity?: number; // Opacity percentage (e.g. 10 to 50, default 30)
+  billWatermarkText?: string; // Custom watermark text (e.g. 'PRISHA STATIONERY & XEROX')
   hideUpiOnBill?: boolean;
   showMrpOnStore?: boolean;
   showDiscountOnStore?: boolean;
   billShowFraudWarning?: boolean;
   billShowSpecialOffer?: boolean;
   billTermsNote?: string;
+  qrCodeMode?: 'dynamic' | 'custom';
   // Government Recognized & Authorized Signatory Fields
   signatureUrl?: string; // Digital signature / Stamp image base64
   billShowSignature?: boolean; // Whether to display signature box on bill
@@ -101,6 +121,64 @@ export interface StoreSettings {
   bankName?: string; // Optional Bank details for official invoices
   accountNumber?: string;
   ifscCode?: string;
+  // Custom Invoice Number Prefix & Sequential Number Config
+  invoicePrefix?: string; // e.g. "PRISHA", "INV", "GST"
+  nextInvoiceSeq?: number; // Starting or next sequence number e.g. 1
+  invoiceGstRate?: number; // Default GST rate (0, 5, 12, 18, 28)
+  invoiceDefaultHsn?: string; // Default HSN/SAC code e.g. "4901" or "9983"
+
+  // WEBSITE FRONTEND DISPLAY & POWER CUSTOMIZATION (દુકાન સેટિંગ્સ)
+  productCardSize?: 'small' | 'medium' | 'large'; // Card size: નાની, મધ્યમ, મોટી
+  productLayoutMode?: 'grid' | 'list'; // View: બોક્સ (Grid) કે લિસ્ટ (List)
+  catalogFirstView?: 'categories' | 'products'; // ગ્રાહકને પહેલા કેટેગરી બતાવવી કે પ્રોડક્ટ્સ
+  productGridColumns?: '2' | '3' | '4' | '5'; // કોલમ સંખ્યા
+  autoSlideBannerInterval?: number; // Banner auto-slide seconds (e.g. 4s)
+  bannerSlides?: Array<{ id: string; imageUrl: string; title: string; subtitle?: string; linkUrl?: string }>; // મલ્ટિપલ બેનર સ્લાઇડ્સ
+  storeStories?: Array<{ id: string; title: string; mediaUrl: string; type: 'image' | 'video'; caption?: string; date?: string; active: boolean }>; // WhatsApp/Insta Story box
+  showStoriesWidget?: boolean; // Toggle story box on customer store
+  showBannerSlider?: boolean; // Toggle hero banner
+  showCategoryFirst?: boolean;
+}
+
+export interface RojmelEntry {
+  id: string;
+  date: string; // DD/MM/YYYY
+  type: 'aavak' | 'javak'; // આવક (Jama/Credit) કે જાવક (Udhar/Debit)
+  category: string; // વેચાણ, ખર્ચ, માલ ખરીદી, ઉધારી વસૂલી, અંગત ખર્ચ, ભાડું, લાઈટબિલ, પગાર
+  amount: number;
+  paymentMode: 'Cash' | 'UPI' | 'Bank' | 'બાકી (Credit)';
+  personName?: string; // ગ્રાહક કે વેપારીનું નામ
+  phone?: string;
+  notes?: string;
+  invoiceNo?: string;
+  createdAt?: number;
+}
+
+export interface KhataAccount {
+  id: string;
+  type: 'customer' | 'supplier'; // ગ્રાહક (Customer Khata) કે વેપારી (Supplier Ledger)
+  name: string;
+  phone: string;
+  address?: string;
+  balance: number; // Positive = લેવાના બાકી (Receivable), Negative = આપવાના બાકી (Payable)
+  totalGiven: number; // કુલ ઉધાર આપ્યો / ખરીદ્યો
+  totalReceived: number; // કુલ જમા મળ્યા / ચૂકવ્યા
+  lastTransactionDate: string;
+  notes?: string;
+}
+
+export interface KhataTransaction {
+  id: string;
+  accountId: string;
+  accountName: string;
+  date: string;
+  type: 'jama' | 'udhar'; // જમા (Received/Credit) કે ઉધાર (Given/Debit)
+  amount: number;
+  paymentMode: 'Cash' | 'UPI' | 'Bank' | 'Transfer';
+  billNo?: string;
+  description?: string;
+  balanceAfter: number;
+  createdAt?: number;
 }
 
 export interface TrashRecord {

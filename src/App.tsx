@@ -61,6 +61,13 @@ import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDelete
 import { OnlinePrintModal } from './components/OnlinePrintModal';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
 import { MultiPlatformSyncModal } from './components/MultiPlatformSyncModal';
+import { DailyReportModal } from './components/DailyReportModal';
+import { RojmelKhataModal } from './components/RojmelKhataModal';
+import { StoreSettingsModal } from './components/StoreSettingsModal';
+import { BannerSlider } from './components/BannerSlider';
+import { StoryWidget } from './components/StoryWidget';
+import { ProductDetailModal } from './components/ProductDetailModal';
+import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 
 export default function App() {
@@ -78,6 +85,7 @@ export default function App() {
   const [showOnlinePrintModal, setShowOnlinePrintModal] = useState<boolean>(false);
   const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
   const [showMultiPlatformSyncModal, setShowMultiPlatformSyncModal] = useState<boolean>(false);
+  const [showDailyReportModal, setShowDailyReportModal] = useState<boolean>(false);
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
 
   // Ensure clean initial state (no starter sample mock print jobs)
@@ -163,17 +171,37 @@ export default function App() {
     { id: 'pur-1', supplierName: 'અમદાવાદ સ્ટેશનરી માર્ટ', billNo: 'ASM-8821', date: '10/09/2026', totalAmount: 7750, itemsCount: 45, paymentStatus: 'Paid' }
   ]);
 
+  // Rojmel (Daily Income/Expense) & Khata (Customer & Supplier Ledger) ERP States
+  const [showRojmelModal, setShowRojmelModal] = useState<boolean>(false);
+  const [showStoreSettingsModal, setShowStoreSettingsModal] = useState<boolean>(false);
+  const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
+  const [rojmelEntries, setRojmelEntries] = useFirebaseSync<RojmelEntry[]>('rojmel', 'prisha_rojmel_v1', []);
+  const [khataAccounts, setKhataAccounts] = useFirebaseSync<KhataAccount[]>('khata_accounts', 'prisha_khata_accounts_v1', [
+    {
+      id: 'khata-demo-1',
+      type: 'customer',
+      name: 'રમેશભાઈ પટેલ',
+      phone: '9876543210',
+      balance: 450,
+      totalGiven: 1200,
+      totalReceived: 750,
+      lastTransactionDate: '12/09/2026',
+      notes: 'નિયમિત ગ્રાહક'
+    }
+  ]);
+  const [khataTransactions, setKhataTransactions] = useFirebaseSync<KhataTransaction[]>('khata_tx', 'prisha_khata_tx_v1', []);
+
   // Search & Filter Category
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
 
-  // Auto ERP Calculations
+  // Auto ERP Real-time Calculations (100% NaN-proof)
   const now = new Date();
-  const getStartOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const getStartOfWeek = (d) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return getStartOfDay(x); };
-  const getStartOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1).getTime();
-  const getStartOfYear = (d) => new Date(d.getFullYear(), 0, 1).getTime();
+  const getStartOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const getStartOfWeek = (d: Date) => { const x = new Date(d); x.setDate(x.getDate() - x.getDay()); return getStartOfDay(x); };
+  const getStartOfMonth = (d: Date) => new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+  const getStartOfYear = (d: Date) => new Date(d.getFullYear(), 0, 1).getTime();
 
   let calcTodaySales = 0;
   let calcWeekSales = 0;
@@ -182,27 +210,45 @@ export default function App() {
 
   orders.forEach(o => {
     let time = 0;
-    if (o.id.startsWith('ord-')) {
+    if (o && o.id && typeof o.id === 'string' && o.id.startsWith('ord-')) {
       const parts = o.id.split('-');
-      if (parts[1]) time = parseInt(parts[1]);
+      if (parts[1]) time = parseInt(parts[1], 10);
     }
-    if (!time) time = now.getTime(); // fallback
+    if (!time || isNaN(time)) time = now.getTime(); // fallback
 
-    if (time >= getStartOfDay(now)) calcTodaySales += o.total;
-    if (time >= getStartOfWeek(now)) calcWeekSales += o.total;
-    if (time >= getStartOfMonth(now)) calcMonthSales += o.total;
-    if (time >= getStartOfYear(now)) calcYearSales += o.total;
+    const orderTotal = Number(o.total || 0);
+    if (!isNaN(orderTotal) && orderTotal > 0) {
+      if (time >= getStartOfDay(now)) calcTodaySales += orderTotal;
+      if (time >= getStartOfWeek(now)) calcWeekSales += orderTotal;
+      if (time >= getStartOfMonth(now)) calcMonthSales += orderTotal;
+      if (time >= getStartOfYear(now)) calcYearSales += orderTotal;
+    }
   });
 
-  const calcStockValue = posItems.reduce((acc, item) => {
-    return acc + (Number(item.stock || 0) * Number(item.costPrice || 0));
+  // Purchase/Cost Stock Value (ખરીદ મૂલ્ય) & Selling Stock Value (વેચાણ મૂલ્ય / MRP)
+  const calcCostStockValue = posItems.reduce((acc, item) => {
+    const stock = Number(item.stock || 0);
+    const cost = Number(item.costPrice || 0);
+    return acc + (isNaN(stock) || isNaN(cost) ? 0 : stock * cost);
   }, 0);
 
-  const displayTodaySales = calcTodaySales + (stats.correctionDaily || 0);
-  const displayWeekSales = calcWeekSales + (stats.correctionWeekly || 0);
-  const displayMonthSales = calcMonthSales + (stats.correctionMonthly || 0);
-  const displayYearSales = calcYearSales + (stats.correctionYearly || 0);
-  const displayStockValue = calcStockValue + (stats.correctionStockVal || 0);
+  const calcSellingStockValue = posItems.reduce((acc, item) => {
+    const stock = Number(item.stock || 0);
+    const price = Number(item.price || item.mrp || 0);
+    return acc + (isNaN(stock) || isNaN(price) ? 0 : stock * price);
+  }, 0);
+
+  const calcTotalStockUnits = posItems.reduce((acc, item) => {
+    const stock = Number(item.stock || 0);
+    return acc + (isNaN(stock) ? 0 : stock);
+  }, 0);
+
+  const displayTodaySales = (isNaN(calcTodaySales) ? 0 : calcTodaySales) + (Number(stats?.correctionDaily) || 0);
+  const displayWeekSales = (isNaN(calcWeekSales) ? 0 : calcWeekSales) + (Number(stats?.correctionWeekly) || 0);
+  const displayMonthSales = (isNaN(calcMonthSales) ? 0 : calcMonthSales) + (Number(stats?.correctionMonthly) || 0);
+  const displayYearSales = (isNaN(calcYearSales) ? 0 : calcYearSales) + (Number(stats?.correctionYearly) || 0);
+  const displayCostStockValue = (isNaN(calcCostStockValue) ? 0 : calcCostStockValue) + (Number(stats?.correctionStockVal) || 0);
+  const displaySellingStockValue = isNaN(calcSellingStockValue) ? 0 : calcSellingStockValue;
 
 
   // Customer Shopping Cart & UI State
@@ -530,16 +576,21 @@ export default function App() {
     showToast('🗑️ આઇટમ કાર્ટમાંથી દૂર કરી.');
   };
 
-  // SEQUENTIAL ORDER INVOICE ID GENERATOR (Strictly sequential: prisha000001, prisha000002...)
+  // SEQUENTIAL ORDER INVOICE ID GENERATOR (Configurable prefix + sequential series)
   const getNextOrderNumber = (): string => {
     const seqKey = 'prisha_order_seq_v4';
     let currentSeq = Number(localStorage.getItem(seqKey));
     if (!currentSeq || isNaN(currentSeq) || currentSeq < 1) {
-      currentSeq = Math.max(orders.length + 1, 1);
+      currentSeq = storeSettings.nextInvoiceSeq || Math.max(orders.length + 1, 1);
     }
     const nextSeq = currentSeq + 1;
     localStorage.setItem(seqKey, String(nextSeq));
-    return `prisha${String(currentSeq).padStart(6, '0')}`;
+    
+    // Auto-update storeSettings next sequence
+    setStoreSettings(prev => ({ ...prev, nextInvoiceSeq: nextSeq }));
+
+    const prefix = storeSettings.invoicePrefix?.trim() || 'prisha';
+    return `${prefix}${String(currentSeq).padStart(6, '0')}`;
   };
 
   // CUSTOMER CONFIRM ORDER: Instant On-Screen Success & Sequential Invoice
@@ -1496,63 +1547,40 @@ export default function App() {
             </div>
           )}
 
-          {/* PROMO HERO BANNER WITH ADMIN UPLOAD OPTION */}
-          <div className="relative rounded-2xl bg-gradient-to-r from-[#0B1E48] via-[#1E3A8A] to-[#0B1E48] text-white p-5 sm:p-7 shadow-md overflow-hidden border border-blue-900">
-            {storeSettings.bannerImageUrl ? (
-              <div className="absolute inset-0 z-0">
-                <img src={storeSettings.bannerImageUrl} alt="Banner" className="w-full h-full object-cover opacity-35" />
-                <div className="absolute inset-0 bg-gradient-to-r from-[#0B1E48]/90 via-[#0B1E48]/60 to-transparent" />
-              </div>
-            ) : null}
-
-            <div className="relative z-10 max-w-2xl space-y-2">
-              <span className="inline-flex items-center gap-1.5 bg-orange-500 text-black text-[11px] font-black px-3 py-0.5 rounded-full uppercase tracking-wider">
-                <Sparkles className="w-3 h-3" /> {storeSettings.storeNameGu}
-              </span>
-              <h2 className="text-xl sm:text-3xl font-black tracking-tight text-white leading-tight">
-                {storeSettings.bannerTitle}
-              </h2>
-              <p className="text-xs sm:text-sm text-neutral-200 font-medium">
-                {storeSettings.bannerSubtitle}
-              </p>
-
-              {/* Quick perks */}
-              <div className="flex flex-wrap gap-2 pt-2">
-                <span className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1">
-                  ⚡ ઈન્સ્ટન્ટ ઓનલાઇન રસીદ & બિલ
-                </span>
-                <span className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1">
-                  📱 ડાયરેક્ટ UPI QR પેમેન્ટ
-                </span>
-                <span className="bg-white/10 text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1">
-                  🏢 CSC ઓથોરાઇઝ્ડ સેન્ટર
-                </span>
-              </div>
+          {/* ROTATING BANNER SLIDER & STORIES WIDGET (Configured in Store Settings) */}
+          {storeSettings.showBannerSlider !== false && (
+            <div className="relative">
+              <BannerSlider
+                slides={storeSettings.bannerSlides}
+                defaultImageUrl={storeSettings.bannerImageUrl}
+                defaultTitle={storeSettings.bannerTitle}
+                defaultSubtitle={storeSettings.bannerSubtitle}
+                storeNameGu={storeSettings.storeNameGu}
+                intervalSeconds={storeSettings.autoSlideBannerInterval || 4}
+              />
+              {isAdminUnlocked && (
+                <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowStoreSettingsModal(true)}
+                    className="bg-black/80 hover:bg-black text-amber-300 border border-amber-400/80 px-2.5 py-1 rounded-lg text-xs font-black shadow flex items-center gap-1 cursor-pointer"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-orange-400" />
+                    <span>દુકાન સેટિંગ્સ & બેનર</span>
+                  </button>
+                </div>
+              )}
             </div>
+          )}
 
-            {/* Admin Banner Edit Trigger */}
-            {isAdminUnlocked && (
-              <div className="absolute top-3 right-3 z-20 flex items-center gap-2">
-                <label className="bg-white/90 hover:bg-white text-black px-2.5 py-1 rounded-lg text-xs font-black shadow cursor-pointer flex items-center gap-1">
-                  <Camera className="w-3.5 h-3.5 text-orange-600" />
-                  <span>બેનર ફોટો બદલો</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={e => handleImageFileUpload(e, 'bannerImage')}
-                  />
-                </label>
-                <button
-                  onClick={() => setShowBannerEditModal(true)}
-                  className="bg-black/80 hover:bg-black text-white px-2.5 py-1 rounded-lg text-xs font-black shadow flex items-center gap-1"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-orange-400" />
-                  <span>ટેક્સ્ટ બદલો</span>
-                </button>
-              </div>
-            )}
-          </div>
+          {/* INSTAGRAM / WHATSAPP STYLE STORE STORIES WIDGET */}
+          {storeSettings.showStoriesWidget !== false && (
+            <StoryWidget
+              stories={storeSettings.storeStories || []}
+              isAdminUnlocked={isAdminUnlocked}
+              onOpenStoreSettings={() => setShowStoreSettingsModal(true)}
+            />
+          )}
 
           {/* SEARCH & CATEGORY FILTER BAR */}
           <div className="bg-white p-3 sm:p-4 rounded-xl border border-neutral-300 shadow-2xs space-y-3">
@@ -1856,6 +1884,17 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* DAILY SALES, PROFIT & STOCK REPORT BUTTON */}
+              <button
+                type="button"
+                onClick={() => setShowDailyReportModal(true)}
+                className="bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-800 hover:to-indigo-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-blue-400"
+                title="આજનું વેચાણ, ચોખ્ખો નફો, માર્જિન, અને હાજર સ્ટોકનો વિગતવાર દૈનિક રિપોર્ટ જુઓ"
+              >
+                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                <span>📈 દૈનિક રિપોર્ટ (Daily ERP)</span>
+              </button>
+
               {/* ONLINE PRINT JOBS ADMIN BUTTON */}
               <button
                 type="button"
@@ -1947,110 +1986,125 @@ export default function App() {
             </div>
           </div>
 
-          {/* LIVE STOCK & CATEGORY ANALYTICS BAR */}
+          {/* LIVE STOCK & CATEGORY ANALYTICS BAR (REAL-TIME COST VS SELLING PRICE) */}
           {(() => {
             const totalCategories = new Set(posItems.map(p => p.category)).size;
             const totalItemsCount = posItems.length;
-            const totalStockUnits = posItems.reduce((acc, p) => acc + Number(p.stock || 0), 0);
-            const totalSellingPriceValue = posItems.reduce((acc, p) => acc + (Number(p.stock || 0) * Number(p.price || 0)), 0);
+            const projectedProfit = Math.max(0, displaySellingStockValue - displayCostStockValue);
+
             return (
-              <div className="bg-gradient-to-r from-blue-900 via-indigo-900 to-[#0B1E48] text-white p-4 rounded-2xl shadow-md flex flex-wrap items-center justify-between gap-4 border border-blue-800">
+              <div className="bg-gradient-to-r from-blue-950 via-indigo-950 to-[#0B1E48] text-white p-4 rounded-2xl shadow-md flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border border-blue-800">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-orange-500 text-black flex items-center justify-center font-black">
-                    <Package className="w-5 h-5" />
+                  <div className="w-11 h-11 rounded-xl bg-orange-500 text-black flex items-center justify-center font-black shrink-0 shadow-sm">
+                    <Package className="w-6 h-6" />
                   </div>
                   <div>
-                    <h3 className="text-sm font-black text-white">
-                      📊 દુકાન લાઈવ સ્ટોક અને કેટેગરી ટ્રેકિંગ (Live Stock Summary)
+                    <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                      <span>📊 દુકાન લાઈવ સ્ટોક & માલ વિગત</span>
+                      <span className="bg-emerald-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full">
+                        ઓટો અપડેટ
+                      </span>
                     </h3>
                     <p className="text-[11px] text-blue-200 font-bold">
-                      દુકાનની તમામ આઇટમ્સ, કેટેગરી અને વેચાણ કિંમતનું રિયલ-ટાઇમ ટ્રેકિંગ
+                      ખરીદ ભાવ, વેચાણ ભાવ (MRP), હાજર સ્ટોક નંગ અને અંદાજિત નફો રિયલ-ટાઇમ
                     </p>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs w-full sm:w-auto">
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs w-full lg:w-auto">
                   <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
                     <span className="block text-[10px] text-blue-200 font-bold">કુલ કેટેગરી</span>
-                    <span className="text-base font-black text-orange-400">{totalCategories}</span>
+                    <span className="text-sm sm:text-base font-black text-orange-400">{totalCategories}</span>
                   </div>
                   <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
-                    <span className="block text-[10px] text-blue-200 font-bold">કુલ વસ્તુઓ (Items)</span>
-                    <span className="text-base font-black text-white">{totalItemsCount}</span>
+                    <span className="block text-[10px] text-blue-200 font-bold">કુલ વસ્તુઓ</span>
+                    <span className="text-sm sm:text-base font-black text-white">{totalItemsCount}</span>
                   </div>
                   <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
                     <span className="block text-[10px] text-blue-200 font-bold">હાજર સ્ટોક (નંગ)</span>
-                    <span className="text-base font-black text-emerald-400">{totalStockUnits} નંગ</span>
+                    <span className="text-sm sm:text-base font-black text-emerald-400">{calcTotalStockUnits} નંગ</span>
                   </div>
                   <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center">
-                    <span className="block text-[10px] text-blue-200 font-bold">કુલ વેચાણ મૂલ્ય</span>
-                    <span className="text-base font-black text-amber-300">₹{totalSellingPriceValue.toFixed(2)}</span>
+                    <span className="block text-[10px] text-blue-200 font-bold">કુલ ખરીદ મૂલ્ય</span>
+                    <span className="text-sm sm:text-base font-black text-rose-300">₹{displayCostStockValue.toFixed(2)}</span>
+                  </div>
+                  <div className="bg-white/10 px-3 py-2 rounded-xl border border-white/20 text-center col-span-2 sm:col-span-1">
+                    <span className="block text-[10px] text-blue-200 font-bold">કુલ વેચાણ (MRP)</span>
+                    <span className="text-sm sm:text-base font-black text-amber-300">₹{displaySellingStockValue.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
             );
           })()}
 
-                    {/* REAL-TIME ERP DASHBOARD */}
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          {/* REAL-TIME ERP DASHBOARD (6 RESPONSIVE STAT CARDS) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div
               onClick={() => {
-                const val = prompt('દૈનિક વેચાણ (Today) કરેક્શન/સુધારો (+/-):', (stats.correctionDaily || 0).toString());
+                const val = prompt('દૈનિક વેચાણ (Today) કરેક્શન/સુધારો (+/-):', (stats?.correctionDaily || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionDaily: Number(val) || 0 }));
               }}
               className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-orange-500 transition-colors"
             >
               <p className="text-[10px] font-bold text-neutral-500">💰 આજનું વેચાણ</p>
-              <h3 className="text-sm font-black text-orange-600">₹{displayTodaySales.toFixed(2)}</h3>
+              <h3 className="text-sm sm:text-base font-black text-orange-600">₹{(displayTodaySales || 0).toFixed(2)}</h3>
               <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
             </div>
 
             <div
               onClick={() => {
-                const val = prompt('અઠવાડિયાનું વેચાણ (Weekly) કરેક્શન/સુધારો (+/-):', (stats.correctionWeekly || 0).toString());
+                const val = prompt('અઠવાડિયાનું વેચાણ (Weekly) કરેક્શન/સુધારો (+/-):', (stats?.correctionWeekly || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionWeekly: Number(val) || 0 }));
               }}
               className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-blue-500 transition-colors"
             >
               <p className="text-[10px] font-bold text-neutral-500">📅 આ અઠવાડિયાનું વેચાણ</p>
-              <h3 className="text-sm font-black text-blue-700">₹{displayWeekSales.toFixed(2)}</h3>
+              <h3 className="text-sm sm:text-base font-black text-blue-700">₹{(displayWeekSales || 0).toFixed(2)}</h3>
               <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
             </div>
 
             <div
               onClick={() => {
-                const val = prompt('મહિનાનું વેચાણ (Monthly) કરેક્શન/સુધારો (+/-):', (stats.correctionMonthly || 0).toString());
+                const val = prompt('મહિનાનું વેચાણ (Monthly) કરેક્શન/સુધારો (+/-):', (stats?.correctionMonthly || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionMonthly: Number(val) || 0 }));
               }}
               className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-emerald-500 transition-colors"
             >
               <p className="text-[10px] font-bold text-neutral-500">📈 આ મહિનાનું વેચાણ</p>
-              <h3 className="text-sm font-black text-emerald-600">₹{displayMonthSales.toFixed(2)}</h3>
+              <h3 className="text-sm sm:text-base font-black text-emerald-600">₹{(displayMonthSales || 0).toFixed(2)}</h3>
               <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
             </div>
 
             <div
               onClick={() => {
-                const val = prompt('આખા વર્ષનું વેચાણ (Yearly) કરેક્શન/સુધારો (+/-):', (stats.correctionYearly || 0).toString());
+                const val = prompt('આખા વર્ષનું વેચાણ (Yearly) કરેક્શન/સુધારો (+/-):', (stats?.correctionYearly || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionYearly: Number(val) || 0 }));
               }}
               className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-purple-500 transition-colors"
             >
               <p className="text-[10px] font-bold text-neutral-500">🏆 વાર્ષિક વેચાણ</p>
-              <h3 className="text-sm font-black text-purple-700">₹{displayYearSales.toFixed(2)}</h3>
+              <h3 className="text-sm sm:text-base font-black text-purple-700">₹{(displayYearSales || 0).toFixed(2)}</h3>
               <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
             </div>
 
             <div
               onClick={() => {
-                const val = prompt('કુલ સ્ટોક માલની કિંમત કરેક્શન (+/-):', (stats.correctionStockVal || 0).toString());
+                const val = prompt('કુલ ખરીદ સ્ટોક મૂલ્ય કરેક્શન (+/-):', (stats?.correctionStockVal || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionStockVal: Number(val) || 0 }));
               }}
-              className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-red-500 transition-colors"
+              className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-rose-500 transition-colors"
             >
-              <p className="text-[10px] font-bold text-neutral-500">📦 કુલ માલ / સ્ટોક મૂલ્ય</p>
-              <h3 className="text-sm font-black text-red-600">₹{displayStockValue.toFixed(2)}</h3>
+              <p className="text-[10px] font-bold text-neutral-500">🛒 કુલ ખરીદ માલ મૂલ્ય</p>
+              <h3 className="text-sm sm:text-base font-black text-rose-600">₹{(displayCostStockValue || 0).toFixed(2)}</h3>
               <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
+            </div>
+
+            <div
+              className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs"
+            >
+              <p className="text-[10px] font-bold text-neutral-500">🏷️ કુલ વેચાણ મૂલ્ય (MRP)</p>
+              <h3 className="text-sm sm:text-base font-black text-emerald-700">₹{(displaySellingStockValue || 0).toFixed(2)}</h3>
+              <span className="text-[9px] text-emerald-600 font-bold">નફો: +₹{Math.max(0, displaySellingStockValue - displayCostStockValue).toFixed(2)}</span>
             </div>
           </div>
 
@@ -3225,6 +3279,40 @@ export default function App() {
             </div>
 
             <div className="space-y-2.5 text-xs font-bold">
+              <div className="grid grid-cols-2 gap-2 bg-blue-50/60 p-2.5 rounded-xl border border-blue-200">
+                <div>
+                  <label className="block text-blue-950 mb-1 flex items-center gap-1">
+                    <span>🧾 બિલ નંબર (Invoice No):</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editingOrder.invoiceNo}
+                    onChange={e =>
+                      setEditingOrder({ ...editingOrder, invoiceNo: e.target.value.trim() })
+                    }
+                    className="w-full p-2 border border-blue-400 bg-white rounded-lg font-mono font-black text-blue-900 outline-none focus:border-blue-700"
+                    placeholder="દા.ત. prisha000001"
+                  />
+                  <span className="text-[9px] text-blue-700 font-medium">બિલ નંબર બદલી શકાય છે</span>
+                </div>
+
+                <div>
+                  <label className="block text-blue-950 mb-1 flex items-center gap-1">
+                    <span>📅 તારીખ & સમય (Date):</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editingOrder.date}
+                    onChange={e =>
+                      setEditingOrder({ ...editingOrder, date: e.target.value })
+                    }
+                    className="w-full p-2 border border-blue-400 bg-white rounded-lg font-mono font-bold text-neutral-800 outline-none focus:border-blue-700 text-xs"
+                    placeholder="DD/MM/YYYY HH:MM"
+                  />
+                  <span className="text-[9px] text-blue-700 font-medium">તારીખ બદલી શકાય છે</span>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-neutral-700 mb-1">ગ્રાહકનું નામ:</label>
                 <input
@@ -3407,6 +3495,23 @@ export default function App() {
           isOpen={showMultiPlatformSyncModal}
           onClose={() => setShowMultiPlatformSyncModal(false)}
           printJobCount={printJobs.length}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 23. DAILY SALES, PROFIT & STOCK ERP REPORT MODAL */}
+      {/* ========================================================================= */}
+      {showDailyReportModal && (
+        <DailyReportModal
+          orders={orders}
+          posItems={posItems}
+          expenses={expenses}
+          storeSettings={storeSettings}
+          onClose={() => setShowDailyReportModal(false)}
+          onOpenInvoice={ord => {
+            setActiveInvoiceOrder(ord);
+            setIsSuccessModal(false);
+          }}
         />
       )}
 

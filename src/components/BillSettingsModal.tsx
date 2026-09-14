@@ -53,7 +53,9 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
         storeNameGu: settings.storeNameGu || '',
         tagline: settings.tagline || '',
         ownerName: settings.ownerName || '',
-        phone: settings.phone || '',
+        phone: settings.phone || '8140430395',
+        whatsappNumber: settings.whatsappNumber || '8140430395',
+        email: settings.email || 'prishastationry@gmail.com',
         gstNumber: settings.gstNumber || '',
         panNumber: settings.panNumber || 'BTQPC3756D',
         address: settings.address || '',
@@ -65,20 +67,41 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
         invoiceFooterNote: settings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર! માલ પરત લેવામાં આવશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે.',
         billFraudWarning: settings.billFraudWarning || '⚠️ સાવચેતી: કોઈપણ ઓનલાઇન છેતરપિંડીથી બચવા ફક્ત આ જ સત્તાવાર UPI QR / પ્રિષા સ્ટેશનરી પર પેમેન્ટ કરવું.',
         billSpecialOffer: settings.billSpecialOffer || '🎉 આ બિલ પર આગામી ખરીદીમાં વિશેષ ૫% ડિસ્કાઉન્ટ મેળવો!',
+        billShowPan: settings.billShowPan !== false,
         billShowGst: settings.billShowGst !== false,
         billShowQr: settings.billShowQr !== false,
+        billShowUpi: settings.billShowUpi !== false,
+        billShowAddress: settings.billShowAddress !== false,
+        billShowHelpline: settings.billShowHelpline !== false,
         billShowLogos: settings.billShowLogos !== false,
-        email: settings.email || 'prishastationry@gmail.com',
+        billShowTerms: settings.billShowTerms !== false,
+        billShowTagline: settings.billShowTagline !== false,
+        billShowOwnerName: settings.billShowOwnerName !== false,
+        billShowHsnColumn: settings.billShowHsnColumn !== false,
+        billShowWords: settings.billShowWords !== false,
+        billShowBankDetails: settings.billShowBankDetails || false,
+        billShowWatermark: settings.billShowWatermark !== false,
+        billWatermarkType: settings.billWatermarkType || 'both',
+        billWatermarkOpacity: settings.billWatermarkOpacity ?? 30,
+        billWatermarkText: settings.billWatermarkText || 'PRISHA STATIONERY & XEROX (THARAD)',
         hideUpiOnBill: settings.hideUpiOnBill || false,
         showMrpOnStore: settings.showMrpOnStore !== false,
         showDiscountOnStore: settings.showDiscountOnStore !== false,
         billShowFraudWarning: settings.billShowFraudWarning !== false,
         billShowSpecialOffer: settings.billShowSpecialOffer !== false,
         billTermsNote: settings.billTermsNote || 'કમ્પ્યુટર જનરેટેડ ટેક્સ ઇન્વોઇસ. ખરીદેલ માલ પરત લેવાશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે. વિવાદનું સ્થળ: થરાદ કોર્ટ.',
+        qrCodeMode: settings.qrCodeMode || 'dynamic',
         signatureUrl: settings.signatureUrl || '',
         billShowSignature: settings.billShowSignature !== false,
         signatoryTitle: settings.signatoryTitle || 'For, PRISHA STATIONERY & ONLINE SERVICES',
-        signatoryName: settings.signatoryName || 'Authorized Signatory / અધિકૃત સહી'
+        signatoryName: settings.signatoryName || 'Authorized Signatory / અધિકૃત સહી',
+        bankName: settings.bankName || 'State Bank of India',
+        accountNumber: settings.accountNumber || '',
+        ifscCode: settings.ifscCode || '',
+        invoicePrefix: settings.invoicePrefix || 'prisha',
+        nextInvoiceSeq: settings.nextInvoiceSeq || 1,
+        invoiceGstRate: settings.invoiceGstRate || 0,
+        invoiceDefaultHsn: settings.invoiceDefaultHsn || '4901'
       });
     }
   }, [isOpen, settings]);
@@ -226,7 +249,7 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="text-[11px] font-black text-neutral-700 block mb-1">
                   દુકાનનું અંગ્રેજી નામ (English Store Name):
@@ -255,18 +278,6 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
 
               <div>
                 <label className="text-[11px] font-black text-neutral-700 block mb-1">
-                  ટેગલાઇન / પ્રકાર (Tagline):
-                </label>
-                <input
-                  type="text"
-                  value={formData.tagline}
-                  onChange={e => setFormData({ ...formData, tagline: e.target.value })}
-                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] font-black text-neutral-700 block mb-1">
                   સંચાલકનું નામ (Owner Name):
                 </label>
                 <input
@@ -277,7 +288,7 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
                 />
               </div>
 
-              <div className="sm:col-span-2">
+              <div className="sm:col-span-3">
                 <label className="text-[11px] font-black text-neutral-700 block mb-1">
                   સંપૂર્ણ સરનામું (Address for Bill):
                 </label>
@@ -305,6 +316,65 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
 
               <div>
                 <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  GST ટેક્સ ટકાવારી (Default Tax %):
+                </label>
+                <select
+                  value={formData.invoiceGstRate || 0}
+                  onChange={e => setFormData({ ...formData, invoiceGstRate: Number(e.target.value) })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                >
+                  <option value={0}>0% (ટેક્સ મુક્ત / Exempted)</option>
+                  <option value={5}>5% GST (2.5% CGST + 2.5% SGST)</option>
+                  <option value={12}>12% GST (6% CGST + 6% SGST)</option>
+                  <option value={18}>18% GST (9% CGST + 9% SGST - સ્ટેશનરી/સેવા)</option>
+                  <option value={28}>28% GST (14% CGST + 14% SGST)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  ડિફોલ્ટ HSN/SAC કોડ (Default HSN):
+                </label>
+                <input
+                  type="text"
+                  value={formData.invoiceDefaultHsn || '4901'}
+                  onChange={e => setFormData({ ...formData, invoiceDefaultHsn: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700 font-mono"
+                  placeholder="4901 (પુસ્તકો), 9983 (Xerox/Print)"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  બિલ નંબર પ્રીફિક્સ (Invoice Prefix):
+                </label>
+                <input
+                  type="text"
+                  value={formData.invoicePrefix || 'prisha'}
+                  onChange={e => setFormData({ ...formData, invoicePrefix: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700 font-mono uppercase"
+                  placeholder="prisha અથવા INV અથવા GST"
+                />
+                <span className="text-[9.5px] text-neutral-500 font-medium">દા.ત. prisha000001 અથવા INV-2026-001</span>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  હાલનો/આગામી બિલ ક્રમાંક (Next Bill No):
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={formData.nextInvoiceSeq || 1}
+                  onChange={e => setFormData({ ...formData, nextInvoiceSeq: Math.max(1, Number(e.target.value) || 1) })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700 font-mono"
+                  placeholder="1"
+                />
+                <span className="text-[9.5px] text-neutral-500 font-medium">બિલ નંબર અહીંથી આગળ વધશે</span>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
                   PAN નંબર (PAN Number):
                 </label>
                 <input
@@ -318,7 +388,7 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
 
               <div>
                 <label className="text-[11px] font-black text-neutral-700 block mb-1">
-                  દુકાન મોબાઇલ નંબર:
+                  દુકાન કોલિંગ નંબર (Phone):
                 </label>
                 <input
                   type="text"
@@ -330,8 +400,23 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
               </div>
 
               <div>
-                <label className="text-[11px] font-black text-neutral-700 block mb-1">
-                  Gmail / ઈમેલ (Email):
+                <label className="text-[11px] font-black text-neutral-700 block mb-1 flex items-center gap-1">
+                  <span className="text-emerald-600">💬</span>
+                  <span>WhatsApp હેલ્પલાઇન નંબર:</span>
+                </label>
+                <input
+                  type="text"
+                  value={formData.whatsappNumber || ''}
+                  onChange={e => setFormData({ ...formData, whatsappNumber: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                  placeholder="8140430395"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1 flex items-center gap-1">
+                  <span className="text-red-500">📧</span>
+                  <span>Gmail / ઈમેલ (Email):</span>
                 </label>
                 <input
                   type="email"
@@ -340,6 +425,494 @@ export const BillSettingsModal: React.FC<BillSettingsModalProps> = ({
                   className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
                   placeholder="prishastationry@gmail.com"
                 />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  ટેગલાઇન / પ્રકાર (Tagline):
+                </label>
+                <input
+                  type="text"
+                  value={formData.tagline}
+                  onChange={e => setFormData({ ...formData, tagline: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                />
+              </div>
+
+              {/* Bank Details Inputs */}
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  🏛️ બેંકનું નામ (Bank Name):
+                </label>
+                <input
+                  type="text"
+                  value={formData.bankName || ''}
+                  onChange={e => setFormData({ ...formData, bankName: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                  placeholder="State Bank of India"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  💳 એકાઉન્ટ નંબર (Bank A/c No):
+                </label>
+                <input
+                  type="text"
+                  value={formData.accountNumber || ''}
+                  onChange={e => setFormData({ ...formData, accountNumber: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700 font-mono"
+                  placeholder="3958XXXXXXXX"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                  🏦 IFSC કોડ (IFSC Code):
+                </label>
+                <input
+                  type="text"
+                  value={formData.ifscCode || ''}
+                  onChange={e => setFormData({ ...formData, ifscCode: e.target.value })}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700 uppercase font-mono"
+                  placeholder="SBIN0060045"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* 1.5 ADMIN BILL DISPLAY TOGGLES (બિલમાં શું બતાવવું / છુપાવવું) */}
+          {/* ========================================================================= */}
+          <div className="bg-gradient-to-r from-blue-50 to-indigo-50/60 p-4 rounded-xl border border-blue-200 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between border-b border-blue-200 pb-2">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-blue-700" />
+                <h3 className="text-xs font-black text-blue-950 uppercase tracking-wider">
+                  બિલ વિગત કંટ્રોલ (Admin Display Toggles - શું બતાવવું / છુપાવવું)
+                </h3>
+              </div>
+              <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-md">
+                ⚡ એક ક્લિક પર ચાલુ/બંધ (Live Toggles)
+              </span>
+            </div>
+
+            <p className="text-[11px] text-neutral-600 font-medium">
+              તમે જે વિગત પર ટિકમાર્ક કરશો તે જ વિગત ગ્રાહકના બિલ અને પ્રિન્ટમાં દેખાશે. જો કોઈ વિગત ન બતાવવી હોય તો ફક્ત અનટિક કરો:
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
+              {/* Toggle GST */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowGst !== false}
+                    onChange={e => setFormData({ ...formData, billShowGst: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">GSTIN નંબર બતાવો</span>
+                </div>
+                <span className="text-[10px] font-mono text-neutral-400 font-medium">GSTIN</span>
+              </label>
+
+              {/* Toggle PAN */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowPan !== false}
+                    onChange={e => setFormData({ ...formData, billShowPan: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">PAN નંબર બતાવો</span>
+                </div>
+                <span className="text-[10px] font-mono text-neutral-400 font-medium">PAN</span>
+              </label>
+
+              {/* Toggle Payment QR */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-emerald-100 shadow-2xs hover:border-emerald-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowQr !== false}
+                    onChange={e => setFormData({ ...formData, billShowQr: e.target.checked })}
+                    className="w-4 h-4 rounded accent-emerald-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-emerald-900">પેમેન્ટ QR કોડ બતાવો</span>
+                </div>
+                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">UPI QR</span>
+              </label>
+
+              {/* Toggle UPI ID Text */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowUpi !== false}
+                    onChange={e => setFormData({ ...formData, billShowUpi: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">UPI ID લખાણ બતાવો</span>
+                </div>
+                <span className="text-[10px] font-mono text-neutral-400 font-medium">UPI ID</span>
+              </label>
+
+              {/* Toggle Address */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowAddress !== false}
+                    onChange={e => setFormData({ ...formData, billShowAddress: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">દુકાન સરનામું બતાવો</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Address</span>
+              </label>
+
+              {/* Toggle Helpline & Email */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowHelpline !== false}
+                    onChange={e => setFormData({ ...formData, billShowHelpline: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">ફોન/Email હેલ્પલાઇન</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Helpline</span>
+              </label>
+
+              {/* Toggle Tagline */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowTagline !== false}
+                    onChange={e => setFormData({ ...formData, billShowTagline: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">ટેગલાઇન & સેવાઓ</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Tagline</span>
+              </label>
+
+              {/* Toggle Owner Name */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowOwnerName !== false}
+                    onChange={e => setFormData({ ...formData, billShowOwnerName: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">સંચાલકનું નામ (Owner)</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Owner</span>
+              </label>
+
+              {/* Toggle Logos */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowLogos !== false}
+                    onChange={e => setFormData({ ...formData, billShowLogos: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">પાસપોર્ટ સાઇઝ લોગો</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Logos</span>
+              </label>
+
+              {/* Toggle Watermark */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-purple-200 shadow-2xs hover:border-purple-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowWatermark !== false}
+                    onChange={e => setFormData({ ...formData, billShowWatermark: e.target.checked })}
+                    className="w-4 h-4 rounded accent-purple-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-purple-900">સિક્યોરિટી વોટરમાર્ક</span>
+                </div>
+                <span className="text-[10px] font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">Watermark</span>
+              </label>
+
+              {/* Toggle HSN Column */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowHsnColumn !== false}
+                    onChange={e => setFormData({ ...formData, billShowHsnColumn: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">HSN/SAC કોડ કોલમ</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">HSN Code</span>
+              </label>
+
+              {/* Toggle Words */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowWords !== false}
+                    onChange={e => setFormData({ ...formData, billShowWords: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">અક્ષરે રૂપિયા (Words)</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Words</span>
+              </label>
+
+              {/* Toggle Signature */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowSignature !== false}
+                    onChange={e => setFormData({ ...formData, billShowSignature: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">અધિકૃત સહી/સ્ટેમ્પ</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Signature</span>
+              </label>
+
+              {/* Toggle Terms */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowTerms !== false}
+                    onChange={e => setFormData({ ...formData, billShowTerms: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">શરતો & નિયમો બોક્સ</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Terms</span>
+              </label>
+
+              {/* Toggle Fraud Warning */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-amber-100 shadow-2xs hover:border-amber-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowFraudWarning !== false}
+                    onChange={e => setFormData({ ...formData, billShowFraudWarning: e.target.checked })}
+                    className="w-4 h-4 rounded accent-amber-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-amber-900">છેતરપિંડી સાવચેતી</span>
+                </div>
+                <span className="text-[10px] text-amber-600 font-medium">Security</span>
+              </label>
+
+              {/* Toggle Special Offer */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowSpecialOffer !== false}
+                    onChange={e => setFormData({ ...formData, billShowSpecialOffer: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">૫% ડિસ્કાઉન્ટ ઓફર</span>
+                </div>
+                <span className="text-[10px] text-blue-600 font-medium">Offer</span>
+              </label>
+
+              {/* Toggle Bank Details */}
+              <label className="flex items-center justify-between p-2.5 bg-white rounded-lg border border-blue-100 shadow-2xs hover:border-blue-400 cursor-pointer transition-colors">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={formData.billShowBankDetails === true}
+                    onChange={e => setFormData({ ...formData, billShowBankDetails: e.target.checked })}
+                    className="w-4 h-4 rounded accent-blue-600 cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-neutral-800">બેંક ખાતા વિગતો</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-medium">Bank A/c</span>
+              </label>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* 1.8 WATERMARK SECURITY & OPACITY SETTINGS (વોટરમાર્ક કંટ્રોલ) */}
+          {/* ========================================================================= */}
+          <div className="bg-white p-4 rounded-xl border border-purple-200 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b pb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🛡️</span>
+                <div>
+                  <h3 className="text-xs font-black text-purple-950 uppercase tracking-wider">
+                    બિલ પાછળ વોટરમાર્ક & પારદર્શકતા (Watermark Security & Opacity %)
+                  </h3>
+                  <p className="text-[10px] text-neutral-500 font-bold">
+                    બિલની અસલિયત સાબિત કરવા પાછળ દુકાનનું નામ અથવા લોગો 30% વિઝિબલ રાખવાનો કંટ્રોલ
+                  </p>
+                </div>
+              </div>
+              <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-purple-900">
+                <input
+                  type="checkbox"
+                  checked={formData.billShowWatermark !== false}
+                  onChange={e => setFormData({ ...formData, billShowWatermark: e.target.checked })}
+                  className="rounded accent-purple-600 w-4 h-4"
+                />
+                <span>વોટરમાર્ક ચાલુ રાખો</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-3">
+                {/* Watermark Type Selector */}
+                <div>
+                  <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                    વોટરમાર્કનો પ્રકાર (Watermark Type):
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, billWatermarkType: 'both' })}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold border cursor-pointer ${
+                        formData.billWatermarkType === 'both' || !formData.billWatermarkType
+                          ? 'bg-purple-700 text-white border-purple-800 shadow-2xs'
+                          : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100'
+                      }`}
+                    >
+                      👑 નામ + લોગો બંને
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, billWatermarkType: 'name' })}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold border cursor-pointer ${
+                        formData.billWatermarkType === 'name'
+                          ? 'bg-purple-700 text-white border-purple-800 shadow-2xs'
+                          : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100'
+                      }`}
+                    >
+                      ✍️ ફક્ત નામ (Text)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, billWatermarkType: 'logo' })}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold border cursor-pointer ${
+                        formData.billWatermarkType === 'logo'
+                          ? 'bg-purple-700 text-white border-purple-800 shadow-2xs'
+                          : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100'
+                      }`}
+                    >
+                      🖼️ ફક્ત લોગો (Logo)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Watermark Text */}
+                <div>
+                  <label className="text-[11px] font-black text-neutral-700 block mb-1">
+                    વોટરમાર્ક લખાણ (Watermark Text):
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.billWatermarkText || ''}
+                    onChange={e => setFormData({ ...formData, billWatermarkText: e.target.value })}
+                    className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-purple-700 uppercase"
+                    placeholder="PRISHA STATIONERY & XEROX (THARAD)"
+                  />
+                </div>
+
+                {/* Watermark Opacity Slider (% Control) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-black text-neutral-700">
+                      પારદર્શકતા / વિઝિબિલિટી (Opacity %):
+                    </label>
+                    <span className="text-xs font-black text-purple-800 bg-purple-100 px-2 py-0.5 rounded-md">
+                      {formData.billWatermarkOpacity ?? 30}% વિઝિબલ
+                    </span>
+                  </div>
+
+                  <input
+                    type="range"
+                    min="5"
+                    max="60"
+                    step="5"
+                    value={formData.billWatermarkOpacity ?? 30}
+                    onChange={e => setFormData({ ...formData, billWatermarkOpacity: Number(e.target.value) })}
+                    className="w-full accent-purple-700 cursor-pointer"
+                  />
+
+                  {/* Quick percentage buttons */}
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="text-[10px] text-neutral-500 font-bold">ઝડપી પસંદગી:</span>
+                    {[10, 20, 30, 40, 50].map(pct => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, billWatermarkOpacity: pct })}
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded border cursor-pointer ${
+                          formData.billWatermarkOpacity === pct
+                            ? 'bg-purple-800 text-white border-purple-800'
+                            : 'bg-neutral-100 text-neutral-700 border-neutral-200 hover:bg-neutral-200'
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Watermark Preview Sample Box */}
+              <div className="p-3 bg-neutral-100/70 rounded-xl border border-neutral-300 flex flex-col items-center justify-center text-center space-y-2 relative overflow-hidden min-h-[160px]">
+                <div className="text-[10px] font-black text-neutral-500 uppercase tracking-wider">
+                  લાઇવ વોટરમાર્ક પ્રિવ્યુ (Live Sample Preview)
+                </div>
+
+                {/* Simulated Watermark in Background */}
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none transition-opacity"
+                  style={{ opacity: (formData.billWatermarkOpacity ?? 30) / 100 }}
+                >
+                  <div className="transform -rotate-15 flex flex-col items-center justify-center p-2 text-center">
+                    {(formData.billWatermarkType === 'logo' || formData.billWatermarkType === 'both' || !formData.billWatermarkType) && (
+                      <img
+                        src={formData.leftLogoUrl || getDefaultLeftLogoSvg()}
+                        alt="Watermark Preview"
+                        className="w-14 h-14 object-contain grayscale mb-1"
+                      />
+                    )}
+                    {(formData.billWatermarkType === 'name' || formData.billWatermarkType === 'both' || !formData.billWatermarkType) && (
+                      <div className="text-sm font-black tracking-widest text-black uppercase font-mono leading-tight">
+                        {formData.billWatermarkText || formData.storeNameEn || 'PRISHA STATIONERY & XEROX'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Simulated Invoice Table on top */}
+                <div className="relative z-10 w-full bg-white/90 p-2 rounded border border-neutral-300 text-[10px] shadow-xs pointer-events-none">
+                  <div className="flex justify-between font-bold border-b pb-1">
+                    <span>૧. Xerox A4 B/W (50 Qty)</span>
+                    <span>₹100.00</span>
+                  </div>
+                  <div className="flex justify-between font-bold pt-1 text-emerald-800">
+                    <span>કુલ રકમ:</span>
+                    <span>₹100.00 [PAID]</span>
+                  </div>
+                </div>
+
+                <div className="text-[9.5px] text-neutral-600 font-bold z-10">
+                  {formData.billShowWatermark !== false
+                    ? `🛡️ વોટરમાર્ક ${formData.billWatermarkOpacity ?? 30}% ની સાથે બિલમાં આ જ રીતે પાછળ દેખાશે.`
+                    : '⚠️ વોટરમાર્ક હાલ બંધ (Unchecked) કરેલ છે.'}
+                </div>
               </div>
             </div>
           </div>

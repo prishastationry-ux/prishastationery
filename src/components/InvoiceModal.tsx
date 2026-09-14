@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
   generateUpiQrDataUrl,
+  getImmediateQrFallbackUrl,
   getDefaultLeftLogoSvg,
   getDefaultRightLogoSvg,
   numberToWordsINR
@@ -27,16 +28,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
   const billContentRef = useRef<HTMLDivElement>(null);
 
-  // Generate Automatic Dynamic UPI Payment QR Code
+  // Generate Automatic Dynamic UPI Payment QR Code with exact bill amount
   useEffect(() => {
     let isMounted = true;
     generateUpiQrDataUrl(
-      storeSettings.upiId,
-      storeSettings.payeeName || storeSettings.storeNameEn,
+      storeSettings.upiId || '8140430395@apl',
+      storeSettings.payeeName || storeSettings.storeNameEn || 'PRISHA STATIONERY',
       order.total,
       order.invoiceNo
     ).then(url => {
-      if (isMounted) {
+      if (isMounted && url) {
         setUpiQrDataUrl(url);
       }
     });
@@ -45,18 +46,46 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     };
   }, [storeSettings.upiId, storeSettings.payeeName, storeSettings.storeNameEn, order.total, order.invoiceNo]);
 
-  // Determine effective logos and QR code
+  // Determine effective logos and QR code (with guaranteed instant fallback so QR is NEVER missing)
   const effectiveLeftLogo = storeSettings.leftLogoUrl || getDefaultLeftLogoSvg();
   const effectiveRightLogo = storeSettings.rightLogoUrl || getDefaultRightLogoSvg();
-  const effectiveQrCode = storeSettings.customQrUrl || upiQrDataUrl;
+  const fallbackImmediateQr = getImmediateQrFallbackUrl(
+    storeSettings.upiId || '8140430395@apl',
+    storeSettings.payeeName || storeSettings.storeNameEn || 'PRISHA STATIONERY',
+    order.total,
+    order.invoiceNo
+  );
+  const effectiveQrCode = (storeSettings.qrCodeMode === 'custom' && storeSettings.customQrUrl)
+    ? storeSettings.customQrUrl
+    : (upiQrDataUrl || fallbackImmediateQr);
   const words = numberToWordsINR(order.total);
+
+  // Visibility Flags from Admin Toggles
+  const showLogos = storeSettings.billShowLogos !== false;
+  const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill;
+  const showUpi = storeSettings.billShowUpi !== false && !storeSettings.hideUpiOnBill;
+  const showGst = storeSettings.billShowGst !== false && Boolean(storeSettings.gstNumber);
+  const showPan = storeSettings.billShowPan !== false && Boolean(storeSettings.panNumber);
+  const showAddress = storeSettings.billShowAddress !== false && Boolean(storeSettings.address);
+  const showHelpline = storeSettings.billShowHelpline !== false;
+  const showTagline = storeSettings.billShowTagline !== false && Boolean(storeSettings.tagline);
+  const showOwnerName = storeSettings.billShowOwnerName !== false && Boolean(storeSettings.ownerName);
+  const showHsnColumn = storeSettings.billShowHsnColumn !== false;
+  const showWords = storeSettings.billShowWords !== false;
+  const showBankDetails = storeSettings.billShowBankDetails === true && Boolean(storeSettings.accountNumber);
+  const showSignature = storeSettings.billShowSignature !== false;
+  const showTerms = storeSettings.billShowTerms !== false;
+  const showFraud = storeSettings.billShowFraudWarning !== false;
+  const showOffer = storeSettings.billShowSpecialOffer !== false;
+
+  // Watermark Settings (~30% default opacity control)
+  const showWatermark = storeSettings.billShowWatermark !== false;
+  const watermarkOpacity = (storeSettings.billWatermarkOpacity ?? 30) / 100;
+  const watermarkText = storeSettings.billWatermarkText || storeSettings.storeNameEn || 'PRISHA STATIONERY & XEROX (THARAD)';
+  const watermarkType = storeSettings.billWatermarkType || 'both';
 
   // Generate self-contained HTML for rock-solid, single-page A4 printing (Government Recognized)
   const getInvoiceHtmlString = () => {
-    const showLogos = storeSettings.billShowLogos !== false;
-    const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill;
-    const showSignature = storeSettings.billShowSignature !== false;
-
     const itemsHtml = order.items
       .map(
         (it, idx) => `
@@ -65,9 +94,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 6px; font-weight: 700;">
             ${it.name}${it.unit ? ` (${it.unit})` : ''}
           </td>
-          <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-size: 10.5px;">
-            ${it.name.includes('ઝેરોક્ષ') || it.name.includes('પ્રિન્ટ') || it.name.includes('સેવા') ? '9983' : '4901'}
-          </td>
+          ${
+            showHsnColumn
+              ? `<td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-size: 10.5px;">
+                  ${it.name.includes('ઝેરોક્ષ') || it.name.includes('પ્રિન્ટ') || it.name.includes('સેવા') ? '9983' : '4901'}
+                </td>`
+              : ''
+          }
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-weight: 800;">${it.qty}</td>
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 6px; text-align: right; font-weight: 600;">₹${Number(it.price).toFixed(2)}</td>
           <td style="padding: 4px 6px; text-align: right; font-weight: 800;">₹${Number(it.price * it.qty).toFixed(2)}</td>
@@ -101,12 +134,55 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       line-height: 1.35;
     }
     .bill-wrapper {
+      position: relative;
       width: 100%;
       max-width: 780px;
       margin: 0 auto;
       border: 1.5px solid #000000;
       padding: 8px 10px;
       background: #ffffff;
+      overflow: hidden;
+    }
+    /* Watermark background container */
+    .watermark-overlay {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-25deg);
+      opacity: ${watermarkOpacity};
+      pointer-events: none;
+      z-index: 0;
+      text-align: center;
+      width: 85%;
+      user-select: none;
+    }
+    .watermark-logo-img {
+      width: 110px;
+      height: 110px;
+      object-fit: contain;
+      filter: grayscale(100%);
+      margin-bottom: 6px;
+    }
+    .watermark-title-text {
+      font-size: 32px;
+      font-weight: 900;
+      text-transform: uppercase;
+      font-family: monospace;
+      letter-spacing: 2px;
+      color: #000000;
+      line-height: 1.15;
+    }
+    .watermark-sub-text {
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-top: 4px;
+      color: #1a1a1a;
+    }
+    .bill-main-content {
+      position: relative;
+      z-index: 1;
     }
     /* Government Header Strip */
     .govt-strip {
@@ -324,6 +400,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       border-top: 1px dashed #d1d5db;
       padding-top: 3px;
     }
+    .bank-box {
+      font-size: 9.5px;
+      color: #1e3a8a;
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      padding: 3px 5px;
+      border-radius: 4px;
+      margin-top: 4px;
+    }
     /* Authorized Signatory Box */
     .signatory-box {
       text-align: center;
@@ -362,171 +447,224 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 <body>
   <div class="bill-wrapper">
     
-    <!-- 1. Government Recognized Header Strip -->
-    <div class="govt-strip">
-      <span>🇮🇳 ટેક્સ ઇન્વોઇસ / વેચાણ બિલ (TAX INVOICE)</span>
-      <span>અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)</span>
-    </div>
-
-    <!-- 2. Store Header with Passport-size Logos -->
-    <div class="store-header-grid">
-      <div class="header-col-left">
+    <!-- Watermark Layer (~30% Opacity) -->
+    ${
+      showWatermark
+        ? `
+      <div class="watermark-overlay">
         ${
-          showLogos
-            ? `<img src="${effectiveLeftLogo}" alt="Logo" class="passport-logo" />`
+          watermarkType === 'logo' || watermarkType === 'both'
+            ? `<img src="${effectiveLeftLogo}" class="watermark-logo-img" alt="Watermark Logo" />`
+            : ''
+        }
+        ${
+          watermarkType === 'name' || watermarkType === 'both'
+            ? `<div class="watermark-title-text">${watermarkText}</div>
+               <div class="watermark-sub-text">ORIGINAL TAX INVOICE • THARAD</div>`
             : ''
         }
       </div>
-      <div class="header-col-center">
-        <h1 class="store-name-en">${storeSettings.storeNameEn}</h1>
-        <h2 class="store-name-gu">${storeSettings.storeNameGu}</h2>
-        <div class="store-sub">
-          ${storeSettings.tagline}${storeSettings.ownerName ? ` • સંચાલક: ${storeSettings.ownerName}` : ''}
+    `
+        : ''
+    }
+
+    <div class="bill-main-content">
+      <!-- 1. Government Recognized Header Strip -->
+      <div class="govt-strip">
+        <span>🇮🇳 ટેક્સ ઇન્વોઇસ / વેચાણ બિલ (TAX INVOICE)</span>
+        <span>અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)</span>
+      </div>
+
+      <!-- 2. Store Header with Passport-size Logos -->
+      <div class="store-header-grid">
+        <div class="header-col-left">
+          ${
+            showLogos
+              ? `<img src="${effectiveLeftLogo}" alt="Logo" class="passport-logo" />`
+              : ''
+          }
         </div>
-        <div class="store-address">${storeSettings.address}</div>
-        <div class="store-tax-ids">
-          📞 +91 ${storeSettings.phone}${storeSettings.email ? ` • ✉️ ${storeSettings.email}` : ''}
-          ${storeSettings.billShowGst !== false && storeSettings.gstNumber ? ` • <b>GSTIN:</b> ${storeSettings.gstNumber}` : ''}
-          ${storeSettings.panNumber ? ` • <b>PAN:</b> ${storeSettings.panNumber}` : ''}
+        <div class="header-col-center">
+          <h1 class="store-name-en">${storeSettings.storeNameEn}</h1>
+          <h2 class="store-name-gu">${storeSettings.storeNameGu}</h2>
+          ${
+            showTagline || showOwnerName
+              ? `<div class="store-sub">
+                  ${showTagline ? storeSettings.tagline : ''}${showTagline && showOwnerName ? ' • ' : ''}${showOwnerName ? `સંચાલક: ${storeSettings.ownerName}` : ''}
+                </div>`
+              : ''
+          }
+          ${showAddress ? `<div class="store-address">${storeSettings.address}</div>` : ''}
+          <div class="store-tax-ids">
+            ${showHelpline ? `📞 +91 ${storeSettings.phone}${storeSettings.email ? ` • ✉️ ${storeSettings.email}` : ''}` : ''}
+            ${showGst ? ` • <b>GSTIN:</b> ${storeSettings.gstNumber}` : ''}
+            ${showPan ? ` • <b>PAN:</b> ${storeSettings.panNumber}` : ''}
+          </div>
+        </div>
+        <div class="header-col-right">
+          ${
+            showLogos
+              ? `<img src="${effectiveRightLogo}" alt="CSC Emblem" class="passport-logo" />`
+              : ''
+          }
         </div>
       </div>
-      <div class="header-col-right">
-        ${
-          showLogos
-            ? `<img src="${effectiveRightLogo}" alt="CSC Emblem" class="passport-logo" />`
-            : ''
-        }
-      </div>
-    </div>
 
-    <!-- 3. Customer & Invoice Details Table -->
-    <table class="meta-table">
-      <tr>
-        <td class="meta-left">
-          <div class="meta-title">ગ્રાહકની વિગત (BILLED TO / CUSTOMER):</div>
-          <div class="customer-name">${order.customerName}</div>
-          <div>📞 <b>મોબાઇલ:</b> +91 ${order.mobile}</div>
-          <div>📍 <b>સરનામું:</b> ${order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
-        </td>
-        <td class="meta-right">
-          <div class="meta-title">ઇન્વોઇસ વિગત (INVOICE DETAILS):</div>
-          <div><b>બિલ નં (Inv No):</b> <span style="font-weight: 800; font-size: 12px;">${order.invoiceNo}</span></div>
-          <div><b>તારીખ (Date):</b> ${order.date}</div>
-          <div><b>ચૂકવણી પદ્ધતિ:</b> ${order.paymentMode} (${order.paymentStatus})</div>
-          <div><b>સપ્લાય સ્થળ:</b> ગુજરાત (Place of Supply: 24-Gujarat)</div>
-        </td>
-      </tr>
-    </table>
-
-    <!-- 4. Items Table -->
-    <table class="items-table">
-      <thead>
+      <!-- 3. Customer & Invoice Details Table -->
+      <table class="meta-table">
         <tr>
-          <th style="width: 28px; text-align: center;">#</th>
-          <th style="text-align: left;">વસ્તુ / સેવાની વિગત (Description of Goods & Services)</th>
-          <th style="width: 55px; text-align: center;">HSN/SAC</th>
-          <th style="width: 48px; text-align: center;">જથ્થો</th>
-          <th style="width: 70px; text-align: right;">દર (Rate)</th>
-          <th style="width: 80px; text-align: right;">કુલ (Amount)</th>
+          <td class="meta-left">
+            <div class="meta-title">ગ્રાહકની વિગત (BILLED TO / CUSTOMER):</div>
+            <div class="customer-name">${order.customerName}</div>
+            <div>📞 <b>મોબાઇલ:</b> +91 ${order.mobile}</div>
+            <div>📍 <b>સરનામું:</b> ${order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
+          </td>
+          <td class="meta-right">
+            <div class="meta-title">ઇન્વોઇસ વિગત (INVOICE DETAILS):</div>
+            <div><b>બિલ નં (Inv No):</b> <span style="font-weight: 800; font-size: 12px;">${order.invoiceNo}</span></div>
+            <div><b>તારીખ (Date):</b> ${order.date}</div>
+            <div><b>ચૂકવણી પદ્ધતિ:</b> ${order.paymentMode} (${order.paymentStatus})</div>
+            <div><b>સપ્લાય સ્થળ:</b> ગુજરાત (Place of Supply: 24-Gujarat)</div>
+          </td>
         </tr>
-      </thead>
-      <tbody>
-        ${itemsHtml}
-      </tbody>
-    </table>
+      </table>
 
-    <!-- 5. Totals & Amount in Words Grid -->
-    <div class="summary-grid">
-      <div class="summary-left">
-        <div class="words-label">અક્ષરે રૂપિયા (Amount in Words):</div>
-        <div class="words-text">${words.gu}</div>
-        <div style="font-size: 10px; color: #4b5563; margin-top: 1px;">${words.en}</div>
-        <div style="margin-top: 4px; font-size: 10px; font-weight: 700;">
-          ✓ પ્રમાણિત કેન્દ્ર • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે
+      <!-- 4. Items Table -->
+      <table class="items-table">
+        <thead>
+          <tr>
+            <th style="width: 28px; text-align: center;">#</th>
+            <th style="text-align: left;">વસ્તુ / સેવાની વિગત (Description of Goods & Services)</th>
+            ${showHsnColumn ? `<th style="width: 55px; text-align: center;">HSN/SAC</th>` : ''}
+            <th style="width: 48px; text-align: center;">જથ્થો</th>
+            <th style="width: 70px; text-align: right;">દર (Rate)</th>
+            <th style="width: 80px; text-align: right;">કુલ (Amount)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsHtml}
+        </tbody>
+      </table>
+
+      <!-- 5. Totals & Amount in Words Grid -->
+      <div class="summary-grid">
+        <div class="summary-left">
+          ${
+            showWords
+              ? `
+            <div class="words-label">અક્ષરે રૂપિયા (Amount in Words):</div>
+            <div class="words-text">${words.gu}</div>
+            <div style="font-size: 10px; color: #4b5563; margin-top: 1px;">${words.en}</div>
+          `
+              : `<div class="words-text">${storeSettings.storeNameGu} • અધિકૃત બિલ</div>`
+          }
+          <div style="margin-top: 4px; font-size: 10px; font-weight: 700; color: #047857;">
+            ✓ પ્રમાણિત કેન્દ્ર • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે
+          </div>
+        </div>
+        <div class="summary-right">
+          <div>સબટોટલ (Subtotal): <b>₹${Number(order.subtotal).toFixed(2)}</b></div>
+          ${
+            order.discount > 0
+              ? `<div style="color: #b91c1c;">ડિસ્કાઉન્ટ: -₹${Number(order.discount).toFixed(2)}</div>`
+              : ''
+          }
+          <div class="grand-total-row">
+            ચૂકવવાપાત્ર રકમ: ₹${Number(order.total).toFixed(2)}
+          </div>
+          <div style="font-size: 10px; margin-top: 1px;">
+            સ્થિતિ: <b>${order.paymentStatus === 'Paid' ? '✅ ચૂકવેલ (PAID)' : '⚠️ બાકી (PENDING)'}</b>
+          </div>
         </div>
       </div>
-      <div class="summary-right">
-        <div>સબટોટલ (Subtotal): <b>₹${Number(order.subtotal).toFixed(2)}</b></div>
-        ${
-          order.discount > 0
-            ? `<div style="color: #b91c1c;">ડિસ્કાઉન્ટ: -₹${Number(order.discount).toFixed(2)}</div>`
-            : ''
-        }
-        <div class="grand-total-row">
-          ચૂકવવાપાત્ર રકમ: ₹${Number(order.total).toFixed(2)}
-        </div>
-        <div style="font-size: 10px; margin-top: 1px;">
-          સ્થિતિ: <b>${order.paymentStatus === 'Paid' ? '✅ ચૂકવેલ (PAID)' : '⚠️ બાકી (PENDING)'}</b>
-        </div>
-      </div>
-    </div>
 
-    <!-- 6. Bottom Section: Passport-size QR Code on Left | Authorized Signatory on Right -->
-    <div class="bottom-grid">
-      <div class="bottom-left">
-        ${
-          showQr && effectiveQrCode
-            ? `
-          <div class="qr-container">
-            <img src="${effectiveQrCode}" alt="Payment QR" class="passport-qr" />
-            <div class="qr-details">
-              <div style="font-weight: 800; font-size: 10.5px; color: #000000;">
-                📱 ઓટોમેટિક પેમેન્ટ QR કોડ
-              </div>
-              <div style="font-weight: 700; color: #15803d; font-size: 9.5px;">
-                કોઈપણ UPI (GPay / PhonePe / Paytm) થી સ્કેન કરો
-              </div>
-              <div style="font-size: 9.5px; margin-top: 1px;">
-                UPI ID: <b>${storeSettings.upiId}</b>
-              </div>
-              <div style="font-size: 9.5px; color: #1f2937;">
-                Payee: <b>${storeSettings.payeeName || storeSettings.storeNameEn}</b>
+      <!-- 6. Bottom Section: Details on Left | Authorized Signatory on Right -->
+      <div class="bottom-grid">
+        <div class="bottom-left">
+          ${
+            showQr && effectiveQrCode
+              ? `
+            <div class="qr-container">
+              <img src="${effectiveQrCode}" alt="Payment QR" class="passport-qr" />
+              <div class="qr-details">
+                <div style="font-weight: 800; font-size: 10.5px; color: #000000;">
+                  📱 ઓટોમેટિક પેમેન્ટ QR કોડ
+                </div>
+                <div style="font-weight: 700; color: #15803d; font-size: 9.5px;">
+                  કોઈપણ UPI (GPay / PhonePe / Paytm) થી સ્કેન કરો
+                </div>
+                ${showUpi ? `<div style="font-size: 9.5px; margin-top: 1px;">UPI ID: <b>${storeSettings.upiId}</b></div>` : ''}
+                <div style="font-size: 9.5px; color: #1f2937;">
+                  Payee: <b>${storeSettings.payeeName || storeSettings.storeNameEn}</b>
+                </div>
               </div>
             </div>
-          </div>
-        `
-            : `
-          <div style="font-weight: 700; font-size: 10.5px;">
-            📞 પેમેન્ટ / હેલ્પલાઇન: +91 ${storeSettings.phone} • UPI ID: ${storeSettings.upiId}
-          </div>
-        `
-        }
+          `
+              : showUpi
+              ? `
+            <div style="font-weight: 700; font-size: 10.5px;">
+              📞 પેમેન્ટ હેલ્પલાઇન: +91 ${storeSettings.phone} • UPI ID: <b>${storeSettings.upiId}</b>
+            </div>
+          `
+              : `
+            <div style="font-weight: 700; font-size: 10.5px; color: #111827;">
+              ${showHelpline ? `📞 ગ્રાહક સહાય / સંપર્ક: +91 ${storeSettings.phone}${storeSettings.email ? ` • ${storeSettings.email}` : ''}` : `✓ પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ (Tharad)`}
+            </div>
+          `
+          }
 
-        <div class="terms-box">
-          <b>શરતો & નિયમો:</b> ${storeSettings.billTermsNote || '૧. ખરીદેલ માલ પરત લેવાશે નહિ. ૨. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
+          ${
+            showBankDetails
+              ? `
+            <div class="bank-box">
+              💳 <b>બેંક વિગતો:</b> ${storeSettings.bankName || 'SBI'} | A/c: <b>${storeSettings.accountNumber}</b> | IFSC: <b>${storeSettings.ifscCode}</b>
+            </div>
+          `
+              : ''
+          }
+
+          ${
+            showTerms
+              ? `
+            <div class="terms-box">
+              <b>શરતો & નિયમો:</b> ${storeSettings.billTermsNote || '૧. ખરીદેલ માલ પરત લેવાશે નહિ. ૨. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
+            </div>
+          `
+              : ''
+          }
+        </div>
+
+        <div class="bottom-right">
+          ${
+            showSignature
+              ? `
+            <div class="signatory-box">
+              <div class="signatory-title">
+                ${storeSettings.signatoryTitle || `For, ${storeSettings.storeNameEn}`}
+              </div>
+              ${
+                storeSettings.signatureUrl
+                  ? `<img src="${storeSettings.signatureUrl}" alt="Signature" class="signature-image" />`
+                  : `<div class="signature-line"></div>`
+              }
+              <div class="signatory-caption">
+                ${storeSettings.signatoryName || 'Authorized Signatory / અધિકૃત સહી'}
+              </div>
+            </div>
+          `
+              : `
+            <div style="padding-top: 30px; font-weight: 800; font-size: 10.5px;">
+              ${storeSettings.storeNameEn}
+            </div>
+          `
+          }
         </div>
       </div>
 
-      <div class="bottom-right">
-        ${
-          showSignature
-            ? `
-          <div class="signatory-box">
-            <div class="signatory-title">
-              ${storeSettings.signatoryTitle || `For, ${storeSettings.storeNameEn}`}
-            </div>
-            ${
-              storeSettings.signatureUrl
-                ? `<img src="${storeSettings.signatureUrl}" alt="Signature" class="signature-image" />`
-                : `<div class="signature-line"></div>`
-            }
-            <div class="signatory-caption">
-              ${storeSettings.signatoryName || 'Authorized Signatory / અધિકૃત સહી'}
-            </div>
-          </div>
-        `
-            : `
-          <div style="padding-top: 30px; font-weight: 800; font-size: 10.5px;">
-            ${storeSettings.storeNameEn}
-          </div>
-        `
-        }
+      <!-- 7. Footer Note -->
+      <div class="footer-note">
+        ${storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'} • કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ
       </div>
-    </div>
-
-    <!-- 7. Footer Note -->
-    <div class="footer-note">
-      ${storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'} • કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ
     </div>
 
   </div>
@@ -680,10 +818,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     window.open(`https://wa.me/91${storeSettings.phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
-  const showLogos = storeSettings.billShowLogos !== false;
-  const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill;
-  const showSignature = storeSettings.billShowSignature !== false;
-
   return (
     <div className="invoice-modal-overlay fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
       <div className="invoice-modal-card bg-white rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden border border-neutral-300 print:border-none print:shadow-none my-auto">
@@ -754,242 +888,297 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         <div
           ref={billContentRef}
           id="printable-bill-area"
-          className="p-4 sm:p-6 bg-white text-black text-[12px] font-sans space-y-2.5 print:p-0 print:space-y-2 print:text-[11px] print:w-full"
+          className="relative overflow-hidden p-4 sm:p-6 bg-white text-black text-[12px] font-sans space-y-2.5 print:p-0 print:space-y-2 print:text-[11px] print:w-full"
         >
-          {/* A. GOVT RECOGNIZED TOP STRIP */}
-          <div className="flex items-center justify-between border-b-2 border-black pb-1 text-[11px] sm:text-xs font-black uppercase tracking-wide">
-            <span className="flex items-center gap-1">
-              <span>🇮🇳</span>
-              <span>ટેક્સ ઇન્વોઇસ / વેચાણ બિલ (TAX INVOICE)</span>
-            </span>
-            <span className="text-[10px] sm:text-[11px] text-neutral-700 font-bold">
-              અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)
-            </span>
-          </div>
-
-          {/* B. 3-COLUMN STORE HEADER WITH PASSPORT-SIZE LOGOS */}
-          <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
-            {/* Left Logo (Passport size: 68x68px) */}
-            <div className="w-[72px] shrink-0 text-center">
-              {showLogos && (
+          {/* Watermark Overlay for On-Screen & PDF (~30% Opacity) */}
+          {showWatermark && (
+            <div
+              className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center select-none z-0 rotate-[-25deg]"
+              style={{ opacity: watermarkOpacity }}
+            >
+              {(watermarkType === 'logo' || watermarkType === 'both') && (
                 <img
                   src={effectiveLeftLogo}
-                  alt="Store Logo"
-                  className="w-[68px] h-[68px] object-contain rounded-lg border border-neutral-300 p-1 mx-auto bg-white"
-                  title="પ્રિષા સ્ટેશનરી લોગો (Passport Size)"
+                  alt="Watermark Logo"
+                  className="w-24 h-24 object-contain grayscale mb-1.5"
                 />
               )}
-            </div>
-
-            {/* Centered Store Details */}
-            <div className="flex-1 text-center min-w-0">
-              <h1 className="text-base sm:text-lg font-black tracking-tight text-black leading-tight uppercase">
-                {storeSettings.storeNameEn}
-              </h1>
-              <h2 className="text-sm sm:text-base font-black text-black leading-tight">
-                {storeSettings.storeNameGu}
-              </h2>
-              <div className="text-[11px] font-bold text-black mt-0.5">
-                {storeSettings.tagline}
-                {storeSettings.ownerName ? ` • સંચાલક: ${storeSettings.ownerName}` : ''}
-              </div>
-              <div className="text-[10.5px] text-neutral-800 font-medium max-w-lg mx-auto leading-tight mt-0.5">
-                {storeSettings.address}
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-x-2 text-[10.5px] font-bold text-black pt-0.5">
-                <span>📞 +91 {storeSettings.phone}</span>
-                {storeSettings.email && <span>• ✉️ {storeSettings.email}</span>}
-                {storeSettings.billShowGst !== false && storeSettings.gstNumber && (
-                  <span>• <b>GSTIN:</b> {storeSettings.gstNumber}</span>
-                )}
-                {storeSettings.panNumber && (
-                  <span>• <b>PAN:</b> {storeSettings.panNumber}</span>
-                )}
-              </div>
-            </div>
-
-            {/* Right Logo / CSC Digital Emblem (Passport size: 68x68px) */}
-            <div className="w-[72px] shrink-0 text-center">
-              {showLogos && (
-                <img
-                  src={effectiveRightLogo}
-                  alt="CSC Emblem"
-                  className="w-[68px] h-[68px] object-contain rounded-lg border border-neutral-300 p-1 mx-auto bg-white"
-                  title="CSC ડિજિટલ સેવા એમ્બ્લેમ (Passport Size)"
-                />
+              {(watermarkType === 'name' || watermarkType === 'both') && (
+                <>
+                  <div className="text-2xl sm:text-3xl font-black uppercase font-mono tracking-widest text-black text-center max-w-md leading-tight">
+                    {watermarkText}
+                  </div>
+                  <div className="text-[11px] font-black uppercase tracking-wider text-neutral-800 text-center mt-0.5">
+                    ORIGINAL TAX INVOICE • THARAD
+                  </div>
+                </>
               )}
             </div>
-          </div>
+          )}
 
-          {/* C. CUSTOMER & INVOICE META (TWO COLUMNS TABLE) */}
-          <div className="grid grid-cols-2 border border-black text-[11px] sm:text-xs">
-            {/* Left: Customer */}
-            <div className="p-2 border-r border-black space-y-0.5">
-              <div className="text-[10px] font-black uppercase text-neutral-600 underline">
-                ગ્રાહકની વિગત (BILLED TO / CUSTOMER):
-              </div>
-              <div className="text-xs sm:text-sm font-black text-black">{order.customerName}</div>
-              <div className="font-bold text-black">📞 +91 {order.mobile}</div>
-              <div className="text-black font-medium">📍 {order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
+          <div className="relative z-10 space-y-2.5">
+            {/* A. GOVT RECOGNIZED TOP STRIP */}
+            <div className="flex items-center justify-between border-b-2 border-black pb-1 text-[11px] sm:text-xs font-black uppercase tracking-wide">
+              <span className="flex items-center gap-1">
+                <span>🇮🇳</span>
+                <span>ટેક્સ ઇન્વોઇસ / વેચાણ બિલ (TAX INVOICE)</span>
+              </span>
+              <span className="text-[10px] sm:text-[11px] text-neutral-700 font-bold">
+                અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)
+              </span>
             </div>
 
-            {/* Right: Invoice */}
-            <div className="p-2 space-y-0.5">
-              <div className="text-[10px] font-black uppercase text-neutral-600 underline">
-                ઇન્વોઇસ વિગત (INVOICE DETAILS):
-              </div>
-              <div className="font-bold text-black">
-                બિલ નં: <span className="font-mono font-black text-xs">{order.invoiceNo}</span>
-              </div>
-              <div className="font-bold text-black">તારીખ: {order.date}</div>
-              <div className="font-bold text-black">ચૂકવણી: {order.paymentMode} ({order.paymentStatus})</div>
-              <div className="text-black text-[10px]">સપ્લાય સ્થળ: ગુજરાત (24-Gujarat)</div>
-            </div>
-          </div>
-
-          {/* D. ITEMS TABLE */}
-          <div className="overflow-hidden">
-            <table className="w-full text-left border-collapse text-[11.5px] border border-black">
-              <thead>
-                <tr className="bg-neutral-100 text-black border-b border-black font-black text-[10.5px]">
-                  <th className="p-1.5 text-center w-8 border-r border-black">#</th>
-                  <th className="p-1.5 border-r border-black">વસ્તુ / સેવાની વિગત (Description of Goods & Services)</th>
-                  <th className="p-1.5 text-center w-16 border-r border-black">HSN/SAC</th>
-                  <th className="p-1.5 text-center w-14 border-r border-black">જથ્થો</th>
-                  <th className="p-1.5 text-right w-16 border-r border-black">દર (₹)</th>
-                  <th className="p-1.5 text-right w-20">કુલ (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {order.items.map((it, idx) => (
-                  <tr key={idx} className="border-b border-black">
-                    <td className="p-1.5 text-center font-bold text-black border-r border-black">{idx + 1}</td>
-                    <td className="p-1.5 font-bold text-black border-r border-black">
-                      {it.name} {it.unit ? `(${it.unit})` : ''}
-                    </td>
-                    <td className="p-1.5 text-center text-[10px] text-neutral-600 border-r border-black">
-                      {it.name.includes('ઝેરોક્ષ') || it.name.includes('પ્રિન્ટ') || it.name.includes('સેવા') ? '9983' : '4901'}
-                    </td>
-                    <td className="p-1.5 text-center font-black text-black border-r border-black">{it.qty}</td>
-                    <td className="p-1.5 text-right font-medium text-black border-r border-black">
-                      ₹{Number(it.price).toFixed(2)}
-                    </td>
-                    <td className="p-1.5 text-right font-black text-black">
-                      ₹{Number(it.price * it.qty).toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* E. TOTALS & WORDS SUMMARY ROW */}
-          <div className="grid grid-cols-12 border border-black bg-neutral-50/50 text-[11.5px]">
-            {/* Left 7 cols: In Words */}
-            <div className="col-span-7 p-2 border-r border-black space-y-1">
-              <div className="text-[10px] font-black uppercase text-neutral-600">
-                અક્ષરે રૂપિયા (Amount in Words):
-              </div>
-              <div className="text-xs font-black text-black">{words.gu}</div>
-              <div className="text-[10px] text-neutral-600 italic">{words.en}</div>
-              <div className="text-[10px] font-bold text-emerald-800 pt-0.5">
-                ✓ અધિકૃત પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ
-              </div>
-            </div>
-
-            {/* Right 5 cols: Totals */}
-            <div className="col-span-5 p-2 text-right space-y-0.5 bg-white">
-              <div className="font-bold text-black">
-                સબટોટલ: ₹{Number(order.subtotal).toFixed(2)}
-              </div>
-              {order.discount > 0 && (
-                <div className="font-bold text-red-600">
-                  ડિસ્કાઉન્ટ: -₹{Number(order.discount).toFixed(2)}
-                </div>
-              )}
-              <div className="text-sm font-black text-black border-t border-black pt-1 mt-1">
-                કુલ રકમ (Total): ₹{Number(order.total).toFixed(2)}
-              </div>
-              <div className="text-[10px] font-bold text-neutral-700">
-                સ્થિતિ: {order.paymentStatus === 'Paid' ? '✅ ચૂકવેલ' : '⚠️ બાકી'}
-              </div>
-            </div>
-          </div>
-
-          {/* F. BOTTOM ROW: PASSPORT-SIZE QR CODE ON LEFT | AUTHORIZED SIGNATORY ON RIGHT */}
-          <div className="grid grid-cols-12 border border-black text-[11px]">
-            {/* Left 7 cols: Automatic QR Code & Terms */}
-            <div className="col-span-7 p-2.5 border-r border-black flex flex-col justify-between">
-              {showQr && effectiveQrCode ? (
-                <div className="flex items-center gap-3">
-                  {/* Passport-size QR Code (approx 78x78px) */}
+            {/* B. 3-COLUMN STORE HEADER WITH PASSPORT-SIZE LOGOS */}
+            <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
+              {/* Left Logo (Passport size: 68x68px) */}
+              <div className="w-[72px] shrink-0 text-center">
+                {showLogos && (
                   <img
-                    src={effectiveQrCode}
-                    alt="Automatic UPI Payment QR Code"
-                    className="w-[78px] h-[78px] object-contain border border-black rounded p-0.5 bg-white shrink-0"
-                    title="આ QR કોડ GPay/PhonePe થી સ્કેન કરી બિલનું પેમેન્ટ કરો"
+                    src={effectiveLeftLogo}
+                    alt="Store Logo"
+                    className="w-[68px] h-[68px] object-contain rounded-lg border border-neutral-300 p-1 mx-auto bg-white"
+                    title="પ્રિષા સ્ટેશનરી લોગો (Passport Size)"
                   />
-                  <div className="space-y-0.5 min-w-0">
-                    <div className="font-black text-black text-xs flex items-center gap-1">
-                      <span>📱 ઓટોમેટિક પેમેન્ટ QR કોડ</span>
-                    </div>
-                    <div className="text-[10px] font-bold text-emerald-700">
-                      GPay / PhonePe / Paytm થી સ્કેન કરો
-                    </div>
-                    <div className="text-[10px] text-neutral-800">
-                      UPI ID: <span className="font-mono font-bold text-black">{storeSettings.upiId}</span>
-                    </div>
-                    <div className="text-[9.5px] text-neutral-600 truncate">
-                      રકમ: <b>₹{Number(order.total).toFixed(2)}</b> (Bill: {order.invoiceNo})
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="font-bold text-xs text-neutral-800">
-                  📞 પેમેન્ટ સંપર્ક: +91 {storeSettings.phone} • UPI: {storeSettings.upiId}
-                </div>
-              )}
+                )}
+              </div>
 
-              <div className="text-[9px] text-neutral-700 pt-1.5 mt-1 border-t border-dashed border-neutral-300 leading-tight">
-                <b>શરતો:</b> {storeSettings.billTermsNote || 'ખરીદેલ માલ પરત લેવાશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
+              {/* Centered Store Details */}
+              <div className="flex-1 text-center min-w-0">
+                <h1 className="text-base sm:text-lg font-black tracking-tight text-black leading-tight uppercase">
+                  {storeSettings.storeNameEn}
+                </h1>
+                <h2 className="text-sm sm:text-base font-black text-black leading-tight">
+                  {storeSettings.storeNameGu}
+                </h2>
+                {(showTagline || showOwnerName) && (
+                  <div className="text-[11px] font-bold text-black mt-0.5">
+                    {showTagline ? storeSettings.tagline : ''}
+                    {showTagline && showOwnerName ? ' • ' : ''}
+                    {showOwnerName ? `સંચાલક: ${storeSettings.ownerName}` : ''}
+                  </div>
+                )}
+                {showAddress && (
+                  <div className="text-[10.5px] text-neutral-800 font-medium max-w-lg mx-auto leading-tight mt-0.5">
+                    {storeSettings.address}
+                  </div>
+                )}
+                <div className="flex flex-wrap items-center justify-center gap-x-2 text-[10.5px] font-bold text-black pt-0.5">
+                  {showHelpline && <span>📞 +91 {storeSettings.phone}</span>}
+                  {showHelpline && storeSettings.email && <span>• ✉️ {storeSettings.email}</span>}
+                  {showGst && (
+                    <span>• <b>GSTIN:</b> {storeSettings.gstNumber}</span>
+                  )}
+                  {showPan && (
+                    <span>• <b>PAN:</b> {storeSettings.panNumber}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Logo / CSC Digital Emblem (Passport size: 68x68px) */}
+              <div className="w-[72px] shrink-0 text-center">
+                {showLogos && (
+                  <img
+                    src={effectiveRightLogo}
+                    alt="CSC Emblem"
+                    className="w-[68px] h-[68px] object-contain rounded-lg border border-neutral-300 p-1 mx-auto bg-white"
+                    title="CSC ડિજિટલ સેવા એમ્બ્લેમ (Passport Size)"
+                  />
+                )}
               </div>
             </div>
 
-            {/* Right 5 cols: Authorized Signatory Box */}
-            <div className="col-span-5 p-2.5 flex flex-col justify-between text-center bg-neutral-50/30">
-              {showSignature ? (
-                <div className="space-y-1 my-auto">
-                  <div className="text-[10px] font-black uppercase text-neutral-800">
-                    {storeSettings.signatoryTitle || `For, ${storeSettings.storeNameEn}`}
-                  </div>
-                  
-                  {storeSettings.signatureUrl ? (
-                    <div className="h-10 flex items-center justify-center">
-                      <img
-                        src={storeSettings.signatureUrl}
-                        alt="Authorized Signature"
-                        className="max-h-10 max-w-[140px] object-contain mx-auto"
-                      />
-                    </div>
-                  ) : (
-                    <div className="w-32 border-b border-black mx-auto my-3"></div>
-                  )}
+            {/* C. CUSTOMER & INVOICE META (TWO COLUMNS TABLE) */}
+            <div className="grid grid-cols-2 border border-black text-[11px] sm:text-xs">
+              {/* Left: Customer */}
+              <div className="p-2 border-r border-black space-y-0.5">
+                <div className="text-[10px] font-black uppercase text-neutral-600 underline">
+                  ગ્રાહકની વિગત (BILLED TO / CUSTOMER):
+                </div>
+                <div className="text-xs sm:text-sm font-black text-black">{order.customerName}</div>
+                <div className="font-bold text-black">📞 +91 {order.mobile}</div>
+                <div className="text-black font-medium">📍 {order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
+              </div>
 
-                  <div className="text-[10.5px] font-black text-black border-t border-neutral-300 pt-0.5">
-                    {storeSettings.signatoryName || 'Authorized Signatory / અધિકૃત સહી'}
-                  </div>
+              {/* Right: Invoice */}
+              <div className="p-2 space-y-0.5">
+                <div className="text-[10px] font-black uppercase text-neutral-600 underline">
+                  ઇન્વોઇસ વિગત (INVOICE DETAILS):
                 </div>
-              ) : (
-                <div className="my-auto text-center font-bold text-xs">
-                  {storeSettings.storeNameEn}
+                <div className="font-bold text-black">
+                  બિલ નં: <span className="font-mono font-black text-xs">{order.invoiceNo}</span>
                 </div>
-              )}
+                <div className="font-bold text-black">તારીખ: {order.date}</div>
+                <div className="font-bold text-black">ચૂકવણી: {order.paymentMode} ({order.paymentStatus})</div>
+                <div className="text-black text-[10px]">સપ્લાય સ્થળ: ગુજરાત (24-Gujarat)</div>
+              </div>
             </div>
-          </div>
 
-          {/* G. FOOTER NOTE */}
-          <div className="text-center text-[9.5px] text-neutral-600 pt-1">
-            {storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'} • કમ્પ્યુટર જનરેટેડ ટેક્સ ઇન્વોઇસ
+            {/* D. ITEMS TABLE */}
+            <div className="overflow-hidden">
+              <table className="w-full text-left border-collapse text-[11.5px] border border-black">
+                <thead>
+                  <tr className="bg-neutral-100 text-black border-b border-black font-black text-[10.5px]">
+                    <th className="p-1.5 text-center w-8 border-r border-black">#</th>
+                    <th className="p-1.5 border-r border-black">વસ્તુ / સેવાની વિગત (Description of Goods & Services)</th>
+                    {showHsnColumn && <th className="p-1.5 text-center w-16 border-r border-black">HSN/SAC</th>}
+                    <th className="p-1.5 text-center w-14 border-r border-black">જથ્થો</th>
+                    <th className="p-1.5 text-right w-16 border-r border-black">દર (₹)</th>
+                    <th className="p-1.5 text-right w-20">કુલ (₹)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {order.items.map((it, idx) => (
+                    <tr key={idx} className="border-b border-black">
+                      <td className="p-1.5 text-center font-bold text-black border-r border-black">{idx + 1}</td>
+                      <td className="p-1.5 font-bold text-black border-r border-black">
+                        {it.name} {it.unit ? `(${it.unit})` : ''}
+                      </td>
+                      {showHsnColumn && (
+                        <td className="p-1.5 text-center text-[10px] text-neutral-600 border-r border-black">
+                          {it.name.includes('ઝેરોક્ષ') || it.name.includes('પ્રિન્ટ') || it.name.includes('સેવા') ? '9983' : '4901'}
+                        </td>
+                      )}
+                      <td className="p-1.5 text-center font-black text-black border-r border-black">{it.qty}</td>
+                      <td className="p-1.5 text-right font-medium text-black border-r border-black">
+                        ₹{Number(it.price).toFixed(2)}
+                      </td>
+                      <td className="p-1.5 text-right font-black text-black">
+                        ₹{Number(it.price * it.qty).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* E. TOTALS & WORDS SUMMARY ROW */}
+            <div className="grid grid-cols-12 border border-black bg-neutral-50/50 text-[11.5px]">
+              {/* Left 7 cols: In Words */}
+              <div className="col-span-7 p-2 border-r border-black space-y-1">
+                {showWords ? (
+                  <>
+                    <div className="text-[10px] font-black uppercase text-neutral-600">
+                      અક્ષરે રૂપિયા (Amount in Words):
+                    </div>
+                    <div className="text-xs font-black text-black">{words.gu}</div>
+                    <div className="text-[10px] text-neutral-600 italic">{words.en}</div>
+                  </>
+                ) : (
+                  <div className="text-xs font-black text-black">{storeSettings.storeNameGu} • અધિકૃત બિલ</div>
+                )}
+                <div className="text-[10px] font-bold text-emerald-800 pt-0.5">
+                  ✓ અધિકૃત પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ
+                </div>
+              </div>
+
+              {/* Right 5 cols: Totals */}
+              <div className="col-span-5 p-2 text-right space-y-0.5 bg-white">
+                <div className="font-bold text-black">
+                  સબટોટલ: ₹{Number(order.subtotal).toFixed(2)}
+                </div>
+                {order.discount > 0 && (
+                  <div className="font-bold text-red-600">
+                    ડિસ્કાઉન્ટ: -₹{Number(order.discount).toFixed(2)}
+                  </div>
+                )}
+                <div className="text-sm font-black text-black border-t border-black pt-1 mt-1">
+                  કુલ રકમ (Total): ₹{Number(order.total).toFixed(2)}
+                </div>
+                <div className="text-[10px] font-bold text-neutral-700">
+                  સ્થિતિ: {order.paymentStatus === 'Paid' ? '✅ ચૂકવેલ' : '⚠️ બાકી'}
+                </div>
+              </div>
+            </div>
+
+            {/* F. BOTTOM ROW: DETAILS ON LEFT | AUTHORIZED SIGNATORY ON RIGHT */}
+            <div className="grid grid-cols-12 border border-black text-[11px]">
+              {/* Left 7 cols: Automatic QR Code / Support & Terms */}
+              <div className="col-span-7 p-2.5 border-r border-black flex flex-col justify-between">
+                {showQr && effectiveQrCode ? (
+                  <div className="flex items-center gap-3">
+                    {/* Passport-size QR Code (approx 78x78px) */}
+                    <img
+                      src={effectiveQrCode}
+                      alt="Automatic UPI Payment QR Code"
+                      className="w-[78px] h-[78px] object-contain border border-black rounded p-0.5 bg-white shrink-0"
+                      title="આ QR કોડ GPay/PhonePe થી સ્કેન કરી બિલનું પેમેન્ટ કરો"
+                    />
+                    <div className="space-y-0.5 min-w-0">
+                      <div className="font-black text-black text-xs flex items-center gap-1">
+                        <span>📱 ઓટોમેટિક પેમેન્ટ QR કોડ</span>
+                      </div>
+                      <div className="text-[10px] font-bold text-emerald-700">
+                        GPay / PhonePe / Paytm થી સ્કેન કરો
+                      </div>
+                      {showUpi && (
+                        <div className="text-[10px] text-neutral-800">
+                          UPI ID: <span className="font-mono font-bold text-black">{storeSettings.upiId}</span>
+                        </div>
+                      )}
+                      <div className="text-[9.5px] text-neutral-600 truncate">
+                        રકમ: <b>₹{Number(order.total).toFixed(2)}</b> (Bill: {order.invoiceNo})
+                      </div>
+                    </div>
+                  </div>
+                ) : showUpi ? (
+                  <div className="font-bold text-xs text-neutral-800">
+                    📞 પેમેન્ટ સંપર્ક: +91 {storeSettings.phone} • UPI ID: {storeSettings.upiId}
+                  </div>
+                ) : (
+                  <div className="font-bold text-xs text-neutral-900">
+                    {showHelpline ? `📞 ગ્રાહક સહાય / સંપર્ક: +91 ${storeSettings.phone}${storeSettings.email ? ` • ${storeSettings.email}` : ''}` : `✓ પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ`}
+                  </div>
+                )}
+
+                {showBankDetails && (
+                  <div className="text-[9.5px] text-blue-900 bg-emerald-50 border border-emerald-200 rounded p-1 mt-1 leading-tight">
+                    💳 <b>બેંક વિગતો:</b> {storeSettings.bankName || 'SBI'} | A/c: <b>{storeSettings.accountNumber}</b> | IFSC: <b>{storeSettings.ifscCode}</b>
+                  </div>
+                )}
+
+                {showTerms && (
+                  <div className="text-[9px] text-neutral-700 pt-1.5 mt-1 border-t border-dashed border-neutral-300 leading-tight">
+                    <b>શરતો:</b> {storeSettings.billTermsNote || 'ખરીદેલ માલ પરત લેવાશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
+                  </div>
+                )}
+              </div>
+
+              {/* Right 5 cols: Authorized Signatory Box */}
+              <div className="col-span-5 p-2.5 flex flex-col justify-between text-center bg-neutral-50/30">
+                {showSignature ? (
+                  <div className="space-y-1 my-auto">
+                    <div className="text-[10px] font-black uppercase text-neutral-800">
+                      {storeSettings.signatoryTitle || `For, ${storeSettings.storeNameEn}`}
+                    </div>
+                    
+                    {storeSettings.signatureUrl ? (
+                      <div className="h-10 flex items-center justify-center">
+                        <img
+                          src={storeSettings.signatureUrl}
+                          alt="Authorized Signature"
+                          className="max-h-10 max-w-[140px] object-contain mx-auto"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-32 border-b border-black mx-auto my-3"></div>
+                    )}
+
+                    <div className="text-[10.5px] font-black text-black border-t border-neutral-300 pt-0.5">
+                      {storeSettings.signatoryName || 'Authorized Signatory / અધિકૃત સહી'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="my-auto text-center font-bold text-xs">
+                    {storeSettings.storeNameEn}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* G. FOOTER NOTE */}
+            <div className="text-center text-[9.5px] text-neutral-600 pt-1">
+              {storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'} • કમ્પ્યુટર જનરેટેડ ટેક્સ ઇન્વોઇસ
+            </div>
           </div>
         </div>
 

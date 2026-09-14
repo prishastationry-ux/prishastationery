@@ -56,7 +56,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [customerName, setCustomerName] = useState('');
   const [mobile, setMobile] = useState('');
   const [address, setAddress] = useState('');
-  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Cash'>('UPI');
+  const isUpiAllowed = !storeSettings.hideUpiOnBill && storeSettings.billShowUpi !== false;
+  const [paymentMode, setPaymentMode] = useState<'UPI' | 'Cash'>('Cash');
   const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
   const [upiQrUrl, setUpiQrUrl] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
@@ -378,40 +379,52 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               </div>
 
-              {/* Payment Mode Selection (ONLY UPI OR CASH - NO CREDIT) */}
+              {/* Payment Mode Selection */}
               <div className="space-y-2.5 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
                 <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
                   <Banknote className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>પેમેન્ટ પદ્ધતિ પસંદ કરો</span>
+                  <span>પેમેન્ટ પદ્ધતિ (Payment Mode)</span>
                 </h4>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('UPI')}
-                    className={`p-2.5 rounded-xl text-xs font-black border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                      paymentMode === 'UPI'
-                        ? 'bg-[#0B1E48] text-white border-blue-900 shadow-xs'
-                        : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
-                    }`}
-                  >
-                    <QrCode className="w-4 h-4 text-orange-400" />
-                    <span>UPI / QR સ્કેન</span>
-                  </button>
+                {isUpiAllowed ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMode('Cash')}
+                      className={`p-2.5 rounded-xl text-xs font-black border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                        paymentMode === 'Cash'
+                          ? 'bg-[#0B1E48] text-white border-blue-900 shadow-xs'
+                          : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                      }`}
+                    >
+                      <Banknote className="w-4 h-4 text-emerald-400" />
+                      <span>રોકડ (Cash on Counter)</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setPaymentMode('Cash')}
-                    className={`p-2.5 rounded-xl text-xs font-black border flex flex-col items-center gap-1 transition-all cursor-pointer ${
-                      paymentMode === 'Cash'
-                        ? 'bg-[#0B1E48] text-white border-blue-900 shadow-xs'
-                        : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
-                    }`}
-                  >
-                    <Banknote className="w-4 h-4 text-emerald-400" />
-                    <span>રોકડ (Cash on Delivery)</span>
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMode('UPI')}
+                      className={`p-2.5 rounded-xl text-xs font-black border flex flex-col items-center gap-1 transition-all cursor-pointer ${
+                        paymentMode === 'UPI'
+                          ? 'bg-[#0B1E48] text-white border-blue-900 shadow-xs'
+                          : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                      }`}
+                    >
+                      <QrCode className="w-4 h-4 text-orange-400" />
+                      <span>UPI / QR સ્કેન</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-white rounded-xl border border-emerald-300 flex items-center gap-2.5 text-xs font-bold text-neutral-800">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-black shrink-0">
+                      💵
+                    </div>
+                    <div>
+                      <div className="font-black text-emerald-900">રોકડ / કાઉન્ટર બિલિંગ (Cash on Delivery)</div>
+                      <div className="text-[11px] text-neutral-500 font-medium">માલ મેળવતી વખતે દુકાન પર અથવા ડિલિવરી સમયે રોકડ ચૂકવો.</div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Instant Dynamic QR Box */}
                 {paymentMode === 'UPI' && (

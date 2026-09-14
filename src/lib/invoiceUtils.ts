@@ -1,6 +1,35 @@
 import QRCode from 'qrcode';
 
 /**
+ * Build standard NPCI UPI Payment URI with exact amount, payee name, and bill note
+ */
+export function buildUpiPaymentUri(
+  upiId: string,
+  payeeName: string,
+  amount: number,
+  invoiceNo: string
+): string {
+  const cleanUpi = (upiId || '8140430395@apl').trim();
+  const cleanPayee = (payeeName || 'PRISHA STATIONERY').trim();
+  const cleanAmount = Number(amount || 0).toFixed(2);
+  const cleanNote = `Bill ${invoiceNo || 'INV'}`.slice(0, 30);
+  return `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${cleanAmount}&cu=INR&tn=${encodeURIComponent(cleanNote)}`;
+}
+
+/**
+ * Get an immediate URL for the QR code (used before asynchronous toDataURL finishes)
+ */
+export function getImmediateQrFallbackUrl(
+  upiId: string,
+  payeeName: string,
+  amount: number,
+  invoiceNo: string
+): string {
+  const uri = buildUpiPaymentUri(upiId, payeeName, amount, invoiceNo);
+  return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=4&data=${encodeURIComponent(uri)}`;
+}
+
+/**
  * Generate a dynamic UPI payment QR code as a PNG Data URL
  * When scanned by PhonePe, Google Pay, Paytm, BHIM, etc., it automatically
  * pre-fills the Payee Name, UPI ID, Bill Invoice Number, and exact Amount.
@@ -11,17 +40,11 @@ export async function generateUpiQrDataUrl(
   amount: number,
   invoiceNo: string
 ): Promise<string> {
-  const cleanUpi = (upiId || '8140430395@apl').trim();
-  const cleanPayee = (payeeName || 'PRISHA STATIONERY').trim();
-  const cleanAmount = Number(amount || 0).toFixed(2);
-  const cleanNote = `Bill ${invoiceNo || 'INV'}`.slice(0, 30);
-
-  // Standard NPCI UPI URI string
-  const upiUrl = `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${cleanAmount}&cu=INR&tn=${encodeURIComponent(cleanNote)}`;
+  const upiUrl = buildUpiPaymentUri(upiId, payeeName, amount, invoiceNo);
 
   try {
     const dataUrl = await QRCode.toDataURL(upiUrl, {
-      width: 180,
+      width: 200,
       margin: 1,
       color: {
         dark: '#000000',
@@ -32,8 +55,7 @@ export async function generateUpiQrDataUrl(
     return dataUrl;
   } catch (err) {
     console.warn('Local QRCode generator fallback:', err);
-    // Fallback URL if local engine fails
-    return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(upiUrl)}`;
+    return getImmediateQrFallbackUrl(upiId, payeeName, amount, invoiceNo);
   }
 }
 
