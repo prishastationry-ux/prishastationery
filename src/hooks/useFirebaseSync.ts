@@ -73,7 +73,14 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     const unsubscribe = onSnapshot(docRef, (snapshot) => {
       if (snapshot.exists()) {
         const rawData = snapshot.data().data;
-        const cleaned = filterMockData(rawData);
+        if (rawData === undefined || rawData === null) return;
+        const rawCleaned = filterMockData(rawData);
+        if (rawCleaned === undefined || rawCleaned === null) return;
+
+        const cleaned = (typeof initialData === 'object' && initialData !== null && !Array.isArray(initialData))
+          ? { ...initialData, ...rawCleaned }
+          : rawCleaned;
+
         if (Array.isArray(rawData) && cleaned.length !== rawData.length) {
           setDoc(docRef, { data: cleaned }).catch(() => {});
         }

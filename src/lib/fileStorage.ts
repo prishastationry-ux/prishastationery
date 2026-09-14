@@ -24,7 +24,11 @@ export function registerLocalBlobUrl(url: string): string {
 
 export function isLocalBlobValid(url?: string): boolean {
   if (!url || !url.startsWith('blob:')) return false;
-  return activeLocalBlobUrls.has(url);
+  if (activeLocalBlobUrls.has(url)) return true;
+  if (typeof window !== 'undefined' && url.startsWith(`blob:${window.location.origin}`)) {
+    return true;
+  }
+  return false;
 }
 
 export interface StorageProgress {
@@ -75,8 +79,11 @@ function openDB(): Promise<IDBDatabase> {
 export function isForeignBlobUrl(url?: string): boolean {
   if (!url || typeof url !== 'string') return false;
   if (!url.startsWith('blob:')) return false;
-  // If it was not created in this current runtime session, it is a dead/foreign blob URL
-  return !activeLocalBlobUrls.has(url);
+  if (activeLocalBlobUrls.has(url)) return false;
+  if (typeof window !== 'undefined' && !url.startsWith(`blob:${window.location.origin}`)) {
+    return true;
+  }
+  return false;
 }
 
 // 1. Save dataUrl to local browser IndexedDB
@@ -151,7 +158,7 @@ export async function getFileFromStorage(fileId: string): Promise<string | null>
           return;
         }
         if (res.blob && res.blob.size > 0) {
-          resolve(URL.createObjectURL(res.blob));
+          resolve(registerLocalBlobUrl(URL.createObjectURL(res.blob)));
           return;
         }
         if (res.dataUrl && !res.dataUrl.startsWith('blob:') && res.dataUrl.length > 50) {
@@ -549,13 +556,7 @@ export function createBlobUrl(input: string): string | null {
 // Download file safely as original binary Blob (works for PDFs, images, docs without 0KB corruption)
 export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: string): Promise<boolean> {
   if (!dataUrlOrBlobUrl) {
-    console.error('Cannot download: URL or data is empty');
-    return false;
-  }
-
-  // Reject dead foreign blob URLs before attempting to trigger browser navigation
-  if (isForeignBlobUrl(dataUrlOrBlobUrl)) {
-    console.error('Cannot download: Stale or foreign Blob URL detected. Use getFileFromCloudStorage to retrieve fresh chunks.');
+    console.warn('Cannot download: URL or data is empty');
     return false;
   }
 
@@ -564,6 +565,12 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     let shouldRevoke = false;
 
     if (dataUrlOrBlobUrl.startsWith('blob:')) {
+      // If it's explicitly a foreign origin or stale blob, notify caller to retrieve fresh cloud chunks
+      if (isForeignBlobUrl(dataUrlOrBlobUrl)) {
+        console.warn('Stale or foreign Blob URL detected; caller will retrieve fresh chunks.');
+        return false;
+      }
+
       // Test accessibility of the blob
       try {
         const testRes = await fetch(dataUrlOrBlobUrl);
@@ -571,8 +578,9 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
         const testBlob = await testRes.blob();
         if (!testBlob || testBlob.size === 0) throw new Error('Blob is empty');
         directBlobUrl = dataUrlOrBlobUrl;
+        registerLocalBlobUrl(dataUrlOrBlobUrl);
       } catch (e) {
-        console.error('Blob URL failed accessibility test:', e);
+        console.warn('Blob URL cannot be accessed directly (stale session); caller will retrieve fresh chunks:', e);
         return false;
       }
     } else if (dataUrlOrBlobUrl.startsWith('http:') || dataUrlOrBlobUrl.startsWith('https:')) {
@@ -580,7 +588,7 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     } else {
       const blob = await dataUrlToBlobAsync(dataUrlOrBlobUrl);
       if (!blob || blob.size === 0) {
-        console.error('Cannot download: Blob is empty or corrupted');
+        console.warn('Cannot download: Blob is empty or corrupted');
         return false;
       }
       directBlobUrl = registerLocalBlobUrl(URL.createObjectURL(blob));
@@ -606,7 +614,7 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
 
     return true;
   } catch (err) {
-    console.error('Safe download failed:', err);
+    console.warn('Safe download attempt encountered issue:', err);
     return false;
   }
 }
@@ -623,14 +631,14 @@ export async function openFileInNewTab(dataUrl: string, fileName: string): Promi
     if (!blob || blob.size === 0) {
       return false;
     }
-    const blobUrl = URL.createObjectURL(blob);
+    const blobUrl = registerLocalBlobUrl(URL.createObjectURL(blob));
     const newWindow = window.open(blobUrl, '_blank');
     if (!newWindow) {
       return await downloadFileSafely(blobUrl, fileName);
     }
     return true;
   } catch (err) {
-    console.error('Open in new tab failed:', err);
+    console.warn('Open in new tab failed:', err);
     return false;
   }
 }

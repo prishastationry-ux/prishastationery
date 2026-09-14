@@ -42,7 +42,8 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  Filter
+  Filter,
+  Server
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
@@ -58,6 +59,7 @@ import { BillSettingsModal } from './components/BillSettingsModal';
 import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDeleteModal';
 import { OnlinePrintModal } from './components/OnlinePrintModal';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
+import { MultiPlatformSyncModal } from './components/MultiPlatformSyncModal';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 
 export default function App() {
@@ -74,6 +76,7 @@ export default function App() {
   // Online Print Customer & Admin Print Job States
   const [showOnlinePrintModal, setShowOnlinePrintModal] = useState<boolean>(false);
   const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
+  const [showMultiPlatformSyncModal, setShowMultiPlatformSyncModal] = useState<boolean>(false);
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
 
   // Ensure clean initial state (no starter sample mock print jobs)
@@ -1435,7 +1438,7 @@ export default function App() {
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
           {/* DHAMAKA OFFER TICKER / BANNER (Editable by Admin) */}
-          {(storeSettings.dhamakaOfferEnabled || isAdminUnlocked) && (
+          {(storeSettings?.dhamakaOfferEnabled || isAdminUnlocked) && (
             <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 text-black p-3.5 sm:p-4 shadow-md border-2 border-amber-300 animate-fade-in">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 relative z-10">
                 <div className="flex items-center gap-3">
@@ -1448,11 +1451,11 @@ export default function App() {
                         સ્પેશિયલ ઓફર
                       </span>
                       <h3 className="text-sm sm:text-base font-black text-neutral-950">
-                        {storeSettings.dhamakaOfferTitle || 'ધમાકા ઓફર!'}
+                        {storeSettings?.dhamakaOfferTitle || 'ધમાકા ઓફર!'}
                       </h3>
                     </div>
                     <p className="text-xs sm:text-sm font-bold text-neutral-900 mt-0.5">
-                      {storeSettings.dhamakaOfferText || 'બધી સ્કૂલ અને ઓફિસ સ્ટેશનરી પર જબરદસ્ત ડિસ્કાઉન્ટ!'}
+                      {storeSettings?.dhamakaOfferText || 'બધી સ્કૂલ અને ઓફિસ સ્ટેશનરી પર જબરદસ્ત ડિસ્કાઉન્ટ!'}
                     </p>
                   </div>
                 </div>
@@ -1840,6 +1843,17 @@ export default function App() {
               >
                 <Printer className="w-4 h-4 text-black" />
                 <span>🖨️ પ્રિન્ટ ઓર્ડર્સ ({printJobs.filter(j => j.status === 'received').length ? `${printJobs.filter(j => j.status === 'received').length} નવા` : printJobs.length})</span>
+              </button>
+
+              {/* MULTI-PLATFORM ECOSYSTEM & SYNC HUB BUTTON */}
+              <button
+                type="button"
+                onClick={() => setShowMultiPlatformSyncModal(true)}
+                className="bg-neutral-900 hover:bg-black text-amber-300 border border-amber-400/80 px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer"
+                title="Desktop App (SQLite) & Mobile App રિયલ-ટાઇમ સિન્ક અને 4K સ્ટોરેજ કન્ટ્રોલ"
+              >
+                <Server className="w-4 h-4 text-amber-400" />
+                <span>🌐 મલ્ટિ-પ્લેટફોર્મ સિન્ક</span>
               </button>
 
               <button
@@ -3252,6 +3266,7 @@ export default function App() {
         <DhamakaOfferModal
           isOpen={showDhamakaEditModal}
           onClose={() => setShowDhamakaEditModal(false)}
+          storeSettings={storeSettings}
           settings={storeSettings}
           onSave={updatedSettings => {
             setStoreSettings(prev => ({
@@ -3504,6 +3519,17 @@ export default function App() {
           onUpdateJob={handleUpdatePrintJob}
           onDeleteJob={handleDeletePrintJob}
           onConvertToInvoice={handleConvertPrintJobToInvoice}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 22. MULTI-PLATFORM ECOSYSTEM & REAL-TIME SYNC MODAL */}
+      {/* ========================================================================= */}
+      {showMultiPlatformSyncModal && (
+        <MultiPlatformSyncModal
+          isOpen={showMultiPlatformSyncModal}
+          onClose={() => setShowMultiPlatformSyncModal(false)}
+          printJobCount={printJobs.length}
         />
       )}
 

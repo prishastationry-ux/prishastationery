@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { Sparkles, X, Check, Megaphone, Tag, AlignLeft } from 'lucide-react';
 import { StoreSettings } from '../types';
+import { DEFAULT_STORE_SETTINGS } from '../data';
 
 interface DhamakaOfferModalProps {
   isOpen: boolean;
   onClose: () => void;
-  storeSettings: StoreSettings;
+  storeSettings?: StoreSettings;
+  settings?: StoreSettings;
   onSave: (updatedSettings: StoreSettings) => void;
 }
 
@@ -13,19 +15,21 @@ export const DhamakaOfferModal: React.FC<DhamakaOfferModalProps> = ({
   isOpen,
   onClose,
   storeSettings,
+  settings,
   onSave
 }) => {
-  const [title, setTitle] = useState(storeSettings.dhamakaOfferTitle || '');
-  const [text, setText] = useState(storeSettings.dhamakaOfferText || '');
-  const [marquee, setMarquee] = useState(storeSettings.marqueeText || '');
-  const [enabled, setEnabled] = useState(storeSettings.dhamakaOfferEnabled !== false);
+  const currentSettings = storeSettings || settings || DEFAULT_STORE_SETTINGS;
+  const [title, setTitle] = useState(currentSettings?.dhamakaOfferTitle || '');
+  const [text, setText] = useState(currentSettings?.dhamakaOfferText || '');
+  const [marquee, setMarquee] = useState(currentSettings?.marqueeText || '');
+  const [enabled, setEnabled] = useState(currentSettings?.dhamakaOfferEnabled !== false);
 
   if (!isOpen) return null;
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
-      ...storeSettings,
+      ...currentSettings,
       dhamakaOfferTitle: title,
       dhamakaOfferText: text,
       marqueeText: marquee,

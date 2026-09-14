@@ -27,6 +27,7 @@ import {
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
 import {
   getFileFromCloudStorage,
+  getFileFromStorage,
   uploadFileObjectInChunks,
   isForeignBlobUrl,
   createBlobUrl,
@@ -104,8 +105,9 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'શરૂ થઈ રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      // If fileUrl is missing, or is a dead blob URL from another device/session, fetch fresh from cloud
-      if (!fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl) || fileUrl.startsWith('blob:')) {
+      // If fileUrl is missing or dead/foreign, fetch fresh from cloud storage
+      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl);
+      if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
             fileId: file.id,
@@ -115,6 +117,16 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
             totalBytes: prog.totalBytes
           });
         });
+      }
+
+      if (!fileUrl) {
+        // Fallback: check local IndexedDB
+        fileUrl = await getFileFromStorage(file.id);
+      }
+
+      if (!fileUrl && file.fileDataUrl && file.fileDataUrl.length > 50) {
+        // Fallback: try raw existing fileDataUrl if available
+        fileUrl = file.fileDataUrl;
       }
 
       if (!fileUrl) {
@@ -148,7 +160,8 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'લોડ થઈ રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      if (!fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl) || fileUrl.startsWith('blob:')) {
+      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isForeignBlobUrl(fileUrl);
+      if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
             fileId: file.id,
@@ -158,6 +171,15 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
             totalBytes: prog.totalBytes
           });
         });
+      }
+
+      if (!fileUrl) {
+        // Fallback: check local IndexedDB
+        fileUrl = await getFileFromStorage(file.id);
+      }
+
+      if (!fileUrl && file.fileDataUrl && file.fileDataUrl.length > 50) {
+        fileUrl = file.fileDataUrl;
       }
 
       if (!fileUrl) {

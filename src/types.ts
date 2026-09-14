@@ -180,6 +180,11 @@ export interface PrintJobRecord {
   paymentStatus: 'Pending' | 'Paid' | 'બાકી';
   paymentMode?: 'UPI' | 'Cash' | 'Online' | 'બાકી (Credit)';
   adminNotes?: string;
+  notes?: string;
+  paidAmount?: number;
+  updatedAt?: number;
+  syncStatus?: 'synced' | 'pending_push' | 'conflict';
+  syncVersion?: number;
   invoiceGenerated?: boolean;
   invoiceNo?: string;
   totalJobSize?: number;
