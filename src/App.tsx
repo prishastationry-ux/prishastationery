@@ -1933,9 +1933,7 @@ export default function App() {
               <MobilePosterWidget
                 posters={storeSettings.mobilePosters || []}
               />
-              <MobilePosterWidget
-                posters={storeSettings.newsBoxPosters || []}
-              />
+              
             </div>
           </div>
 
@@ -3686,6 +3684,63 @@ export default function App() {
             }));
 
             setKhataTransactions(prev => [...prev, newTx]);
+          }}
+          onDeleteKhataAccount={(id) => {
+            setKhataAccounts(prev => prev.filter(a => a.id !== id));
+            setKhataTransactions(prev => prev.filter(t => t.accountId !== id));
+            showToast('🗑️ ખાતું અને વ્યવહારો ડીલીટ થઈ ગયા.');
+          }}
+          onDeleteKhataTransaction={(id, accountId) => {
+            const tx = khataTransactions.find(t => t.id === id);
+            if (!tx) return;
+            
+            setKhataTransactions(prev => prev.filter(t => t.id !== id));
+            
+            // Reverse the balance
+            setKhataAccounts(prev => prev.map(a => {
+              if (a.id === accountId) {
+                const reverseAmt = tx.type === 'jama' ? -tx.amount : tx.amount;
+                return {
+                  ...a,
+                  balance: a.balance + reverseAmt,
+                  totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) - tx.amount : (a.totalGiven || 0),
+                  totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) - tx.amount : (a.totalReceived || 0)
+                };
+              }
+              return a;
+            }));
+            showToast('🗑️ વ્યવહાર ડીલીટ થઈ ગયો.');
+          }}
+          onEditKhataAccount={(id, newName) => {
+             setKhataAccounts(prev => prev.map(a => a.id === id ? { ...a, name: newName } : a));
+             showToast('✅ ખાતાનું નામ અપડેટ થયું.');
+          }}
+          onEditKhataTransaction={(id, newAmount, newDesc) => {
+            const tx = khataTransactions.find(t => t.id === id);
+            if (!tx) return;
+            
+            const amountDiff = newAmount - tx.amount;
+            
+            setKhataTransactions(prev => prev.map(t => {
+               if(t.id === id) {
+                 return { ...t, amount: newAmount, description: newDesc };
+               }
+               return t;
+            }));
+            
+            setKhataAccounts(prev => prev.map(a => {
+               if (a.id === tx.accountId) {
+                 const balanceDiff = tx.type === 'jama' ? amountDiff : -amountDiff;
+                 return {
+                   ...a,
+                   balance: a.balance + balanceDiff,
+                   totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) + amountDiff : (a.totalGiven || 0),
+                   totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) + amountDiff : (a.totalReceived || 0)
+                 };
+               }
+               return a;
+            }));
+            showToast('✅ વ્યવહાર અપડેટ થયો.');
           }}
           storeSettings={storeSettings}
           showToast={showToast}

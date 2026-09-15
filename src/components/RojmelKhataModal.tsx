@@ -31,6 +31,10 @@ interface RojmelKhataModalProps {
   onAddKhataAccount: (acc: Omit<KhataAccount, 'id' | 'balance' | 'totalGiven' | 'totalReceived' | 'lastTransactionDate'>) => void;
   khataTransactions: KhataTransaction[];
   onAddKhataTransaction: (tx: Omit<KhataTransaction, 'id' | 'createdAt' | 'balanceAfter'>) => void;
+  onDeleteKhataAccount: (id: string) => void;
+  onDeleteKhataTransaction: (id: string, accountId: string) => void;
+  onEditKhataAccount: (id: string, newName: string) => void;
+  onEditKhataTransaction: (id: string, newAmount: number, newDesc: string) => void;
   storeSettings: StoreSettings;
   showToast: (msg: string) => void;
 }
@@ -45,6 +49,10 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
   onAddKhataAccount,
   khataTransactions,
   onAddKhataTransaction,
+  onDeleteKhataAccount,
+  onDeleteKhataTransaction,
+  onEditKhataAccount,
+  onEditKhataTransaction,
   storeSettings,
   showToast
 }) => {
@@ -662,7 +670,36 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                     {/* ACCOUNT DETAIL CARD */}
                     <div className="bg-gradient-to-r from-blue-900 to-[#0B1E48] text-white p-3.5 rounded-xl flex items-center justify-between gap-3 shadow-sm">
                       <div>
-                        <h4 className="text-base font-black">{selectedAccount.name}</h4>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-base font-black">{selectedAccount.name}</h4>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newName = window.prompt('નવું નામ દાખલ કરો:', selectedAccount.name);
+                                if (newName && newName.trim() !== '') {
+                                  onEditKhataAccount(selectedAccount.id, newName.trim());
+                                }
+                              }}
+                              className="text-blue-300 hover:text-white px-1 py-1 rounded cursor-pointer"
+                              title="નામ બદલો"
+                            >
+                              ✏️
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (window.confirm('આ ખાતું અને તેના તમામ વ્યવહારો કાઢી નાખવા છે?')) {
+                                onDeleteKhataAccount(selectedAccount.id);
+                                setSelectedAccountId(null);
+                              }
+                            }}
+                            className="bg-red-500/20 text-red-300 hover:bg-red-500 hover:text-white px-2 py-1 rounded-lg text-[10px] font-black cursor-pointer"
+                          >
+                            ડીલીટ ખાતું
+                          </button>
+                        </div>
                         <p className="text-xs text-blue-200 font-bold">
                           {selectedAccount.phone ? `📞 ${selectedAccount.phone}` : 'સંપર્ક નંબર નથી'}
                           {selectedAccount.address ? ` • 📍 ${selectedAccount.address}` : ''}
