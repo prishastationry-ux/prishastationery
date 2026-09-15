@@ -1,4 +1,7 @@
-import React, { useState, useEffect } from 'react';
+const fs = require('fs');
+let code = fs.readFileSync('src/components/MobilePosterWidget.tsx', 'utf8');
+
+code = `import React, { useState, useEffect } from 'react';
 import { Smartphone, ChevronLeft, ChevronRight, LucideIcon } from 'lucide-react';
 import { BannerSlide } from '../types';
 
@@ -19,20 +22,20 @@ export const MobilePosterWidget: React.FC<MobilePosterWidgetProps> = ({
     {
       id: 'p-1',
       imageUrl: 'https://images.unsplash.com/photo-1588072432836-e10032774350?w=600&auto=format&fit=crop&q=80',
-      title: 'નવી પ્રોડક્ટ્સ અને સ્કીમ',
-      subtitle: 'અહીં તમારા નવા ફોટા જોવા મળશે',
+      title: 'ઓનલાઇન પ્રિન્ટિંગ & ઝેરોક્ષ સેવા',
+      subtitle: 'WhatsApp & Web પરથી ફાઇલ મોકલો • સુપર ફાસ્ટ પ્રિન્ટ મેળવો',
     },
     {
       id: 'p-2',
       imageUrl: 'https://images.unsplash.com/photo-1456735190829-80ab072ac1a0?w=600&auto=format&fit=crop&q=80',
-      title: 'નવી ઓફર',
-      subtitle: 'અહીં તમારા નવા ફોટા જોવા મળશે',
+      title: 'સ્કૂલ-કોલેજ સ્ટેશનરી & ચોપડા',
+      subtitle: 'હોલસેલ ભાવે તમામ બ્રાન્ડેડ સાહિત્ય ઉપલબ્ધ છે',
     },
     {
       id: 'p-3',
       imageUrl: 'https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=600&auto=format&fit=crop&q=80',
-      title: 'દુકાનની માહિતી',
-      subtitle: 'અહીં તમારા નવા ફોટા જોવા મળશે',
+      title: 'CSC ડિજિટલ સેવા કેન્દ્ર (Tharad)',
+      subtitle: 'આધાર, પાન કાર્ડ, ચૂંટણી કાર્ડ, આવકના દાખલા',
     }
   ];
 
@@ -87,9 +90,9 @@ export const MobilePosterWidget: React.FC<MobilePosterWidgetProps> = ({
             <button
               key={idx}
               onClick={(e) => { e.stopPropagation(); setCurrentIndex(idx); }}
-              className={`h-1.5 rounded-full transition-all cursor-pointer ${
+              className={\`h-1.5 rounded-full transition-all cursor-pointer \${
                 currentIndex === idx ? 'w-5 bg-orange-500 shadow-sm' : 'w-1.5 bg-white/70 shadow-sm'
-              }`}
+              }\`}
             />
           ))}
         </div>
@@ -121,3 +124,7 @@ export const MobilePosterWidget: React.FC<MobilePosterWidgetProps> = ({
     </div>
   );
 };
+`;
+
+fs.writeFileSync('src/components/MobilePosterWidget.tsx', code);
+console.log('MobilePosterWidget updated');

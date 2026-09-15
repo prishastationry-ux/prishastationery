@@ -1231,6 +1231,19 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white">
       
+      
+      {showStoreSettingsModal && (
+        <StoreSettingsModal
+          isOpen={showStoreSettingsModal}
+          onClose={() => setShowStoreSettingsModal(false)}
+          settings={storeSettings}
+          onSave={(updated) => {
+            setStoreSettings(prev => ({ ...prev, ...updated }));
+          }}
+          showToast={showToast}
+        />
+      )}
+
       {/* ========================================================================= */}
       {/* 1. PROFESSIONAL AMAZON / FLIPKART STYLE TOP HEADER */}
       {/* ========================================================================= */}
@@ -1610,14 +1623,7 @@ export default function App() {
             </div>
           )}
 
-          {/* INSTAGRAM / WHATSAPP STYLE STORE STORIES WIDGET */}
-          {storeSettings.showStoriesWidget !== false && (
-            <StoryWidget
-              stories={storeSettings.storeStories || []}
-              isAdminUnlocked={isAdminUnlocked}
-              onOpenStoreSettings={() => setShowStoreSettingsModal(true)}
-            />
-          )}
+          
 
           {/* SEARCH & CATEGORY FILTER BAR */}
           <div className="bg-white p-3 sm:p-4 rounded-xl border border-neutral-300 shadow-2xs space-y-3">
@@ -1929,9 +1935,6 @@ export default function App() {
               />
               <MobilePosterWidget
                 posters={storeSettings.newsBoxPosters || []}
-                headerTitle="નવા સમાચાર & અપડેટ્સ"
-                headerSubtitle="સ્ટોર અને ઓફર્સ વિશે માહિતી"
-                Icon={Newspaper}
               />
             </div>
           </div>

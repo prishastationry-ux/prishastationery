@@ -46,9 +46,6 @@ export const StoryWidget: React.FC<StoryWidgetProps> = ({
       <div className="flex items-center justify-between gap-2 mb-2.5">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-          <span className="font-black text-xs text-neutral-900 flex items-center gap-1">
-            <span>✨ દૈનિક અપડેટ્સ & સ્ટોરી (Daily Stories)</span>
-          </span>
         </div>
         {isAdminUnlocked && onOpenStoreSettings && (
           <button
