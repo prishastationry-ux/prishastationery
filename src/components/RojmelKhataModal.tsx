@@ -460,7 +460,7 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                       type="text"
                       value={rojmelPerson}
                       onChange={e => setRojmelPerson(e.target.value)}
-                      placeholder="દા.ત. રમેશભાઈ થરાદ"
+                      placeholder="દા.ત. ભરતભાઈ થરાદ"
                       className="w-full p-2 bg-white border border-neutral-300 rounded-lg font-bold text-xs outline-none"
                     />
                   </div>
@@ -605,7 +605,7 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                     type="text"
                     value={newAccName}
                     onChange={e => setNewAccName(e.target.value)}
-                    placeholder="નામ (દા.ત. રમેશભાઈ ચૌધરી)"
+                    placeholder="નામ (દા.ત. ભરતભાઈ ચૌધરી)"
                     className="w-full p-1.5 bg-white border border-neutral-300 rounded text-xs font-bold outline-none"
                   />
                   <input

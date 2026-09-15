@@ -214,7 +214,7 @@ export interface KhataTransaction {
 
 export interface TrashRecord {
   id: string;
-  type: 'product' | 'order' | 'expense';
+  type: 'product' | 'order' | 'expense' | 'khata_account' | 'khata_transaction' | 'rojmel' | 'print_job';
   title: string;
   deletedAt: string;
   summary: string;

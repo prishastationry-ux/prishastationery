@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+const fs = require('fs');
+
+const newTrashModal = `import React, { useState } from 'react';
 import { Trash2, RotateCcw, X, AlertTriangle, Package, Receipt, DollarSign, CheckCircle2, ShieldAlert, BookOpen, Users } from 'lucide-react';
 import { TrashRecord } from '../types';
 
@@ -220,3 +222,7 @@ export const TrashModal: React.FC<TrashModalProps> = ({
     </div>
   );
 };
+`;
+
+fs.writeFileSync('src/components/TrashModal.tsx', newTrashModal);
+console.log('Updated src/components/TrashModal.tsx successfully');

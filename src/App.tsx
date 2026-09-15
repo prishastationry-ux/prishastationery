@@ -118,77 +118,6 @@ export default function App() {
   const [showTrashModal, setShowTrashModal] = useState<boolean>(false);
   const [trashList, setTrashList] = useFirebaseSync<TrashRecord[]>('trash', 'prisha_trash_v4', []);
 
-  
-  
-  const handleRestoreTrashItem = (id: string) => {
-    const item = trashList.find(t => t.id === id);
-    if (!item) return;
-    
-    if (item.type === 'khata_account' && item.data) {
-      const accData = item.data.account || item.data;
-      const txData = item.data.transactions || [];
-      setKhataAccounts(prev => [...prev, accData]);
-      if (txData.length > 0) {
-        setKhataTransactions(prev => [...prev, ...txData]);
-      }
-    } else if (item.type === 'khata_transaction' && item.data) {
-      const tx = item.data;
-      setKhataTransactions(prev => [...prev, tx]);
-      setKhataAccounts(prev => prev.map(a => {
-        if (a.id === tx.accountId) {
-          const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
-          return {
-            ...a,
-            balance: a.balance + txAmt,
-            totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) + tx.amount : (a.totalGiven || 0),
-            totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) + tx.amount : (a.totalReceived || 0)
-          };
-        }
-        return a;
-      }));
-    } else if (item.type === 'rojmel' && item.data) {
-      setRojmelEntries(prev => [...prev, item.data]);
-    } else if (item.type === 'print_job' && item.data) {
-      setPrintJobs(prev => [...prev, item.data]);
-    }
-    
-    setTrashList(prev => prev.filter(t => t.id !== id));
-    showToast('♻️ આઇટમ સફળતાપૂર્વક પાછી મેળવી લીધી (Restored)!');
-  };
-const item = trashList.find(t => t.id === id);
-    if (!item) return;
-    
-    if (item.type === 'khata_account' && item.data) {
-      const accData = item.data.account || item.data;
-      const txData = item.data.transactions || [];
-      setKhataAccounts(prev => [...prev, accData]);
-      if (txData.length > 0) {
-        setKhataTransactions(prev => [...prev, ...txData]);
-      }
-    } else if (item.type === 'khata_transaction' && item.data) {
-      const tx = item.data;
-      setKhataTransactions(prev => [...prev, tx]);
-      // re-apply balance on account
-      setKhataAccounts(prev => prev.map(a => {
-        if (a.id === tx.accountId) {
-          const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
-          return {
-            ...a,
-            balance: a.balance + txAmt,
-            totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) + tx.amount : (a.totalGiven || 0),
-            totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) + tx.amount : (a.totalReceived || 0)
-          };
-        }
-        return a;
-      }));
-    } else if (item.type === 'rojmel' && item.data) {
-      setRojmelEntries(prev => [...prev, item.data]);
-    } else if (item.type === 'print_job' && item.data) {
-      setPrintJobs(prev => [...prev, item.data]);
-    }
-    
-    setTrashList(prev => prev.filter(t => t.id !== id));
-    showToast('♻️ આઇટમ સફળતાપૂર્વક પાછી મેળવી લીધી (Restored)!');
   // Dhamaka Offer Edit Modal State
   const [showDhamakaEditModal, setShowDhamakaEditModal] = useState<boolean>(false);
 
@@ -863,6 +792,45 @@ const item = trashList.find(t => t.id === id);
       setExpenses(prev => [exp, ...prev.filter(e => e.id !== exp.id)]);
       setTrashList(prev => prev.filter(t => t.id !== record.id));
       showToast(`🔄 ખર્ચ રેકોર્ડ પાછો ઉમેરાઈ ગયો!`);
+    } else if (record.type === 'khata_account') {
+      const accData = record.data?.account || record.data;
+      const txData = record.data?.transactions || [];
+      if (accData) {
+        setKhataAccounts(prev => [...prev.filter(a => a.id !== accData.id), accData]);
+        if (txData && txData.length > 0) {
+          const txIds = new Set(txData.map((t: any) => t.id));
+          setKhataTransactions(prev => [...prev.filter(t => !txIds.has(t.id)), ...txData]);
+        }
+        setTrashList(prev => prev.filter(t => t.id !== record.id));
+        showToast(`🔄 ખાતું "${accData.name}" પાછું આવી ગયું!`);
+      }
+    } else if (record.type === 'khata_transaction') {
+      const tx = record.data;
+      if (tx) {
+        setKhataTransactions(prev => [...prev.filter(t => t.id !== tx.id), tx]);
+        // Re-apply balance
+        setKhataAccounts(prev => prev.map(a => {
+          if (a.id === tx.accountId) {
+            const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
+            return {
+              ...a,
+              balance: a.balance + txAmt,
+              totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) + tx.amount : (a.totalGiven || 0),
+              totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) + tx.amount : (a.totalReceived || 0)
+            };
+          }
+          return a;
+        }));
+        setTrashList(prev => prev.filter(t => t.id !== record.id));
+        showToast(`🔄 ખાતાનો વ્યવહાર પાછો ઉમેરાઈ ગયો!`);
+      }
+    } else if (record.type === 'rojmel') {
+      const entry = record.data;
+      if (entry) {
+        setRojmelEntries(prev => [...prev.filter(e => e.id !== entry.id), entry]);
+        setTrashList(prev => prev.filter(t => t.id !== record.id));
+        showToast(`🔄 રોજમેળ એન્ટ્રી પાછી ઉમેરાઈ ગઈ!`);
+      }
     }
   };
 

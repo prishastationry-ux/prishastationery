@@ -679,7 +679,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                         <input
                           type="text"
                           required
-                          placeholder="દા.ત. રમેશભાઈ પટેલ"
+                          placeholder="દા.ત. ભરતભાઈ પટેલ"
                           value={customerName}
                           onChange={e => setCustomerName(e.target.value)}
                           className="w-full bg-white border border-neutral-300 rounded-xl px-3 py-2 text-xs font-bold text-neutral-900 focus:outline-none focus:border-blue-700"

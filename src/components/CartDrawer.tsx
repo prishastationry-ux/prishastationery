@@ -347,7 +347,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                   </label>
                   <input
                     type="text"
-                    placeholder="દા.ત. રમેશભાઈ પટેલ"
+                    placeholder="દા.ત. ભરતભાઈ પટેલ"
                     value={customerName}
                     onChange={e => setCustomerName(e.target.value)}
                     className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
