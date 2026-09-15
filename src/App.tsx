@@ -118,16 +118,22 @@ export default function App() {
   const [showTrashModal, setShowTrashModal] = useState<boolean>(false);
   const [trashList, setTrashList] = useFirebaseSync<TrashRecord[]>('trash', 'prisha_trash_v4', []);
 
+  
+  
   const handleRestoreTrashItem = (id: string) => {
     const item = trashList.find(t => t.id === id);
     if (!item) return;
     
     if (item.type === 'khata_account' && item.data) {
-      setKhataAccounts(prev => [...prev, item.data]);
+      const accData = item.data.account || item.data;
+      const txData = item.data.transactions || [];
+      setKhataAccounts(prev => [...prev, accData]);
+      if (txData.length > 0) {
+        setKhataTransactions(prev => [...prev, ...txData]);
+      }
     } else if (item.type === 'khata_transaction' && item.data) {
-      setKhataTransactions(prev => [...prev, item.data]);
-      // restore balance on account
       const tx = item.data;
+      setKhataTransactions(prev => [...prev, tx]);
       setKhataAccounts(prev => prev.map(a => {
         if (a.id === tx.accountId) {
           const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
@@ -149,8 +155,40 @@ export default function App() {
     setTrashList(prev => prev.filter(t => t.id !== id));
     showToast('♻️ આઇટમ સફળતાપૂર્વક પાછી મેળવી લીધી (Restored)!');
   };
-  
-
+const item = trashList.find(t => t.id === id);
+    if (!item) return;
+    
+    if (item.type === 'khata_account' && item.data) {
+      const accData = item.data.account || item.data;
+      const txData = item.data.transactions || [];
+      setKhataAccounts(prev => [...prev, accData]);
+      if (txData.length > 0) {
+        setKhataTransactions(prev => [...prev, ...txData]);
+      }
+    } else if (item.type === 'khata_transaction' && item.data) {
+      const tx = item.data;
+      setKhataTransactions(prev => [...prev, tx]);
+      // re-apply balance on account
+      setKhataAccounts(prev => prev.map(a => {
+        if (a.id === tx.accountId) {
+          const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
+          return {
+            ...a,
+            balance: a.balance + txAmt,
+            totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) + tx.amount : (a.totalGiven || 0),
+            totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) + tx.amount : (a.totalReceived || 0)
+          };
+        }
+        return a;
+      }));
+    } else if (item.type === 'rojmel' && item.data) {
+      setRojmelEntries(prev => [...prev, item.data]);
+    } else if (item.type === 'print_job' && item.data) {
+      setPrintJobs(prev => [...prev, item.data]);
+    }
+    
+    setTrashList(prev => prev.filter(t => t.id !== id));
+    showToast('♻️ આઇટમ સફળતાપૂર્વક પાછી મેળવી લીધી (Restored)!');
   // Dhamaka Offer Edit Modal State
   const [showDhamakaEditModal, setShowDhamakaEditModal] = useState<boolean>(false);
 
@@ -3718,14 +3756,35 @@ export default function App() {
 
             setKhataTransactions(prev => [...prev, newTx]);
           }}
-          onDeleteKhataAccount={(id) => {
+                    onDeleteKhataAccount={(id) => {
+            const acc = khataAccounts.find(a => a.id === id);
+            const txs = khataTransactions.filter(t => t.accountId === id);
+            if (acc) {
+              setTrashList(prev => [{
+                id: `trash-khata-acc-${Date.now()}`,
+                type: 'khata_account',
+                title: `खाતું: ${acc.name} (${acc.type === 'customer' ? 'ગ્રાહક' : 'વેપારી'})`,
+                deletedAt: new Date().toLocaleString(),
+                summary: `ಬાકી: ₹${acc.balance}, ફોન: ${acc.phone || 'નથી'}`,
+                data: { account: acc, transactions: txs }
+              }, ...prev]);
+            }
             setKhataAccounts(prev => prev.filter(a => a.id !== id));
             setKhataTransactions(prev => prev.filter(t => t.accountId !== id));
-            showToast('🗑️ ખાતું અને વ્યવહારો ડીલીટ થઈ ગયા.');
+            showToast('🗑️ ખાતું અને વ્યવહારો ટ્રેશ બિનમાં ખસેડાયા.');
           }}
-          onDeleteKhataTransaction={(id, accountId) => {
+                    onDeleteKhataTransaction={(id, accountId) => {
             const tx = khataTransactions.find(t => t.id === id);
             if (!tx) return;
+            
+            setTrashList(prev => [{
+              id: `trash-khata-tx-${Date.now()}`,
+              type: 'khata_transaction',
+              title: `વ્યવહાર: ${tx.accountName} (₹${tx.amount})`,
+              deletedAt: new Date().toLocaleString(),
+              summary: `પ્રકાર: ${tx.type}, વિગત: ${tx.description || '-'}`,
+              data: tx
+            }, ...prev]);
             
             setKhataTransactions(prev => prev.filter(t => t.id !== id));
             
@@ -3742,7 +3801,7 @@ export default function App() {
               }
               return a;
             }));
-            showToast('🗑️ વ્યવહાર ડીલીટ થઈ ગયો.');
+            showToast('🗑️ વ્યવહાર ટ્રેશ બિનમાં ગયો.');
           }}
           onEditKhataAccount={(id, newName, newPhone, newAddress) => {
              setKhataAccounts(prev => prev.map(a => a.id === id ? { ...a, name: newName, phone: newPhone, address: newAddress } : a));
