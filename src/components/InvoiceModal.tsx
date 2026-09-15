@@ -830,13 +830,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                <span>{isSuccessView ? '🎉 ઓર્ડર નોંધાઈ ગયો (બિલ તૈયાર)' : '🧾 સરકારી માન્ય ટેક્સ ઇન્વોઇસ'}</span>
-                <span className="text-[10px] bg-emerald-500/30 text-emerald-300 border border-emerald-400/40 px-2 py-0.5 rounded-full font-bold">
-                  ૧ પેજ પ્રિન્ટ તૈયાર
-                </span>
+                <span>{isSuccessView ? '🎉 ઓર્ડર નોંધાઈ ગયો (બિલ તૈયાર)' : '🧾 બિલ'}</span>
               </h3>
               <p className="text-[11px] text-blue-200 font-bold">
-                ઓર્ડર નં: <span className="font-mono text-orange-400 font-black">{order.invoiceNo}</span> | {order.date}
+                બિલ નં: <span className="font-mono text-orange-400 font-black">{order.invoiceNo}</span> | {order.date}
               </p>
             </div>
           </div>
@@ -1183,29 +1180,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
 
         {/* BOTTOM ACTION BAR (NO-PRINT) */}
-        <div className="no-print bg-neutral-100 p-3 sm:p-4 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-xs text-neutral-600 font-bold text-center sm:text-left">
-            💡 કમ્પ્યુટર અથવા પ્રિન્ટરમાં ૧ પેજનું કાગળ પ્રિન્ટ કરવા માટે 'પ્રિન્ટ' બટન દબાવો.
-          </p>
-          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap justify-end">
-            <button
-              type="button"
-              onClick={handleDirectPrint}
-              className="flex-1 sm:flex-none bg-[#0B1E48] hover:bg-blue-900 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95"
-            >
-              <Printer className="w-4 h-4 text-orange-400" />
-              <span>🖨️ પ્રિન્ટ (A4 Print)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 sm:flex-none bg-orange-500 hover:bg-orange-600 text-black px-5 py-2.5 rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-transform active:scale-95"
-            >
-              <span>પૂર્ણ</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
+        <div className="no-print bg-neutral-100 p-3 sm:p-4 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full sm:w-auto bg-orange-500 hover:bg-orange-600 text-black px-8 py-2.5 rounded-xl text-sm font-black shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-transform active:scale-95"
+          >
+            <span>પૂર્ણ (Close)</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
         </div>
 
       </div>

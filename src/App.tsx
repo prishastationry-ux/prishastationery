@@ -44,7 +44,8 @@ import {
   ExternalLink,
   Filter,
   Server,
-  Share2
+  Share2,
+  Newspaper
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
@@ -61,9 +62,9 @@ import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDelete
 import { OnlinePrintModal } from './components/OnlinePrintModal';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
 import { MultiPlatformSyncModal } from './components/MultiPlatformSyncModal';
-import { DailyReportModal } from './components/DailyReportModal';
 import { RojmelKhataModal } from './components/RojmelKhataModal';
 import { StoreSettingsModal } from './components/StoreSettingsModal';
+import { MobilePosterWidget } from './components/MobilePosterWidget';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
@@ -85,7 +86,6 @@ export default function App() {
   const [showOnlinePrintModal, setShowOnlinePrintModal] = useState<boolean>(false);
   const [showAdminPrintJobsModal, setShowAdminPrintJobsModal] = useState<boolean>(false);
   const [showMultiPlatformSyncModal, setShowMultiPlatformSyncModal] = useState<boolean>(false);
-  const [showDailyReportModal, setShowDailyReportModal] = useState<boolean>(false);
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
 
   // Ensure clean initial state (no starter sample mock print jobs)
@@ -397,6 +397,32 @@ export default function App() {
     } else {
       showToast(`➕ સ્ટોક વધાર્યો (+1)`);
     }
+  };
+
+  // Reorder Item (Up/Down)
+  const handleMoveItem = (itemId: string, direction: 'up' | 'down', e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    
+    // Create a working copy and ensure orderIdx is initialized
+    let itemsCopy = [...posItems].sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
+    itemsCopy = itemsCopy.map((item, index) => ({ ...item, orderIdx: item.orderIdx ?? index }));
+
+    const currentIndex = itemsCopy.findIndex(p => p.id === itemId);
+    if (currentIndex === -1) return;
+
+    if (direction === 'up' && currentIndex > 0) {
+      // Swap with previous
+      const temp = itemsCopy[currentIndex].orderIdx;
+      itemsCopy[currentIndex].orderIdx = itemsCopy[currentIndex - 1].orderIdx;
+      itemsCopy[currentIndex - 1].orderIdx = temp;
+    } else if (direction === 'down' && currentIndex < itemsCopy.length - 1) {
+      // Swap with next
+      const temp = itemsCopy[currentIndex].orderIdx;
+      itemsCopy[currentIndex].orderIdx = itemsCopy[currentIndex + 1].orderIdx;
+      itemsCopy[currentIndex + 1].orderIdx = temp;
+    }
+
+    setPosItems(itemsCopy);
   };
 
   // Delete an Item completely -> Opens In-App Confirm Modal -> Moves to Trash Bin (Recycle Bin)
@@ -1168,10 +1194,39 @@ export default function App() {
       item.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCat;
-  });
+  }).sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
 
   const cartTotalAmount = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const totalCartCount = cart.reduce((sum, i) => sum + i.quantity, 0);
+
+  const getHeaderSizeClasses = () => {
+    switch (storeSettings.headerNameSize) {
+      case 'small': return 'text-lg sm:text-xl md:text-2xl';
+      case 'medium': return 'text-xl sm:text-2xl md:text-3xl';
+      case 'xl': return 'text-3xl sm:text-5xl md:text-6xl';
+      case 'large': 
+      default: return 'text-2xl sm:text-4xl md:text-5xl';
+    }
+  };
+
+  const getSubHeaderSizeClasses = () => {
+    switch (storeSettings.headerNameSize) {
+      case 'small': return 'text-base sm:text-lg md:text-xl';
+      case 'medium': return 'text-lg sm:text-xl md:text-2xl';
+      case 'xl': return 'text-2xl sm:text-4xl md:text-5xl';
+      case 'large': 
+      default: return 'text-xl sm:text-3xl md:text-4xl';
+    }
+  };
+
+  const getProductTextSizeClasses = () => {
+    switch (storeSettings.productTextSize) {
+      case 'small': return 'text-[10px] sm:text-[11px]';
+      case 'large': return 'text-sm sm:text-base';
+      case 'medium':
+      default: return 'text-xs sm:text-sm';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white">
@@ -1223,10 +1278,10 @@ export default function App() {
           {/* CENTER STORE TITLE (LARGER, HIGH CONTRAST TYPOGRAPHY) */}
           <div className="text-center flex flex-col items-center flex-1 min-w-0 px-1">
             <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap justify-center">
-              <span className="text-xl sm:text-3xl md:text-4xl font-black text-[#EA580C] tracking-tight uppercase drop-shadow-xs">
+              <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight uppercase drop-shadow-xs`}>
                 {storeSettings.storeNameEn.split(' ')[0] || 'PRISHA'}
               </span>
-              <span className="text-lg sm:text-2xl md:text-3xl font-black text-[#1E40AF] tracking-tight uppercase truncate drop-shadow-xs">
+              <span className={`${getSubHeaderSizeClasses()} font-black text-[#1E40AF] tracking-tight uppercase truncate drop-shadow-xs`}>
                 {storeSettings.storeNameEn.substring(storeSettings.storeNameEn.indexOf(' ') + 1) || 'STATIONERY & ONLINE SERVICES'}
               </span>
             </div>
@@ -1665,17 +1720,20 @@ export default function App() {
           </div>
 
           {/* ========================================================================= */}
-          {/* 4. AMAZON / FLIPKART STYLE PRODUCT GRID (Large High-Res Photos) */}
+          {/* 4. AMAZON / FLIPKART STYLE PRODUCT GRID & RIGHT POSTER WIDGET */}
           {/* ========================================================================= */}
-          <div className={
-            storeSettings.productLayoutMode === 'list' 
-            ? "flex flex-col gap-3" 
-            : "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4.5"
-          }>
-            {filteredItems.map(item => {
-              const inCart = cart.find(c => c.product.id === item.id);
-              const isOutOfStock = typeof item.stock === 'number' && item.stock <= 0;
-              const isListView = storeSettings.productLayoutMode === 'list';
+          <div className="flex flex-col lg:flex-row items-start gap-4">
+            
+            {/* Left Side: Product Grid */}
+            <div className={`flex-1 w-full ${
+              storeSettings.productLayoutMode === 'list' 
+              ? "flex flex-col gap-3" 
+              : "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3.5 sm:gap-4.5"
+            }`}>
+              {filteredItems.map(item => {
+                const inCart = cart.find(c => c.product.id === item.id);
+                const isOutOfStock = typeof item.stock === 'number' && item.stock <= 0;
+                const isListView = storeSettings.productLayoutMode === 'list';
 
               return (
                 <div
@@ -1694,21 +1752,37 @@ export default function App() {
 
                   {/* Admin Edit / Delete Shortcuts */}
                   {isAdminUnlocked && (
-                    <div className="absolute top-2 right-2 z-20 flex items-center gap-1 bg-white/95 backdrop-blur-xs p-1 rounded-lg border border-neutral-300 shadow-sm">
-                      <button
-                        onClick={() => setEditingItem(item)}
-                        className="text-blue-700 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
-                        title="પ્રોડક્ટ એડિટ કરો"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={e => handleDeleteItem(item.id, item.nameGu, e)}
-                        className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
-                        title="પ્રોડક્ટ ડિલીટ કરો"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="absolute top-2 right-2 z-20 flex flex-col gap-1 items-end">
+                      <div className="flex items-center gap-1 bg-white/95 backdrop-blur-xs p-1 rounded-lg border border-neutral-300 shadow-sm">
+                        <button
+                          onClick={e => handleMoveItem(item.id, 'up', e)}
+                          className="text-neutral-500 hover:text-black p-1 rounded hover:bg-neutral-200 cursor-pointer"
+                          title="ઉપર ખસેડો"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                        </button>
+                        <button
+                          onClick={e => handleMoveItem(item.id, 'down', e)}
+                          className="text-neutral-500 hover:text-black p-1 rounded hover:bg-neutral-200 cursor-pointer"
+                          title="નીચે ખસેડો"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <button
+                          onClick={() => setEditingItem(item)}
+                          className="text-blue-700 hover:text-blue-900 p-1 rounded hover:bg-blue-50 cursor-pointer"
+                          title="પ્રોડક્ટ એડિટ કરો"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={e => handleDeleteItem(item.id, item.nameGu, e)}
+                          className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50 cursor-pointer"
+                          title="પ્રોડક્ટ ડિલીટ કરો"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -1769,7 +1843,7 @@ export default function App() {
                   {/* Product Info */}
                   <div className={`flex-1 flex flex-col justify-between space-y-2 ${isListView ? 'py-1' : 'p-3'}`}>
                     <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectedProductForModal(item); }}>
-                      <h3 className={`${storeSettings.productCardSize === 'small' ? 'text-xs' : storeSettings.productCardSize === 'large' ? 'text-base sm:text-lg' : 'text-xs sm:text-sm'} font-black text-neutral-900 leading-snug line-clamp-2`}>
+                      <h3 className={`${getProductTextSizeClasses()} font-black text-neutral-900 leading-snug line-clamp-2`}>
                         {item.nameGu}
                       </h3>
                       <p className="text-[10px] text-neutral-500 font-bold truncate mt-0.5">
@@ -1846,6 +1920,20 @@ export default function App() {
                 </div>
               );
             })}
+            </div>
+
+            {/* Right Side: Mobile Poster Widget (Hidden on small screens, visible on large) */}
+            <div className="hidden lg:flex flex-col gap-4 w-72 shrink-0 sticky top-24">
+              <MobilePosterWidget
+                posters={storeSettings.mobilePosters || []}
+              />
+              <MobilePosterWidget
+                posters={storeSettings.newsBoxPosters || []}
+                headerTitle="નવા સમાચાર & અપડેટ્સ"
+                headerSubtitle="સ્ટોર અને ઓફર્સ વિશે માહિતી"
+                Icon={Newspaper}
+              />
+            </div>
           </div>
 
         </main>
@@ -1875,12 +1963,12 @@ export default function App() {
               {/* DAILY SALES, PROFIT & STOCK REPORT BUTTON */}
               <button
                 type="button"
-                onClick={() => setShowDailyReportModal(true)}
+                onClick={() => setShowRojmelModal(true)}
                 className="bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-800 hover:to-indigo-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-blue-400"
-                title="આજનું વેચાણ, ચોખ્ખો નફો, માર્જિન, અને હાજર સ્ટોકનો વિગતવાર દૈનિક રિપોર્ટ જુઓ"
+                title="રોજમેળ અને ખાતાવહી (Excel Style)"
               >
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
-                <span>📈 દૈનિક રિપોર્ટ (Daily ERP)</span>
+                <span>📈 રોજમેળ (Daily ERP)</span>
               </button>
 
               {/* ONLINE PRINT JOBS ADMIN BUTTON */}
@@ -1912,16 +2000,6 @@ export default function App() {
               >
                 <Plus className="w-4 h-4" />
                 <span>+ નવો સ્ટોક ઉમેરો</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowBillSettingsModal(true)}
-                className="bg-purple-700 hover:bg-purple-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer border border-purple-400"
-                title="બિલ વિગત, GST, લોગો, ઓફર અને ફ્રોડ એલર્ટ એડિટ કરો"
-              >
-                <FileText className="w-4 h-4 text-purple-200" />
-                <span>🧾 બિલ એડિટ & સેટિંગ્સ</span>
               </button>
 
               <button
@@ -3545,19 +3623,69 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
-      {/* 23. DAILY SALES, PROFIT & STOCK ERP REPORT MODAL */}
+      {/* 23. ROJMEL & KHATA ERP MODAL */}
       {/* ========================================================================= */}
-      {showDailyReportModal && (
-        <DailyReportModal
-          orders={orders}
-          posItems={posItems}
-          expenses={expenses}
-          storeSettings={storeSettings}
-          onClose={() => setShowDailyReportModal(false)}
-          onOpenInvoice={ord => {
-            setActiveInvoiceOrder(ord);
-            setIsSuccessModal(false);
+      {showRojmelModal && (
+        <RojmelKhataModal
+          isOpen={showRojmelModal}
+          onClose={() => setShowRojmelModal(false)}
+          rojmelEntries={rojmelEntries}
+          onAddRojmelEntry={(entry) => {
+            const newEntry = {
+              ...entry,
+              id: `rojmel-${Date.now()}`,
+              createdAt: new Date().toISOString()
+            };
+            setRojmelEntries(prev => [...prev, newEntry]);
           }}
+          onDeleteRojmelEntry={(id) => {
+            setRojmelEntries(prev => prev.filter(e => e.id !== id));
+          }}
+          khataAccounts={khataAccounts}
+          onAddKhataAccount={(acc) => {
+            const newAcc = {
+              ...acc,
+              id: `khata-acc-${Date.now()}`,
+              balance: 0,
+              totalGiven: 0,
+              totalReceived: 0,
+              lastTransactionDate: new Date().toISOString()
+            };
+            setKhataAccounts(prev => [...prev, newAcc]);
+          }}
+          khataTransactions={khataTransactions}
+          onAddKhataTransaction={(tx) => {
+            // Find account to calculate balanceAfter
+            const acc = khataAccounts.find(a => a.id === tx.accountId);
+            const currentBalance = acc?.balance || 0;
+            const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
+            const balanceAfter = currentBalance + txAmt;
+
+            const newTx = {
+              ...tx,
+              id: `khata-tx-${Date.now()}`,
+              createdAt: new Date().toISOString(),
+              balanceAfter
+            };
+            
+            // Update account balance
+            setKhataAccounts(prev => prev.map(a => {
+              if (a.id === tx.accountId) {
+                return {
+                  ...a,
+                  balance: balanceAfter,
+                  totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) + tx.amount : (a.totalGiven || 0),
+                  totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) + tx.amount : (a.totalReceived || 0),
+                  lastTransactionDate: new Date().toISOString()
+                };
+              }
+              return a;
+            }));
+
+            setKhataTransactions(prev => [...prev, newTx]);
+          }}
+          storeSettings={storeSettings}
+          showToast={showToast}
         />
       )}
 

@@ -19,6 +19,7 @@ export interface ProductItem {
   isHidden?: boolean; // છુપાવો (ગ્રાહકને ન દેખાય)
   mrp?: number; // છાપેલી કિંમત (Cross-out)
   bulkPricing?: string; // હોલસેલ ભાવ (e.g. "5 નંગ: ₹200")
+  orderIdx?: number; // For admin reordering
   hsnCode?: string;
   minStockAlert?: number;
 }
@@ -154,6 +155,8 @@ export interface StoreSettings {
   invoiceDefaultHsn?: string; // Default HSN/SAC code e.g. "4901" or "9983"
 
   // WEBSITE FRONTEND DISPLAY & POWER CUSTOMIZATION (દુકાન સેટિંગ્સ)
+  headerNameSize?: 'small' | 'medium' | 'large' | 'xl'; // હેડર નામની સાઈઝ
+  productTextSize?: 'small' | 'medium' | 'large'; // શબ્દોની સાઈઝ
   productCardSize?: 'small' | 'medium' | 'large'; // Card size: નાની, મધ્યમ, મોટી
   productLayoutMode?: 'grid' | 'list'; // View: બોક્સ (Grid) કે લિસ્ટ (List)
   catalogFirstView?: 'categories' | 'products'; // ગ્રાહકને પહેલા કેટેગરી બતાવવી કે પ્રોડક્ટ્સ
@@ -162,6 +165,8 @@ export interface StoreSettings {
   bannerSlides?: Array<{ id: string; imageUrl: string; title: string; subtitle?: string; linkUrl?: string }>; // મલ્ટિપલ બેનર સ્લાઇડ્સ
   storeStories?: Array<{ id: string; title: string; mediaUrl: string; type: 'image' | 'video'; caption?: string; date?: string; active: boolean }>; // WhatsApp/Insta Story box
   showStoriesWidget?: boolean; // Toggle story box on customer store
+  mobilePosters?: Array<{ id: string; imageUrl: string; title: string; subtitle?: string; linkUrl?: string }>; // Mobile Poster Widget
+  newsBoxPosters?: Array<{ id: string; imageUrl: string; title: string; subtitle?: string; linkUrl?: string }>; // News Box Widget
   showBannerSlider?: boolean; // Toggle hero banner
   showCategoryFirst?: boolean;
 }

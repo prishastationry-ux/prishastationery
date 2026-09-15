@@ -14,10 +14,14 @@ import {
   Eye,
   Smartphone,
   Check,
-  Film
+  Film,
+  Newspaper,
+  Crop
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { compressAndResizeImage } from '../lib/invoiceUtils';
+import { ImageCropModal } from './ImageCropModal';
+import { MobilePosterWidget } from './MobilePosterWidget';
 
 interface StoreSettingsModalProps {
   isOpen: boolean;
@@ -61,6 +65,8 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
         subtitle: settings.bannerSubtitle || 'નોટબુક, પેન, ફાઇલ્સ, આધાર-પાન કાર્ડ, ઝેરોક્ષ પ્રિન્ટિંગ'
       }
     ],
+    mobilePosters: settings.mobilePosters || [],
+    newsBoxPosters: settings.newsBoxPosters || [],
     storeStories: settings.storeStories || [
       {
         id: 'story-1',
@@ -74,13 +80,19 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
     ]
   });
 
-  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'banners' | 'stories'>('store_info');
+  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'banners' | 'stories' | 'posters' | 'news'>('store_info');
   const [newSlideTitle, setNewSlideTitle] = useState<string>('');
   const [newSlideSubtitle, setNewSlideSubtitle] = useState<string>('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState<string>('');
   const [newStoryTitle, setNewStoryTitle] = useState<string>('');
   const [newStoryCaption, setNewStoryCaption] = useState<string>('');
   const [newStoryMediaUrl, setNewStoryMediaUrl] = useState<string>('');
+  
+  const [newPosterTitle, setNewPosterTitle] = useState<string>('');
+  const [newPosterSubtitle, setNewPosterSubtitle] = useState<string>('');
+  const [newPosterImageUrl, setNewPosterImageUrl] = useState<string>('');
+  const [cropModalData, setCropModalData] = useState<{isOpen: boolean; imageSrc: string; type: 'poster' | 'news' | null}>({ isOpen: false, imageSrc: '', type: null });
+
 
   if (!isOpen) return null;
 
@@ -163,6 +175,49 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
       storeStories: (prev.storeStories || []).filter(s => s.id !== id)
     }));
     showToast('🗑️ સ્ટોરી દૂર કરી.');
+  };
+
+    const handleAddPoster = (target: 'mobilePosters' | 'newsBoxPosters', imageUrl: string) => {
+    const newEntry = {
+      id: `${target}-${Date.now()}`,
+      title: '', // no text required
+      subtitle: '',
+      imageUrl: imageUrl
+    };
+    setFormData(prev => ({
+      ...prev,
+      [target]: [...(prev[target] || []), newEntry]
+    }));
+    showToast('📱 નવો ફોટો ઉમેરવામાં આવ્યો!');
+  };
+
+  const handleDeletePoster = (target: 'mobilePosters' | 'newsBoxPosters', id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [target]: (prev[target] || []).filter(p => p.id !== id)
+    }));
+    showToast('🗑️ ફોટો દૂર કર્યો.');
+  };
+
+  const handleMediaUploadInit = (e: React.ChangeEvent<HTMLInputElement>, type: 'poster' | 'news') => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCropModalData({ isOpen: true, imageSrc: reader.result as string, type });
+      };
+      reader.readAsDataURL(file);
+    }
+    e.target.value = '';
+  };
+  
+  const handleCropComplete = (croppedBase64: string) => {
+    if (cropModalData.type === 'poster') {
+      handleAddPoster('mobilePosters', croppedBase64);
+    } else if (cropModalData.type === 'news') {
+      handleAddPoster('newsBoxPosters', croppedBase64);
+    }
+    setCropModalData({ isOpen: false, imageSrc: '', type: null });
   };
 
   const handleSaveAll = () => {
@@ -252,6 +307,19 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
           >
             <Film className="w-3.5 h-3.5 text-purple-400" />
             <span>WhatsApp / Insta સ્ટોરી બોક્સ</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => setActiveTab('posters')}
+            className={`px-3.5 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'posters'
+                ? 'bg-[#0B1E48] text-white shadow-xs'
+                : 'bg-white text-neutral-700 hover:bg-neutral-200 border border-neutral-300'
+            }`}
+          >
+            <Smartphone className="w-3.5 h-3.5 text-rose-400" />
+            <span>મોબાઇલ પોસ્ટર (જમણી બાજુનું સ્ક્રીન)</span>
           </button>
         </div>
 
@@ -489,6 +557,60 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                     ))}
                   </div>
                 </div>
+                {/* 5. Header Title Size */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-2">
+                  <label className="block text-neutral-900 font-black">
+                    🅰️ દુકાનનું નામ સાઇઝ (Header Name Size):
+                  </label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'small', label: 'નાની' },
+                      { id: 'medium', label: 'મધ્યમ' },
+                      { id: 'large', label: 'મોટી' },
+                      { id: 'xl', label: 'બહુ મોટી' }
+                    ].map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, headerNameSize: s.id as any })}
+                        className={`py-1.5 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
+                          (formData.headerNameSize || 'large') === s.id
+                            ? 'bg-amber-500 text-black border-amber-600 shadow-xs'
+                            : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 6. Product Text Size */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-2">
+                  <label className="block text-neutral-900 font-black">
+                    📝 પ્રોડક્ટ લખાણ સાઇઝ (Font Size):
+                  </label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {[
+                      { id: 'small', label: 'નાના અક્ષરો' },
+                      { id: 'medium', label: 'મધ્યમ અક્ષરો' },
+                      { id: 'large', label: 'મોટા અક્ષરો' }
+                    ].map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, productTextSize: s.id as any })}
+                        className={`py-1.5 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
+                          (formData.productTextSize || 'medium') === s.id
+                            ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs'
+                            : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -706,6 +828,147 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
             </div>
           )}
 
+          {/* TAB 5: MOBILE POSTERS */}
+          {activeTab === 'posters' && (
+            <div className="space-y-4">
+              <div className="bg-rose-50 p-3 rounded-xl border border-rose-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-rose-950 text-sm mb-1 flex items-center gap-1.5">
+                    <Smartphone className="w-4 h-4 text-rose-700" />
+                    <span>મોબાઇલ પોસ્ટર (જમણી બાજુનું સ્ક્રીન)</span>
+                  </h3>
+                  <p className="text-rose-800 font-bold text-[11px]">
+                    ગ્રાહકને જમણી બાજુ મોબાઈલ સ્ક્રીનમાં રોજ નવી ઓફર્સ, ફોટા કે વિડીયો બતાવો.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Left Side: Upload & Manage */}
+                <div className="space-y-4">
+                  <div className="bg-white p-3 sm:p-4 rounded-xl border border-neutral-300 shadow-sm space-y-3">
+                    <h4 className="font-black text-neutral-900 text-xs border-b border-neutral-200 pb-2">
+                      + નવો ફોટો ઉમેરો
+                    </h4>
+                    <div className="flex flex-col items-center justify-center p-4">
+                      <label className="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-lg text-sm font-black shadow-md cursor-pointer flex items-center gap-2 transition-all hover:-translate-y-0.5">
+                        <Crop className="w-4 h-4" />
+                        <span>ફોટો સિલેક્ટ અને ક્રોપ કરો</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleMediaUploadInit(e, 'poster')} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="font-black text-neutral-800 text-xs flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+                      <span>અપલોડ કરેલા પોસ્ટર્સ ({(formData.mobilePosters || []).length})</span>
+                    </h4>
+                    {!(formData.mobilePosters || []).length ? (
+                      <div className="p-4 rounded-xl border-2 border-dashed border-neutral-300 text-center text-neutral-500 text-xs font-bold bg-neutral-50">
+                        કોઈ પોસ્ટર નથી. નવું પોસ્ટર ઉમેરો.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {(formData.mobilePosters || []).map((poster) => (
+                          <div key={poster.id} className="relative group rounded-xl border-2 border-neutral-200 overflow-hidden aspect-[4/5] bg-neutral-100 shadow-sm">
+                            <img src={poster.imageUrl} alt="Poster" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePoster('mobilePosters', poster.id)}
+                              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-500 text-white hover:bg-red-600 flex items-center justify-center cursor-pointer shadow opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side: Live Preview widget */}
+                <div className="hidden lg:flex items-center justify-center p-4 bg-neutral-100 rounded-2xl border-2 border-dashed border-neutral-300">
+                  <div className="w-64">
+                     <MobilePosterWidget posters={formData.mobilePosters || []} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: NEWS BOX */}
+          {activeTab === 'news' && (
+            <div className="space-y-4">
+              <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-black text-indigo-950 text-sm mb-1 flex items-center gap-1.5">
+                    <Newspaper className="w-4 h-4 text-indigo-700" />
+                    <span>ન્યૂઝ & અપડેટ્સ બોક્સ</span>
+                  </h3>
+                  <p className="text-indigo-800 font-bold text-[11px]">
+                    ગ્રાહકને જમણી બાજુ પોસ્ટરની નીચે નવા સમાચાર, વેકેશન કે નવી સ્કીમની માહિતી બતાવો.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-4">
+                  <div className="bg-white p-3 sm:p-4 rounded-xl border border-neutral-300 shadow-sm space-y-3">
+                    <h4 className="font-black text-neutral-900 text-xs border-b border-neutral-200 pb-2">
+                      + નવો ફોટો ઉમેરો
+                    </h4>
+                    <div className="flex flex-col items-center justify-center p-4">
+                      <label className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-black shadow-md cursor-pointer flex items-center gap-2 transition-all hover:-translate-y-0.5">
+                        <Crop className="w-4 h-4" />
+                        <span>ફોટો સિલેક્ટ અને ક્રોપ કરો</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleMediaUploadInit(e, 'news')} />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="font-black text-neutral-800 text-xs flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                      <span>અપલોડ કરેલા ન્યૂઝ ({(formData.newsBoxPosters || []).length})</span>
+                    </h4>
+                    {!(formData.newsBoxPosters || []).length ? (
+                      <div className="p-4 rounded-xl border-2 border-dashed border-neutral-300 text-center text-neutral-500 text-xs font-bold bg-neutral-50">
+                        કોઈ ન્યૂઝ નથી. નવો ફોટો ઉમેરો.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 gap-3">
+                        {(formData.newsBoxPosters || []).map((poster) => (
+                          <div key={poster.id} className="relative group rounded-xl border-2 border-neutral-200 overflow-hidden aspect-[4/5] bg-neutral-100 shadow-sm">
+                            <img src={poster.imageUrl} alt="News" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePoster('newsBoxPosters', poster.id)}
+                              className="absolute top-2 right-2 w-8 h-8 rounded-full bg-red-500 text-white hover:bg-red-600 flex items-center justify-center cursor-pointer shadow opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side: Live Preview widget */}
+                <div className="hidden lg:flex items-center justify-center p-4 bg-neutral-100 rounded-2xl border-2 border-dashed border-neutral-300">
+                  <div className="w-64">
+                     <MobilePosterWidget 
+                        posters={formData.newsBoxPosters || []} 
+                        headerTitle="નવા સમાચાર & અપડેટ્સ"
+                        headerSubtitle="સ્ટોર અને ઓફર્સ વિશે માહિતી"
+                        Icon={Newspaper}
+                     />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* FOOTER ACTIONS */}
@@ -733,6 +996,15 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
         </div>
 
       </div>
+      {cropModalData.isOpen && (
+        <ImageCropModal
+          imageSrc={cropModalData.imageSrc}
+          aspectPreset="free"
+          title={cropModalData.type === 'poster' ? 'પોસ્ટર ક્રોપ કરો' : 'ન્યૂઝ ક્રોપ કરો'}
+          onCropComplete={handleCropComplete}
+          onClose={() => setCropModalData({ isOpen: false, imageSrc: '', type: null })}
+        />
+      )}
     </div>
   );
 };

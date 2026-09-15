@@ -36,7 +36,6 @@ export const MobilePosterWidget: React.FC<MobilePosterWidgetProps> = ({
 
   const activeList = posters && posters.length > 0 ? posters : defaultPosters;
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isZoomed, setIsZoomed] = useState(false);
 
   // Auto-slide every 4 seconds
   useEffect(() => {

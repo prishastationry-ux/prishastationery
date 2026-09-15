@@ -155,7 +155,7 @@ export function ImageCropModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl p-4 sm:p-5 max-w-xl w-full border-2 border-neutral-800 shadow-2xl space-y-4 my-auto animate-in fade-in zoom-in duration-150">
         
         {/* Header */}

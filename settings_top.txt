@@ -1,0 +1,120 @@
+import React, { useState } from 'react';
+import {
+  Store,
+  X,
+  Save,
+  Layout,
+  Grid,
+  List,
+  Sliders,
+  Sparkles,
+  Image as ImageIcon,
+  Plus,
+  Trash2,
+  Eye,
+  Smartphone,
+  Check,
+  Film
+} from 'lucide-react';
+import { StoreSettings } from '../types';
+import { compressAndResizeImage } from '../lib/invoiceUtils';
+
+interface StoreSettingsModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  settings: StoreSettings;
+  onSave: (updated: Partial<StoreSettings>) => void;
+  showToast: (msg: string) => void;
+}
+
+export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
+  isOpen,
+  onClose,
+  settings,
+  onSave,
+  showToast
+}) => {
+  const [formData, setFormData] = useState<Partial<StoreSettings>>({
+    storeNameGu: settings.storeNameGu || '',
+    storeNameEn: settings.storeNameEn || '',
+    tagline: settings.tagline || '',
+    ownerName: settings.ownerName || '',
+    phone: settings.phone || '',
+    phoneDisplay: settings.phoneDisplay || '',
+    address: settings.address || '',
+    marqueeText: settings.marqueeText || '',
+    bannerTitle: settings.bannerTitle || '',
+    bannerSubtitle: settings.bannerSubtitle || '',
+    bannerImageUrl: settings.bannerImageUrl || '',
+    productCardSize: settings.productCardSize || 'medium',
+    productLayoutMode: settings.productLayoutMode || 'grid',
+    catalogFirstView: settings.catalogFirstView || 'categories',
+    productGridColumns: settings.productGridColumns || '4',
+    autoSlideBannerInterval: settings.autoSlideBannerInterval || 4,
+    showStoriesWidget: settings.showStoriesWidget !== false,
+    showBannerSlider: settings.showBannerSlider !== false,
+    bannerSlides: settings.bannerSlides && settings.bannerSlides.length > 0 ? settings.bannerSlides : [
+      {
+        id: 'slide-1',
+        imageUrl: settings.bannerImageUrl || '',
+        title: settings.bannerTitle || 'ઓનલાઇન સરકારી સેવાઓ અને સ્ટેશનરી સામાન',
+        subtitle: settings.bannerSubtitle || 'નોટબુક, પેન, ફાઇલ્સ, આધાર-પાન કાર્ડ, ઝેરોક્ષ પ્રિન્ટિંગ'
+      }
+    ],
+    storeStories: settings.storeStories || [
+      {
+        id: 'story-1',
+        title: 'નવો સ્ટોક આવ્યો!',
+        mediaUrl: '',
+        type: 'image',
+        caption: 'Classmate નોટબુક્સ અને બધી સ્ટેશનરી હવે ઉપલબ્ધ છે',
+        date: 'આજે',
+        active: true
+      }
+    ]
+  });
+
+  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'banners' | 'stories' | 'posters'>('store_info');
+  const [newSlideTitle, setNewSlideTitle] = useState<string>('');
+  const [newSlideSubtitle, setNewSlideSubtitle] = useState<string>('');
+  const [newSlideImageUrl, setNewSlideImageUrl] = useState<string>('');
+  const [newStoryTitle, setNewStoryTitle] = useState<string>('');
+  const [newStoryCaption, setNewStoryCaption] = useState<string>('');
+  const [newStoryMediaUrl, setNewStoryMediaUrl] = useState<string>('');
+  
+  const [newPosterTitle, setNewPosterTitle] = useState<string>('');
+  const [newPosterSubtitle, setNewPosterSubtitle] = useState<string>('');
+  const [newPosterImageUrl, setNewPosterImageUrl] = useState<string>('');
+
+  if (!isOpen) return null;
+
+  const handleSlideImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressAndResizeImage(file, 960, 480, 0.85);
+      setNewSlideImageUrl(dataUrl);
+      showToast('📸 બેનર ફોટો સફળતાપૂર્વક લોડ થયો!');
+    } catch (err) {
+      showToast('❌ ફોટો લોડ કરવામાં ભૂલ થઈ.');
+    }
+  };
+
+  const handleStoryMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUrl = await compressAndResizeImage(file, 720, 1280, 0.85);
+      setNewStoryMediaUrl(dataUrl);
+      showToast('📱 સ્ટોરી ફોટો સફળતાપૂર્વક લોડ થયો!');
+    } catch (err) {
+      showToast('❌ સ્ટોરી ફોટો લોડ કરવામાં ભૂલ થઈ.');
+    }
+  };
+
+  const handleAddSlide = () => {
+    if (!newSlideTitle.trim()) {
+      showToast('⚠️ કૃપા કરીને બેનરનું ટાઇટલ લખો.');
+      return;
+    }
+    const newSlide = {
