@@ -85,6 +85,15 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
   // EDIT TRANSACTION MODAL STATE
   const [editingTx, setEditingTx] = useState<{ id: string; amount: string; description: string; accountId: string } | null>(null);
 
+  // CONFIRMATION DIALOG STATE
+  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<{
+    type: 'khata_account' | 'khata_transaction';
+    id: string;
+    title: string;
+    subtitle?: string;
+    extraId?: string;
+  } | null>(null);
+
   // KHATA TX STATE
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [txType, setTxType] = useState<'jama' | 'udhar'>('jama');
@@ -645,9 +654,22 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
               {/* LEFT 1 COL: ACCOUNTS LIST */}
               <div className="md:col-span-1 space-y-3">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="font-black text-neutral-900 text-xs flex items-center gap-1.5">
-                    {activeTab === 'khata_customers' ? '👥 ગ્રાહકોનું લિસ્ટ' : activeTab === 'khata_suppliers' ? '🏢 વેપારીઓનું લિસ્ટ' : '💼 અન્ય ખાતાઓ'}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-black text-neutral-900 text-xs flex items-center gap-1.5">
+                      {activeTab === 'khata_customers' ? '👥 ગ્રાહકોનું લિસ્ટ' : activeTab === 'khata_suppliers' ? '🏢 વેપારીઓનું લિસ્ટ' : '💼 અન્ય ખાતાઓ'}
+                    </h3>
+                    {onOpenTrash && (
+                      <button
+                        type="button"
+                        onClick={onOpenTrash}
+                        className="bg-red-100 hover:bg-red-200 text-red-700 border border-red-300 px-2 py-1 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition shadow-xs"
+                        title="ટ્રેશ / ડિલીટ ફાઈલ બોક્સ (ડીલીટ કરેલ ડેટા જોવા અને રીકવર કરવા)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                        <span>ટ્રેશ (ડીલીટ બોક્સ)</span>
+                      </button>
+                    )}
+                  </div>
                   <span className="text-[11px] font-bold text-neutral-500">
                     {activeAccounts.length} ખાતા
                   </span>
@@ -734,20 +756,66 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                             )}
                           </div>
 
-                          <div className="text-right shrink-0" onClick={e => e.stopPropagation()}>
-                            <div
-                              className={`font-mono font-black text-sm ${
-                                acc.balance > 0
-                                  ? selectedAccountId === acc.id ? 'text-amber-300' : 'text-amber-700'
-                                  : acc.balance < 0
-                                  ? selectedAccountId === acc.id ? 'text-rose-300' : 'text-rose-700'
-                                  : 'text-emerald-500'
-                              }`}
-                            >
-                              ₹{Math.abs(acc.balance).toFixed(2)}
+                           <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+                            <div>
+                              <div
+                                className={`font-mono font-black text-sm ${
+                                  acc.balance > 0
+                                    ? selectedAccountId === acc.id ? 'text-amber-300' : 'text-amber-700'
+                                    : acc.balance < 0
+                                    ? selectedAccountId === acc.id ? 'text-rose-300' : 'text-rose-700'
+                                    : 'text-emerald-500'
+                                }`}
+                              >
+                                ₹{Math.abs(acc.balance).toFixed(2)}
+                              </div>
+                              <div className={`text-[10px] font-bold ${selectedAccountId === acc.id ? 'text-blue-100' : 'text-neutral-500'}`}>
+                                {acc.balance > 0 ? '(લેવાના)' : acc.balance < 0 ? '(આપવાના)' : '(ક્લિયર)'}
+                              </div>
                             </div>
-                            <div className={`text-[10px] font-bold ${selectedAccountId === acc.id ? 'text-blue-100' : 'text-neutral-500'}`}>
-                              {acc.balance > 0 ? '(લેવાના)' : acc.balance < 0 ? '(આપવાના)' : '(ક્લિયર)'}
+
+                            {/* QUICK ACTIONS: EDIT & DELETE */}
+                            <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingAcc({
+                                    id: acc.id,
+                                    name: acc.name,
+                                    phone: acc.phone || '',
+                                    address: acc.address || ''
+                                  });
+                                }}
+                                className={`w-9 h-9 flex items-center justify-center rounded-xl text-xs cursor-pointer transition shadow-2xs ${
+                                  selectedAccountId === acc.id
+                                    ? 'bg-blue-800 hover:bg-blue-700 text-white'
+                                    : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-600 hover:text-blue-600'
+                                }`}
+                                title="એડિટ કરો"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setConfirmDeleteTarget({
+                                    type: 'khata_account',
+                                    id: acc.id,
+                                    title: acc.name,
+                                    subtitle: `પ્રકાર: ${acc.type === 'customer' ? 'ગ્રાહક' : 'વેપારી'}, બાકી રકમ: ₹${Math.abs(acc.balance).toFixed(2)}`
+                                  });
+                                }}
+                                className={`w-9 h-9 flex items-center justify-center rounded-xl text-xs cursor-pointer transition shadow-2xs ${
+                                  selectedAccountId === acc.id
+                                    ? 'bg-red-500/30 hover:bg-red-600 hover:text-white text-rose-300 border border-red-500/20'
+                                    : 'bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 border border-red-100'
+                                }`}
+                                title="ખાતું ડિલીટ કરો"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -783,10 +851,12 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                           <button
                             type="button"
                             onClick={() => {
-                              if (window.confirm(`શું તમે "${selectedAccount.name}" ખાતું અને તમામ વ્યવહારો ડિલીટ કરવા માંગો છો? (તે ટ્રેશ બિનમાં સુરક્ષિત રહેશે)`)) {
-                                onDeleteKhataAccount(selectedAccount.id);
-                                setSelectedAccountId(null);
-                              }
+                              setConfirmDeleteTarget({
+                                type: 'khata_account',
+                                id: selectedAccount.id,
+                                title: selectedAccount.name,
+                                subtitle: `પ્રકાર: ${selectedAccount.type === 'customer' ? 'ગ્રાહક' : 'વેપારી'}, બાકી રકમ: ₹${Math.abs(selectedAccount.balance).toFixed(2)}`
+                              });
                             }}
                             className="bg-red-500/20 text-red-300 hover:bg-red-600 hover:text-white px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer transition border border-red-500/40"
                           >
@@ -948,9 +1018,13 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          if (window.confirm(`આ ₹${t.amount} નો વ્યવહાર ડિલીટ કરવો છે? (તે ટ્રેશ બિનમાં સુરક્ષિત રહેશે)`)) {
-                                            onDeleteKhataTransaction(t.id, t.accountId);
-                                          }
+                                          setConfirmDeleteTarget({
+                                            type: 'khata_transaction',
+                                            id: t.id,
+                                            title: `વ્યવહાર: ${t.type === 'jama' ? 'જમા' : 'ઉધાર'} ₹${t.amount.toFixed(2)}`,
+                                            subtitle: `તારીખ: ${t.date}, વિગત: ${t.description || '-'}, ખાતું: ${t.accountName}`,
+                                            extraId: t.accountId
+                                          });
                                         }}
                                         className="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded cursor-pointer transition"
                                         title="વ્યવહાર ડિલીટ કરો (ટ્રેશમાં જશે)"
@@ -1112,6 +1186,95 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                   વ્યવહાર સેવ કરો
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* IN-APP CONFIRMATION MODAL FOR ROJMEL/KHATA MODAL */}
+        {/* ========================================================================= */}
+        {confirmDeleteTarget && (
+          <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-3 animate-fade-in no-print">
+            <div className="bg-white rounded-2xl max-w-md w-full border-2 border-red-500 shadow-2xl overflow-hidden animate-scale-up">
+              
+              {/* Modal Header */}
+              <div className="bg-red-600 text-white p-4 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white">
+                    <Trash2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black">
+                      ડીલીટ કરવાની ખાતરી કરો
+                    </h3>
+                    <p className="text-[11px] text-red-100 font-bold">
+                      {confirmDeleteTarget.type === 'khata_account' ? 'ખાતું અને તેના તમામ વ્યવહારો દૂર થશે' : 'આ ખાતાનો વ્યવહાર દૂર થશે'}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteTarget(null)}
+                  className="w-7 h-7 rounded-full bg-black/20 hover:bg-black/40 flex items-center justify-center text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-4 sm:p-5 space-y-3.5 bg-neutral-50/50 text-xs">
+                <div className="p-3 bg-white rounded-xl border border-neutral-200 shadow-2xs space-y-1">
+                  <p className="font-bold text-neutral-500">આઇટમ વિગત:</p>
+                  <p className="text-sm font-black text-neutral-900">{confirmDeleteTarget.title}</p>
+                  {confirmDeleteTarget.subtitle && (
+                    <p className="text-neutral-600 font-bold mt-1">{confirmDeleteTarget.subtitle}</p>
+                  )}
+                </div>
+
+                <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 space-y-1">
+                  <p className="font-black flex items-center gap-1.5 text-emerald-800">
+                    <span>🛡️ સુરક્ષિત ટ્રેશ બિનમાં જશે</span>
+                  </p>
+                  <p className="text-[11px] text-emerald-700 font-bold">
+                    ચિંતા કરશો નહિ! આ ડેટા સુરક્ષિત રીતે ટ્રેશ બિન (Recycle Bin) માં રહેશે, જેથી તમે ગમે ત્યારે તેને રીકવર (Restore) કરી શકશો.
+                  </p>
+                </div>
+              </div>
+
+              {/* Modal Actions */}
+              <div className="p-3.5 bg-neutral-100 border-t border-neutral-200 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDeleteTarget(null)}
+                  className="px-4 py-2 bg-white hover:bg-neutral-200 text-neutral-800 font-black rounded-xl border border-neutral-300 cursor-pointer"
+                >
+                  રદ કરો
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    const { type, id, extraId } = confirmDeleteTarget;
+                    if (type === 'khata_account') {
+                      onDeleteKhataAccount(id);
+                      if (selectedAccountId === id) {
+                        setSelectedAccountId(null);
+                      }
+                    } else if (type === 'khata_transaction') {
+                      if (extraId) {
+                        onDeleteKhataTransaction(id, extraId);
+                      }
+                    }
+                    setConfirmDeleteTarget(null);
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-black rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>હા, ડિલીટ કરો</span>
+                </button>
+              </div>
+
             </div>
           </div>
         )}

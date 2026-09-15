@@ -68,6 +68,8 @@ import { MobilePosterWidget } from './components/MobilePosterWidget';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
+import { PWAInstallButton } from './components/PWAInstallButton';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 
@@ -1491,6 +1493,9 @@ export default function App() {
               <Share2 className="w-3.5 h-3.5 text-amber-400" />
               <span>🔗 લિંક શેર કરો</span>
             </button>
+
+            {/* PWA INSTALL BUTTON */}
+            <PWAInstallButton />
           </div>
 
           <div className="flex-1 overflow-hidden mx-3 text-[11px] sm:text-xs">
@@ -3890,6 +3895,8 @@ export default function App() {
         </div>
       </footer>
 
+      {/* OFFLINE STATE NOTIFICATION TOAST */}
+      <OfflineIndicator />
     </div>
   );
 }

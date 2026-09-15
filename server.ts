@@ -91,6 +91,36 @@ app.get('/api/sync/status', async (req, res) => {
 });
 
 // =========================================================================
+// 1B. DEVELOPER-ONLY AUTO PWA ICON EXPORTER
+// =========================================================================
+app.post('/api/dev/save-icons', (req, res) => {
+  try {
+    const { icon192, icon512, appleIcon } = req.body;
+    const publicDir = path.join(process.cwd(), 'public');
+    if (!fs.existsSync(publicDir)) {
+      fs.mkdirSync(publicDir, { recursive: true });
+    }
+
+    if (icon192) {
+      const data192 = icon192.split(';base64,').pop();
+      fs.writeFileSync(path.join(publicDir, 'pwa-192x192.png'), Buffer.from(data192, 'base64'));
+    }
+    if (icon512) {
+      const data512 = icon512.split(';base64,').pop();
+      fs.writeFileSync(path.join(publicDir, 'pwa-512x512.png'), Buffer.from(data512, 'base64'));
+      fs.writeFileSync(path.join(publicDir, 'pwa-maskable-512x512.png'), Buffer.from(data512, 'base64'));
+    }
+    if (appleIcon) {
+      const appleData = appleIcon.split(';base64,').pop();
+      fs.writeFileSync(path.join(publicDir, 'apple-touch-icon.png'), Buffer.from(appleData, 'base64'));
+    }
+    res.json({ success: true, message: 'PWA icons written to disk' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to save PWA icons', details: err.message });
+  }
+});
+
+// =========================================================================
 // 2. PRINT JOBS REST API (For Desktop & Mobile Clients)
 // =========================================================================
 app.get('/api/jobs', async (req, res) => {
