@@ -256,7 +256,7 @@ export default function App() {
     imageSrc: string;
     title: string;
     aspectPreset: 'square' | 'banner' | 'standard' | 'free';
-    target: 'leftLogo' | 'rightLogo' | 'bannerImage' | 'customQr' | 'editingProduct' | 'newProduct' | null;
+    target: 'leftLogo' | 'rightLogo' | 'bannerImage' | 'customQr' | 'signature' | 'editingProduct' | 'newProduct' | null;
   }>({
     isOpen: false,
     imageSrc: '',
@@ -452,7 +452,7 @@ export default function App() {
       id: `prod-${Date.now()}`,
       nameGu: newProdName,
       nameEn: newProdEnName || newProdName,
-      category: newProdCategory,
+      category: newProdCategory as any,
       price: Number(newProdPrice) || 0,
       costPrice: Number(newProdCost) || 0,
       stock: newProdCategory === 'service' ? 'સેવા' : Number(newProdStock) || 0,
@@ -3077,7 +3077,7 @@ export default function App() {
                   list="edit-category-list"
                   type="text"
                   value={editingItem.category}
-                  onChange={e => setEditingItem({ ...editingItem, category: e.target.value })}
+                  onChange={e => setEditingItem({ ...editingItem, category: e.target.value as any })}
                   placeholder="કેટેગરી લખો અથવા પસંદ કરો"
                   className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white"
                 />
@@ -3619,7 +3619,7 @@ export default function App() {
         <ConfirmDeleteModal
           isOpen={!!deleteConfirmTarget}
           target={deleteConfirmTarget}
-          onClose={() => setDeleteConfirmTarget(null)}
+          onCancel={() => setDeleteConfirmTarget(null)}
           onConfirm={handleExecuteConfirmedDelete}
         />
       )}
@@ -3674,12 +3674,25 @@ export default function App() {
             const newEntry = {
               ...entry,
               id: `rojmel-${Date.now()}`,
-              createdAt: new Date().toISOString()
+              createdAt: Date.now()
             };
             setRojmelEntries(prev => [...prev, newEntry]);
           }}
+          onOpenTrash={() => setShowTrashModal(true)}
           onDeleteRojmelEntry={(id) => {
+            const entry = rojmelEntries.find(e => e.id === id);
+            if (entry) {
+              setTrashList(prev => [{
+                id: 'trash-rojmel-' + Date.now(),
+                type: 'rojmel',
+                title: 'રોજમેળ: ' + entry.category + ' (₹' + entry.amount + ')',
+                deletedAt: new Date().toLocaleString(),
+                summary: 'પ્રકાર: ' + (entry.type === 'aavak' ? 'આવક' : 'જાવક') + ', તારીખ: ' + entry.date + ', વ્યક્તિ: ' + (entry.personName || '-'),
+                data: entry
+              }, ...prev]);
+            }
             setRojmelEntries(prev => prev.filter(e => e.id !== id));
+            showToast('🗑️ રોજમેળ એન્ટ્રી ટ્રેશ બિનમાં ખસેડાઈ.');
           }}
           khataAccounts={khataAccounts}
           onAddKhataAccount={(acc) => {
@@ -3704,7 +3717,7 @@ export default function App() {
             const newTx = {
               ...tx,
               id: `khata-tx-${Date.now()}`,
-              createdAt: new Date().toISOString(),
+              createdAt: Date.now(),
               balanceAfter
             };
             

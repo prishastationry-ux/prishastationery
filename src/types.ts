@@ -187,7 +187,7 @@ export interface RojmelEntry {
 
 export interface KhataAccount {
   id: string;
-  type: 'customer' | 'supplier'; // ગ્રાહક (Customer Khata) કે વેપારી (Supplier Ledger)
+  type: 'customer' | 'supplier' | 'other'; // ગ્રાહક (Customer Khata), વેપારી (Supplier Ledger), અન્ય (Other Accounts)
   name: string;
   phone: string;
   address?: string;
@@ -268,6 +268,7 @@ export interface PrintJobFile {
   fileDataUrl?: string; // base64 or blob URL
   fileBlob?: Blob; // optional in-memory blob for instant viewing
   uploadStatus?: 'pending' | 'uploading' | 'completed' | 'error';
+  uploadedToCloud?: boolean;
   uploadProgress?: number; // 0 to 100
   uploadSpeed?: string; // e.g. "2.4 MB/s"
   copies: number;

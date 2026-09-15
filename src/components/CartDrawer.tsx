@@ -35,7 +35,7 @@ interface CartDrawerProps {
     customerName: string;
     mobile: string;
     address: string;
-    paymentMode: 'UPI' | 'Cash';
+    paymentMode: 'UPI' | 'Cash' | 'Online';
     paymentScreenshot?: string;
   }) => void;
 }
