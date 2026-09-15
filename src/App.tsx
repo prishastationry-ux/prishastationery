@@ -118,6 +118,39 @@ export default function App() {
   const [showTrashModal, setShowTrashModal] = useState<boolean>(false);
   const [trashList, setTrashList] = useFirebaseSync<TrashRecord[]>('trash', 'prisha_trash_v4', []);
 
+  const handleRestoreTrashItem = (id: string) => {
+    const item = trashList.find(t => t.id === id);
+    if (!item) return;
+    
+    if (item.type === 'khata_account' && item.data) {
+      setKhataAccounts(prev => [...prev, item.data]);
+    } else if (item.type === 'khata_transaction' && item.data) {
+      setKhataTransactions(prev => [...prev, item.data]);
+      // restore balance on account
+      const tx = item.data;
+      setKhataAccounts(prev => prev.map(a => {
+        if (a.id === tx.accountId) {
+          const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
+          return {
+            ...a,
+            balance: a.balance + txAmt,
+            totalGiven: tx.type === 'udhar' ? (a.totalGiven || 0) + tx.amount : (a.totalGiven || 0),
+            totalReceived: tx.type === 'jama' ? (a.totalReceived || 0) + tx.amount : (a.totalReceived || 0)
+          };
+        }
+        return a;
+      }));
+    } else if (item.type === 'rojmel' && item.data) {
+      setRojmelEntries(prev => [...prev, item.data]);
+    } else if (item.type === 'print_job' && item.data) {
+      setPrintJobs(prev => [...prev, item.data]);
+    }
+    
+    setTrashList(prev => prev.filter(t => t.id !== id));
+    showToast('♻️ આઇટમ સફળતાપૂર્વક પાછી મેળવી લીધી (Restored)!');
+  };
+  
+
   // Dhamaka Offer Edit Modal State
   const [showDhamakaEditModal, setShowDhamakaEditModal] = useState<boolean>(false);
 
@@ -3711,9 +3744,9 @@ export default function App() {
             }));
             showToast('🗑️ વ્યવહાર ડીલીટ થઈ ગયો.');
           }}
-          onEditKhataAccount={(id, newName) => {
-             setKhataAccounts(prev => prev.map(a => a.id === id ? { ...a, name: newName } : a));
-             showToast('✅ ખાતાનું નામ અપડેટ થયું.');
+          onEditKhataAccount={(id, newName, newPhone, newAddress) => {
+             setKhataAccounts(prev => prev.map(a => a.id === id ? { ...a, name: newName, phone: newPhone, address: newAddress } : a));
+             showToast('✅ ખાતાની વિગત (નામ, ફોન, સરનામું) અપડેટ થઈ ગઈ!');
           }}
           onEditKhataTransaction={(id, newAmount, newDesc) => {
             const tx = khataTransactions.find(t => t.id === id);

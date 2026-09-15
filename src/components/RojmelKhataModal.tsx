@@ -33,7 +33,7 @@ interface RojmelKhataModalProps {
   onAddKhataTransaction: (tx: Omit<KhataTransaction, 'id' | 'createdAt' | 'balanceAfter'>) => void;
   onDeleteKhataAccount: (id: string) => void;
   onDeleteKhataTransaction: (id: string, accountId: string) => void;
-  onEditKhataAccount: (id: string, newName: string) => void;
+  onEditKhataAccount: (id: string, newName: string, newPhone: string, newAddress: string) => void;
   onEditKhataTransaction: (id: string, newAmount: number, newDesc: string) => void;
   storeSettings: StoreSettings;
   showToast: (msg: string) => void;
@@ -640,18 +640,34 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                       >
                         <div className="flex items-center justify-between font-black text-xs">
                           <span>{acc.name}</span>
-                          <span
-                            className={`font-mono text-xs ${
-                              acc.balance > 0
-                                ? selectedAccountId === acc.id ? 'text-amber-300' : 'text-amber-700'
-                                : acc.balance < 0
-                                ? selectedAccountId === acc.id ? 'text-rose-300' : 'text-rose-700'
-                                : 'text-emerald-500'
-                            }`}
-                          >
-                            ₹{Math.abs(acc.balance).toFixed(2)}
-                            {acc.balance > 0 ? ' (લેવાના)' : acc.balance < 0 ? ' (આપવાના)' : ' (0)'}
-                          </span>
+                          <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+                            <span
+                              className={`font-mono text-xs ${
+                                acc.balance > 0
+                                  ? selectedAccountId === acc.id ? 'text-amber-300' : 'text-amber-700'
+                                  : acc.balance < 0
+                                  ? selectedAccountId === acc.id ? 'text-rose-300' : 'text-rose-700'
+                                  : 'text-emerald-500'
+                              }`}
+                            >
+                              ₹{Math.abs(acc.balance).toFixed(2)}
+                              {acc.balance > 0 ? ' (લેવાના)' : acc.balance < 0 ? ' (આપવાના)' : ' (0)'}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm(`શું તમે "${acc.name}" ખાતું અને તેના તમામ વ્યવહારો કાઢી નાખવા માંગો છો?`)) {
+                                  onDeleteKhataAccount(acc.id);
+                                  if (selectedAccountId === acc.id) setSelectedAccountId(null);
+                                }
+                              }}
+                              className={`p-1 rounded transition cursor-pointer ${selectedAccountId === acc.id ? 'text-rose-300 hover:text-white hover:bg-rose-500/30' : 'text-red-500 hover:text-red-700 hover:bg-red-50'}`}
+                              title="ખાતું ડીલીટ કરો"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                         {acc.phone && (
                           <div className={`text-[10px] font-bold ${selectedAccountId === acc.id ? 'text-blue-200' : 'text-neutral-500'}`}>
@@ -676,15 +692,17 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                const newName = window.prompt('નવું નામ દાખલ કરો:', selectedAccount.name);
-                                if (newName && newName.trim() !== '') {
-                                  onEditKhataAccount(selectedAccount.id, newName.trim());
+                                const newName = window.prompt('નામ બદલો (Name):', selectedAccount.name);
+                                const newPhone = window.prompt('મોબાઇલ નંબર બદલો (Phone):', selectedAccount.phone || '');
+                                const newAddress = window.prompt('સરનામું બદલો (Address/Shop Name):', selectedAccount.address || '');
+                                if (newName !== null && newName.trim() !== '') {
+                                  onEditKhataAccount(selectedAccount.id, newName.trim(), newPhone !== null ? newPhone.trim() : selectedAccount.phone, newAddress !== null ? newAddress.trim() : selectedAccount.address);
                                 }
                               }}
-                              className="text-blue-300 hover:text-white px-1 py-1 rounded cursor-pointer"
-                              title="નામ બદલો"
+                              className="bg-blue-800/60 hover:bg-blue-800 text-amber-300 px-2 py-1 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition"
+                              title="નામ, મોબાઇલ અને સરનામું એડિટ કરો"
                             >
-                              ✏️
+                              ✏️ એડિટ વિગત
                             </button>
                           </div>
                           <button
