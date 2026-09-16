@@ -3,13 +3,47 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "main.cjs",
+  "files": [
+    "dist",
+    "main.cjs"
+  ],
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "electron:dev": "electron .",
+    "electron:build": "electron-builder",
+    "dist": "vite build && electron-builder"
+  },
+  "build": {
+    "appId": "com.prishastationery.app",
+    "productName": "PRISHA STATIONERY",
+    "asar": true,
+    "directories": {
+      "output": "out"
+    },
+    "files": [
+      "dist/**/*",
+      "main.cjs",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "public/icon.svg"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PRISHA STATIONERY"
+    }
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -35,6 +69,8 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "autoprefixer": "^10.4.21",
+    "electron": "^44.4.1",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.25.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",

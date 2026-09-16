@@ -132,6 +132,13 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
 
+      // Avoid unnecessary database writes and state triggers if data has not changed
+      try {
+        if (JSON.stringify(prev) === JSON.stringify(next)) {
+          return prev;
+        }
+      } catch (e) {}
+
       // 1. If this contains files (printJobs), save full uncorrupted files into IndexedDB
       if (docName === 'printJobs' && Array.isArray(next)) {
         next.forEach((job: any) => {
