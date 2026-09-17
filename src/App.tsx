@@ -47,7 +47,9 @@ import {
   Share2,
   Newspaper,
   Heart,
-  ArrowDownUp
+  ArrowDownUp,
+  Bell,
+  Users
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem, RegisteredCustomer } from './types';
@@ -1563,8 +1565,57 @@ export default function App() {
               className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
             >
               <Truck className="w-3.5 h-3.5 text-white" />
-              <span>ઓર્ડર ટ્રેક કરો (Track)</span>
+              <span>ઓર્ડર ટ્રેક કરો</span>
             </button>
+
+            {/* NEW ORDER NOTIFICATIONS BUTTON */}
+            <button
+              onClick={() => setShowOrderNotificationModal(true)}
+              className="relative bg-orange-500 hover:bg-orange-600 text-black px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1.5 transition-transform active:scale-95"
+              title="નવા ઓનલાઇન ઓર્ડર અને પ્રિન્ટ જોબ નોટિફિકેશન જુઓ"
+            >
+              <Bell className="w-3.5 h-3.5 text-black" />
+              <span>🔔 નોટિફિકેશન</span>
+              {(orders.filter(o => o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled').length + printJobs.filter(j => j.status !== 'completed' && j.status !== 'cancelled').length) > 0 && (
+                <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full border border-orange-200 animate-pulse">
+                  {orders.filter(o => o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled').length + printJobs.filter(j => j.status !== 'completed' && j.status !== 'cancelled').length}
+                </span>
+              )}
+            </button>
+
+            {/* CUSTOMER ACCOUNT / LOGIN BUTTON */}
+            {loggedInCustomer ? (
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setShowCustomerAuthModal(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer flex items-center gap-1 shadow-xs"
+                  title="ગ્રાહક એકાઉન્ટ પ્રોફાઇલ અને હિસ્ટ્રી"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>👤 {loggedInCustomer.name}</span>
+                </button>
+                <button
+                  onClick={() => {
+                    setLoggedInCustomer(null);
+                    localStorage.removeItem('prisha_customer_user');
+                    showToast('👋 લૉગઆઉટ થવા માટે આભાર!');
+                  }}
+                  className="text-[10px] text-neutral-300 hover:text-white underline px-1 cursor-pointer"
+                  title="લૉગઆઉટ કરો"
+                >
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowCustomerAuthModal(true)}
+                className="bg-blue-800 hover:bg-blue-700 text-amber-300 border border-blue-600 px-3 py-1 rounded-lg text-xs font-black cursor-pointer flex items-center gap-1.5 shadow-xs"
+                title="મોબાઈલ નંબરથી સાઇન-ઇન અથવા નવું એકાઉન્ટ બનાવો"
+              >
+                <User className="w-3.5 h-3.5 text-amber-400" />
+                <span>👤 એકાઉન્ટ / Login</span>
+              </button>
+            )}
 
             {/* STORE SHARE LINK BUTTON */}
             <button

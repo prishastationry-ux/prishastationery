@@ -21,7 +21,7 @@ interface OrderNotificationModalProps {
   onClose: () => void;
   pendingOrders: OrderRecord[];
   pendingPrintJobs: PrintJobRecord[];
-  onUpdateOrderStatus: (orderId: string, newStatus: 'placed' | 'confirmed' | 'shipped' | 'delivered' | 'cancelled') => void;
+  onUpdateOrderStatus: (orderId: string, newStatus: 'placed' | 'confirmed' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled') => void;
   onUpdatePrintJobStatus: (jobId: string, newStatus: 'received' | 'in_progress' | 'printed' | 'ready' | 'completed' | 'cancelled') => void;
   onViewOrderInvoice: (order: OrderRecord) => void;
   storeSettings: StoreSettings;
@@ -195,7 +195,7 @@ export const OrderNotificationModal: React.FC<OrderNotificationModalProps> = ({
 
                     <div className="flex items-center gap-1.5">
                       <button
-                        onClick={() => onUpdateOrderStatus(order.id, 'shipped')}
+                        onClick={() => onUpdateOrderStatus(order.id, 'out_for_delivery')}
                         className="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-[11px] font-black flex items-center gap-1"
                       >
                         <Truck className="w-3 h-3" />
