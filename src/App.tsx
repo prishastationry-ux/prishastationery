@@ -127,6 +127,18 @@ export default function App() {
   // Orders & Invoices State
   const [orders, setOrders] = useFirebaseSync<OrderRecord[]>('orders', 'prisha_orders_v4', INITIAL_ORDERS);
 
+  // Registered Customers, Notifications & CRM States
+  const [registeredCustomers, setRegisteredCustomers] = useFirebaseSync<RegisteredCustomer[]>('customers', 'prisha_registered_customers_v1', []);
+  const [loggedInCustomer, setLoggedInCustomer] = useState<RegisteredCustomer | null>(() => {
+    try {
+      const saved = localStorage.getItem('prisha_customer_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
+  const [showOrderNotificationModal, setShowOrderNotificationModal] = useState<boolean>(false);
+  const [showCustomerAuthModal, setShowCustomerAuthModal] = useState<boolean>(false);
+  const [showAdminCRMModal, setShowAdminCRMModal] = useState<boolean>(false);
+
   // Expenses & Purchases
   const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v5', []);
   const [purchases, setPurchases] = useFirebaseSync<PurchaseRecord[]>('purchases', 'prisha_purchases_v5', []);
@@ -1258,6 +1270,29 @@ export default function App() {
   const cartTotalAmount = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const totalCartCount = cart.reduce((sum, i) => sum + i.quantity, 0);
 
+  const activePendingOrders = orders.filter(o => o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled');
+  const activePendingPrintJobs = printJobs.filter(j => j.status !== 'completed' && j.status !== 'cancelled');
+  const totalPendingNotifications = activePendingOrders.length + activePendingPrintJobs.length;
+
+  const handleCustomerLogin = (customer: RegisteredCustomer) => {
+    setLoggedInCustomer(customer);
+    localStorage.setItem('prisha_customer_user', JSON.stringify(customer));
+    setRegisteredCustomers(prev => {
+      const exists = prev.some(c => c.mobile === customer.mobile);
+      if (exists) {
+        return prev.map(c => c.mobile === customer.mobile ? customer : c);
+      }
+      return [...prev, customer];
+    });
+    showToast(`👋 જી આવકારો! ${customer.name}`);
+  };
+
+  const handleCustomerLogout = () => {
+    setLoggedInCustomer(null);
+    localStorage.removeItem('prisha_customer_user');
+    showToast('👋 લૉગઆઉટ થઈ ગયું');
+  };
+
   const getHeaderSizeClasses = () => {
     switch (storeSettings.headerNameSize) {
       case 'small': return 'text-lg sm:text-xl md:text-2xl';
@@ -1408,6 +1443,33 @@ export default function App() {
               </div>
             )}
 
+            {/* ORDER NOTIFICATION BELL WITH LIVE COUNTER */}
+            <button
+              onClick={() => setShowOrderNotificationModal(true)}
+              className="relative bg-blue-900 hover:bg-blue-800 text-white p-2 sm:px-3 sm:py-2.5 rounded-xl font-black text-xs flex items-center gap-1.5 border border-blue-700 shadow-2xs cursor-pointer transition-transform active:scale-95"
+              title="નવા ઓર્ડર નોટિફિકેશન સેન્ટર"
+            >
+              <Bell className="w-4 h-4 text-amber-400 animate-pulse" />
+              <span className="hidden md:inline">ઓર્ડર ({totalPendingNotifications})</span>
+              {totalPendingNotifications > 0 && (
+                <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full border border-blue-950 min-w-4 text-center">
+                  {totalPendingNotifications}
+                </span>
+              )}
+            </button>
+
+            {/* CUSTOMER ACCOUNT BUTTON */}
+            <button
+              onClick={() => setShowCustomerAuthModal(true)}
+              className="bg-neutral-800 hover:bg-neutral-900 text-amber-300 border border-neutral-700 px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-xs"
+              title={loggedInCustomer ? `ગ્રાહક: ${loggedInCustomer.name}` : 'ગ્રાહક સાઇન-ઇન / એકાઉન્ટ'}
+            >
+              <User className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">
+                {loggedInCustomer ? loggedInCustomer.name : 'એકાઉન્ટ / Login'}
+              </span>
+            </button>
+
             {/* CART BUTTON WITH LIVE BADGE */}
             <button
               onClick={() => setIsCartDrawerOpen(true)}
@@ -1433,10 +1495,19 @@ export default function App() {
                 className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 shadow-xs cursor-pointer transition-transform active:scale-95"
               >
                 <KeyRound className="w-3.5 h-3.5 text-orange-400" />
-                <span>Login</span>
+                <span>Admin</span>
               </button>
             ) : (
               <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setShowAdminCRMModal(true)}
+                  className="bg-indigo-700 hover:bg-indigo-800 text-white px-2.5 py-2 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer"
+                  title="ગ્રાહક લિસ્ટ અને ખરીદી હિસ્ટ્રી (CRM)"
+                >
+                  <Users className="w-3.5 h-3.5 text-amber-300" />
+                  <span className="hidden sm:inline">ગ્રાહકો (CRM)</span>
+                </button>
+
                 <button
                   onClick={() => setActiveTab(activeTab === 'customer' ? 'admin' : 'customer')}
                   className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1 border shadow-2xs transition-all ${
@@ -4196,6 +4267,48 @@ export default function App() {
           relatedProducts={posItems.filter(p => p.category === selectedProductForModal.category && p.id !== selectedProductForModal.id).slice(0, 4)}
         />
       )}
+
+      {/* ORDER NOTIFICATION MODAL */}
+      <OrderNotificationModal
+        isOpen={showOrderNotificationModal}
+        onClose={() => setShowOrderNotificationModal(false)}
+        pendingOrders={orders}
+        pendingPrintJobs={printJobs}
+        onUpdateOrderStatus={(orderId, newStatus) => {
+          setOrders(prev => prev.map(o => o.id === orderId ? { ...o, orderStatus: newStatus } : o));
+          showToast('✅ ઓર્ડર સ્ટેટસ અપડેટ થઈ ગયું!');
+        }}
+        onUpdatePrintJobStatus={(jobId, newStatus) => {
+          setPrintJobs(prev => prev.map(j => j.id === jobId ? { ...j, status: newStatus } : j));
+          showToast('✅ પ્રિન્ટ જોબ સ્ટેટસ અપડેટ થઈ ગયું!');
+        }}
+        onViewOrderInvoice={(order) => {
+          setSelectedOrderForModal(order);
+          setShowInvoiceModal(true);
+        }}
+        storeSettings={storeSettings}
+      />
+
+      {/* CUSTOMER AUTH MODAL */}
+      <CustomerAuthModal
+        isOpen={showCustomerAuthModal}
+        onClose={() => setShowCustomerAuthModal(false)}
+        onCustomerLogin={handleCustomerLogin}
+        existingCustomers={registeredCustomers}
+      />
+
+      {/* ADMIN CUSTOMER CRM MODAL */}
+      <AdminCustomerCRMModal
+        isOpen={showAdminCRMModal}
+        onClose={() => setShowAdminCRMModal(false)}
+        registeredCustomers={registeredCustomers}
+        orders={orders}
+        printJobs={printJobs}
+        onViewOrderInvoice={(order) => {
+          setSelectedOrderForModal(order);
+          setShowInvoiceModal(true);
+        }}
+      />
     </div>
   );
 }
