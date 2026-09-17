@@ -121,8 +121,48 @@ app.post('/api/dev/save-icons', (req, res) => {
 });
 
 // =========================================================================
-// 2. PRINT JOBS REST API (For Desktop & Mobile Clients)
+// 2. PRODUCTS & PRINT JOBS REST API (For Desktop & Mobile Clients)
 // =========================================================================
+app.get('/api/products', async (req, res) => {
+  const { db } = getCloudDb();
+  if (!db) return res.status(503).json({ error: 'Cloud database not initialized' });
+
+  try {
+    const snap = await getDoc(doc(db, 'store_data', 'products'));
+    const products = snap.exists() ? snap.data()?.data || [] : [];
+    res.json({ success: true, count: products.length, products });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to fetch products', details: err.message });
+  }
+});
+
+app.post('/api/products', async (req, res) => {
+  const { db } = getCloudDb();
+  if (!db) return res.status(503).json({ error: 'Cloud database not initialized' });
+
+  try {
+    const newProduct = req.body;
+    if (!newProduct || !newProduct.nameGu) {
+      return res.status(400).json({ error: 'Product name is required' });
+    }
+
+    const snap = await getDoc(doc(db, 'store_data', 'products'));
+    const currentProducts: any[] = snap.exists() ? snap.data()?.data || [] : [];
+
+    const existingIdx = currentProducts.findIndex((p: any) => p.id === newProduct.id);
+    if (existingIdx >= 0) {
+      currentProducts[existingIdx] = { ...currentProducts[existingIdx], ...newProduct };
+    } else {
+      currentProducts.unshift(newProduct);
+    }
+
+    await setDoc(doc(db, 'store_data', 'products'), { data: currentProducts });
+    res.json({ success: true, product: newProduct, count: currentProducts.length });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to save product', details: err.message });
+  }
+});
+
 app.get('/api/jobs', async (req, res) => {
   const { db } = getCloudDb();
   if (!db) return res.status(503).json({ error: 'Cloud database not initialized' });
@@ -191,13 +231,16 @@ app.post('/api/sync/pull', async (req, res) => {
     const setSnap = await getDoc(doc(db, 'store_data', 'storeSettings'));
     const settings = setSnap.exists() ? setSnap.data()?.data || null : null;
 
+    const prodSnap = await getDoc(doc(db, 'store_data', 'products'));
+    const allProducts = prodSnap.exists() ? prodSnap.data()?.data || [] : [];
+
     res.json({
       serverTimestamp: Date.now(),
       hasMore: false,
       changes: {
         printJobs: modifiedJobs,
         orders: modifiedOrders,
-        products: [],
+        products: allProducts,
         storeSettings: settings
       }
     });
@@ -283,6 +326,19 @@ app.post('/api/sync/push', async (req, res) => {
           };
           jobsList.unshift(newJob);
         }
+        processed++;
+      } else if (m.entity === 'products') {
+        const prodRef = doc(db, 'store_data', 'products');
+        const prodSnap = await getDoc(prodRef);
+        const prodList: any[] = prodSnap.exists() ? prodSnap.data()?.data || [] : [];
+        const existingProdIdx = prodList.findIndex((p: any) => p.id === m.id);
+
+        if (existingProdIdx >= 0) {
+          prodList[existingProdIdx] = { ...prodList[existingProdIdx], ...m.data };
+        } else {
+          prodList.unshift(m.data);
+        }
+        await setDoc(prodRef, { data: prodList });
         processed++;
       }
     }

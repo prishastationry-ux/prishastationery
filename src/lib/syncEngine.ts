@@ -228,6 +228,18 @@ export async function pushOfflineSync(): Promise<SyncPushResponse> {
 
         await setDoc(pjRef, { data: sanitizeForFirestore(currentList) });
         processed++;
+      } else if (m.entity === 'products') {
+        const prodRef = doc(db, 'store_data', 'products');
+        const snap = await getDoc(prodRef);
+        const prodList: any[] = snap.exists() ? snap.data()?.data || [] : [];
+        const existingIdx = prodList.findIndex((p: any) => p.id === m.id);
+        if (existingIdx >= 0) {
+          prodList[existingIdx] = { ...prodList[existingIdx], ...m.data };
+        } else {
+          prodList.unshift(m.data);
+        }
+        await setDoc(prodRef, { data: sanitizeForFirestore(prodList) });
+        processed++;
       }
     }
 

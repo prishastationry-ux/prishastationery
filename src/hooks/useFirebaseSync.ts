@@ -160,6 +160,13 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
               const localOnly = prevData.filter((item: any) => item?.id && !cloudIds.has(item.id));
               const merged = [...cleaned, ...localOnly];
 
+              // Push any un-synced local items to Firestore so other devices (e.g. mobile) receive them immediately
+              if (localOnly.length > 0) {
+                setDoc(docRef, { data: sanitizeForFirestore(merged) }).catch(err => {
+                  console.warn(`Auto-pushing ${localOnly.length} local items to cloud (${docName}):`, err);
+                });
+              }
+
               try {
                 localStorage.setItem(localKey, JSON.stringify(merged));
                 localStorage.setItem(localKey + '_backup', JSON.stringify(merged));
