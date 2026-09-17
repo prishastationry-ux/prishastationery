@@ -15,10 +15,15 @@ function createWindow() {
     icon: path.join(__dirname, 'dist', 'pwa-512x512.png')
   });
 
-  // Load the built Vite production index.html file
+  // Load live Cloud Run app URL for real-time live updates, with fallback to local dist/index.html
+  const liveUrl = 'https://ais-dev-zd76yrx4uq4bnlzknpbhh5-583891191614.asia-southeast1.run.app';
   const indexPath = path.join(__dirname, 'dist', 'index.html');
-  win.loadFile(indexPath).catch(err => {
-    console.error("Error loading application entry file:", err);
+
+  win.loadURL(liveUrl).catch(() => {
+    console.log("Offline detected, loading local fallback...");
+    win.loadFile(indexPath).catch(err => {
+      console.error("Error loading application entry file:", err);
+    });
   });
 
   // Open external links (e.g. UPI, maps) in default browser instead of electron window
