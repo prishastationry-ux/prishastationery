@@ -205,6 +205,15 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
               const merged = Array.from(localItemsMap.values());
 
+              // Auto-push any un-synced local items back to Firestore to ensure multi-device sync
+              try {
+                if (JSON.stringify(merged) !== JSON.stringify(cleaned)) {
+                  setDoc(docRef, { data: sanitizeForFirestore(merged) }).catch(err => {
+                    console.warn(`Auto-pushing local items to cloud (${docName}) failed:`, err);
+                  });
+                }
+              } catch(e) {}
+
               try {
                 localStorage.setItem(localKey, JSON.stringify(merged));
                 localStorage.setItem(localKey + '_backup', JSON.stringify(merged));
