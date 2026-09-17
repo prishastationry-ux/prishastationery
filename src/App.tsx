@@ -1468,6 +1468,18 @@ export default function App() {
               <span>🔗 લિંક શેર કરો</span>
             </button>
 
+            {/* SYNC REFRESH BUTTON */}
+            <button
+              onClick={() => {
+                showToast('🔄 ડેટા સિન્ક અને રિફ્રेश થઈ રહ્યો છે...');
+                setTimeout(() => window.location.reload(), 600);
+              }}
+              className="bg-neutral-800 hover:bg-neutral-900 text-emerald-400 border border-neutral-700 px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+              title="ક્લાઉડ અને લોકલ ડેટા તરત જ સિન્ક કરો"
+            >
+              <span>🔄 Sync</span>
+            </button>
+
             {/* PWA INSTALL BUTTON */}
             <PWAInstallButton />
           </div>

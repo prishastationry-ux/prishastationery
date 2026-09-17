@@ -183,25 +183,27 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
             // For all array records:
             if (Array.isArray(cleaned) && Array.isArray(prevData)) {
-              // SAFEGUARD: Never let an empty cloud document wipe out local PC entries!
               if (cleaned.length === 0 && prevData.length > 0) {
                 return prevData;
               }
 
-              // Filter out any items that were deleted locally
-              const activeCloudItems = cleaned.filter((item: any) => !item?.id || !deletedIds.has(item.id));
+              // Local-First Authoritative Merge: Local items take absolute precedence so additions/edits are never lost
+              const localItemsMap = new Map();
+              (prevData as any[]).forEach((item: any) => {
+                if (item?.id && !deletedIds.has(item.id)) {
+                  localItemsMap.set(item.id, item);
+                }
+              });
 
-              // Merge cloud items with local-only items (adds made offline or pending sync)
-              const cloudIds = new Set(activeCloudItems.map((item: any) => item?.id).filter(Boolean));
-              const localOnly = (prevData as any[]).filter((item: any) => item?.id && !cloudIds.has(item.id) && !deletedIds.has(item.id));
-              const merged = [...activeCloudItems, ...localOnly];
+              cleaned.forEach((cloudItem: any) => {
+                if (cloudItem?.id && !deletedIds.has(cloudItem.id)) {
+                  if (!localItemsMap.has(cloudItem.id)) {
+                    localItemsMap.set(cloudItem.id, cloudItem);
+                  }
+                }
+              });
 
-              // Push any un-synced local items to Firestore
-              if (localOnly.length > 0) {
-                setDoc(docRef, { data: sanitizeForFirestore(merged) }).catch(err => {
-                  console.warn(`Auto-pushing ${localOnly.length} local items to cloud (${docName}):`, err);
-                });
-              }
+              const merged = Array.from(localItemsMap.values());
 
               try {
                 localStorage.setItem(localKey, JSON.stringify(merged));
