@@ -1016,17 +1016,18 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
             </div>
 
             <h3 className="text-base sm:text-lg font-black text-neutral-900 text-center mb-1">
-              ફાઇલ ક્લાઉડમાં ઉપલબ્ધ નથી
+              ફાઇલ ક્લાઉડમાં 100% અપલોડ થઈ શકી નથી
             </h3>
             <p className="text-xs text-neutral-600 text-center mb-4 leading-relaxed">
-              ઓર્ડર <span className="font-bold text-neutral-800">#{missingFileData.job.jobNo}</span> ({missingFileData.job.customerName}) ની ફાઇલ <span className="font-bold text-neutral-800">"{missingFileData.file.fileName}"</span> ગ્રાહકના જૂના સત્રમાંથી આવેલી હોવાથી તેનો ડેટા ક્લાઉડમાં સેવ થઈ શક્યો નથી.
+              ગ્રાહક <span className="font-bold text-neutral-800">{missingFileData.job.customerName}</span> (ઓર્ડર <span className="font-bold text-neutral-800">#{missingFileData.job.jobNo}</span>) ની ફાઇલ <span className="font-bold text-neutral-800">"{missingFileData.file.fileName}"</span> અપલોડ થતી વખતે ઈન્ટરનેટ કનેક્શન તૂટી ગયું હશે અથવા ગ્રાહકે વહેલા પેજ બંધ કરી દીધું હશે.
             </p>
 
             <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-3 mb-4 text-xs text-amber-900">
-              <p className="font-black mb-1">👉 નીચેનામાંથી કોઈપણ ૧ વિકલ્પ પસંદ કરો:</p>
+              <p className="font-black mb-1">👉 હવે શું કરવું?</p>
               <ul className="list-disc list-inside space-y-0.5 text-[11px] text-amber-800">
-                <li>ગ્રાહકને ૧ ક્લિકમાં WhatsApp મેસેજ મોકલી ફાઇલ મંગાવો.</li>
-                <li>અથવા WhatsApp Web માંથી ફાઇલ ડાઉનલોડ કરી અહીં સીધી જોડી દો.</li>
+                <li>ગ્રાહકને ૧ ક્લિકમાં WhatsApp મેસેજ મોકલી ફાઇલ મંગાવી લો.</li>
+                <li>WhatsApp માંથી ડાઉનલોડ કરી આ ફાઇલને અહીં જોડી દો (Attach File).</li>
+                <li>અથવા આ ખામીયુક્ત ઓર્ડર/ફાઇલને સીધી ડિલીટ કરી દો.</li>
               </ul>
             </div>
 
@@ -1034,7 +1035,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  const msg = `નમસ્તે ${missingFileData.job.customerName}જી, પ્રીશા સ્ટેશનરીમાંથી.\nતમારા પ્રિન્ટ ઓર્ડર #${missingFileData.job.jobNo} માટેની ફાઇલ (${missingFileData.file.fileName}) અહીં WhatsApp પર Document તરીકે મોકલી આપવા વિનંતી જેથી અમે પ્રિન્ટ કરી શકીએ.`;
+                  const msg = `નમસ્તે ${missingFileData.job.customerName}જી, પ્રીશા સ્ટેશનરીમાંથી.\nતમારા ઓનલાઇન પ્રિન્ટ ઓર્ડર #${missingFileData.job.jobNo} માં ઇન્ટરનેટના કારણે ફાઇલ પૂરી અપલોડ થઈ શકી નથી. કૃપા કરીને ફાઇલ (${missingFileData.file.fileName}) અહીં WhatsApp પર જ મોકલી આપવા વિનંતી.`;
                   window.open(`https://wa.me/91${missingFileData.job.mobile}?text=${encodeURIComponent(msg)}`, '_blank');
                   showToast('📲 WhatsApp ખુલી ગયું છે!');
                   setMissingFileData(null);
@@ -1042,7 +1043,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
               >
                 <Share2 className="w-4 h-4" />
-                <span>૧. ગ્રાહક પાસેથી WhatsApp પર ફાઇલ મંગાવો</span>
+                <span>૧. WhatsApp પરથી ફાઇલ મંગાવો</span>
               </button>
 
               <label className="w-full bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer transition">
@@ -1059,6 +1060,20 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                   }}
                 />
               </label>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (window.confirm('શું તમે ખરેખર આ અધૂરા અપલોડ થયેલા ઓર્ડરને ડિલીટ કરવા માંગો છો?')) {
+                    handleDeleteJobWithCloud(missingFileData.job);
+                    setMissingFileData(null);
+                  }
+                }}
+                className="w-full bg-red-100 hover:bg-red-200 text-red-700 font-black py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>૩. આખો ઓર્ડર ડિલીટ કરો</span>
+              </button>
 
               <button
                 type="button"

@@ -17,13 +17,15 @@ interface ProductDetailModalProps {
   onClose: () => void;
   onAddToCart: (product: ProductItem) => void;
   cartQuantity: number;
+  relatedProducts?: ProductItem[];
 }
 
 export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
   product,
   onClose,
   onAddToCart,
-  cartQuantity
+  cartQuantity,
+  relatedProducts
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState<number>(0);
 
@@ -183,6 +185,39 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* RELATED PRODUCTS SECTION */}
+          {relatedProducts && relatedProducts.length > 0 && (
+            <div className="mt-6 border-t border-neutral-200 pt-4">
+              <h4 className="text-sm font-black text-neutral-800 mb-3">આવી જ બીજી વસ્તુઓ (Related Items):</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
+                {relatedProducts.map(rel => (
+                  <div key={rel.id} className="bg-neutral-50 rounded-xl p-2 border border-neutral-200 flex flex-col justify-between hover:border-orange-400 transition-colors cursor-pointer">
+                    <div>
+                      <div className="aspect-square bg-white rounded-lg mb-2 flex items-center justify-center overflow-hidden border border-neutral-100 p-1">
+                        {rel.imageUrl ? (
+                          <img src={rel.imageUrl} alt={rel.nameGu} className="w-full h-full object-contain" />
+                        ) : (
+                          <Package className="w-6 h-6 text-neutral-300" />
+                        )}
+                      </div>
+                      <p className="text-[10px] font-bold text-neutral-800 line-clamp-2 leading-tight">{rel.nameGu}</p>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-xs font-black text-orange-700">₹{rel.price}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onAddToCart(rel); }}
+                        className="bg-orange-500 hover:bg-orange-600 text-black p-1 rounded-md"
+                        title="કાર્ટમાં ઉમેરો"
+                      >
+                        <ShoppingCart className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
         </div>
 

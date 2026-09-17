@@ -14,6 +14,7 @@ export interface ProductItem {
   badge?: string;
   isSpecial?: boolean;
   description?: string;
+  createdAt?: number;
   
   // New properties based on feedback
   isHidden?: boolean; // છુપાવો (ગ્રાહકને ન દેખાય)
@@ -55,6 +56,7 @@ export interface OrderRecord {
   orderType?: 'online' | 'counter';
   orderStatus?: 'placed' | 'confirmed' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled';
   statusUpdatedAt?: string;
+  profit?: number;
   notes?: string;
 }
 
@@ -307,4 +309,15 @@ export interface PrintJobRecord {
   invoiceGenerated?: boolean;
   invoiceNo?: string;
   totalJobSize?: number;
+}
+
+export interface RegisteredCustomer {
+  id: string;
+  name: string;
+  mobile: string;
+  address?: string;
+  pincode?: string;
+  createdAt: string;
+  lastLoginAt?: string;
+  isRegistered?: boolean;
 }

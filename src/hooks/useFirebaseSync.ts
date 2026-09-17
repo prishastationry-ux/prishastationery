@@ -29,6 +29,9 @@ export function sanitizeForFirestore(val: any): any {
   return result;
 }
 
+// Track quota status to avoid repeating calls when quota limit is exceeded
+let globalQuotaExceeded = false;
+
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
@@ -108,29 +111,34 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   useEffect(() => {
     const docRef = doc(db, "store_data", docName);
     
-    // Initial check: If Firebase is empty, upload what we have in localStorage
-    getDoc(docRef).then(snapshot => {
-      const saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          const cleaned = filterMockData(parsed);
-          const deletedIds = getDeletedIds();
-          const activeCleaned = Array.isArray(cleaned) ? cleaned.filter((item: any) => !item?.id || !deletedIds.has(item.id)) : cleaned;
-          
-          if (Array.isArray(activeCleaned) && activeCleaned.length > 0) {
-            if (!snapshot.exists()) {
-              setDoc(docRef, { data: sanitizeForFirestore(activeCleaned) }).catch(() => {});
-            } else {
-              const cloudData = snapshot.data()?.data;
-              if (!Array.isArray(cloudData) || cloudData.length === 0) {
-                setDoc(docRef, { data: sanitizeForFirestore(activeCleaned) }).catch(() => {});
+    // Initial check: Only upload if quota is not exceeded
+    if (!globalQuotaExceeded) {
+      getDoc(docRef).then(snapshot => {
+        const saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            const cleaned = filterMockData(parsed);
+            const deletedIds = getDeletedIds();
+            const activeCleaned = Array.isArray(cleaned) ? cleaned.filter((item: any) => !item?.id || !deletedIds.has(item.id)) : cleaned;
+            
+            if (Array.isArray(activeCleaned) && activeCleaned.length > 0) {
+              if (!snapshot.exists() || !Array.isArray(snapshot.data()?.data) || snapshot.data()?.data.length === 0) {
+                setDoc(docRef, { data: sanitizeForFirestore(activeCleaned) }).catch(err => {
+                  if (err?.message?.includes('resource-exhausted') || err?.message?.includes('Quota')) {
+                    globalQuotaExceeded = true;
+                  }
+                });
               }
             }
-          }
-        } catch(e) {}
-      }
-    }).catch(() => {});
+          } catch(e) {}
+        }
+      }).catch(err => {
+        if (err?.message?.includes('resource-exhausted') || err?.message?.includes('Quota')) {
+          globalQuotaExceeded = true;
+        }
+      });
+    }
 
     // Listen for real-time updates from Firebase
     const unsubscribe = onSnapshot(docRef, {
@@ -187,7 +195,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
                 return prevData;
               }
 
-              // Local-First Authoritative Merge: Local items take absolute precedence so additions/edits are never lost
+              // Merge local items and cloud items without calling setDoc in snapshot!
               const localItemsMap = new Map();
               (prevData as any[]).forEach((item: any) => {
                 if (item?.id && !deletedIds.has(item.id)) {
@@ -204,15 +212,6 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
               });
 
               const merged = Array.from(localItemsMap.values());
-
-              // Auto-push any un-synced local items back to Firestore to ensure multi-device sync
-              try {
-                if (JSON.stringify(merged) !== JSON.stringify(cleaned)) {
-                  setDoc(docRef, { data: sanitizeForFirestore(merged) }).catch(err => {
-                    console.warn(`Auto-pushing local items to cloud (${docName}) failed:`, err);
-                  });
-                }
-              } catch(e) {}
 
               try {
                 localStorage.setItem(localKey, JSON.stringify(merged));
@@ -231,8 +230,11 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       },
       error: (err) => {
         const msg = err?.message || String(err);
-        if (!msg.includes('transport errored') && !msg.includes('WebChannel') && !msg.includes('offline')) {
-          console.warn(`Firestore sync note for ${docName} (using local persistence):`, msg);
+        if (msg.includes('resource-exhausted') || msg.includes('Quota')) {
+          globalQuotaExceeded = true;
+        }
+        if (!msg.includes('transport errored') && !msg.includes('WebChannel') && !msg.includes('offline') && !msg.includes('resource-exhausted') && !msg.includes('Quota')) {
+          console.warn(`Firestore sync note for ${docName}:`, msg);
         }
       }
     });
@@ -240,7 +242,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     return () => unsubscribe();
   }, [docName, localKey]);
 
-  // Provide a wrapped setter that saves locally and pushes to Firebase immediately
+  // Provide a wrapped setter that saves locally and pushes to Firebase safely
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
@@ -304,43 +306,55 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         } catch (e) {}
       }
 
-      // 3. Save to Firebase asynchronously
-      try {
-        if (docName === 'printJobs' && Array.isArray(next)) {
-          next.forEach((job: any) => {
-            if (Array.isArray(job.files)) {
-              job.files.forEach((f: any) => {
-                if (f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length > 50) {
-                  saveFileToCloudStorage(
-                    f.id,
-                    f.fileDataUrl,
-                    f.fileName || 'file',
-                    f.fileType || '',
-                    f.fileSize || 0
-                  );
-                }
-              });
-            }
-          });
+      // 3. Save to Firebase asynchronously if quota is not exceeded
+      if (!globalQuotaExceeded) {
+        try {
+          if (docName === 'printJobs' && Array.isArray(next)) {
+            next.forEach((job: any) => {
+              if (Array.isArray(job.files)) {
+                job.files.forEach((f: any) => {
+                  if (f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length > 50) {
+                    saveFileToCloudStorage(
+                      f.id,
+                      f.fileDataUrl,
+                      f.fileName || 'file',
+                      f.fileType || '',
+                      f.fileSize || 0
+                    ).catch(err => {
+                      if (err?.message?.includes('resource-exhausted') || err?.message?.includes('Quota')) {
+                        globalQuotaExceeded = true;
+                      }
+                    });
+                  }
+                });
+              }
+            });
 
-          const firestoreData = next.map((item: any) => ({
-            ...item,
-            files: item.files?.map((f: any) => ({
-              ...f,
-              fileDataUrl: f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length < 300000 ? f.fileDataUrl : ''
-            }))
-          }));
+            const firestoreData = next.map((item: any) => ({
+              ...item,
+              files: item.files?.map((f: any) => ({
+                ...f,
+                fileDataUrl: f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length < 300000 ? f.fileDataUrl : ''
+              }))
+            }));
 
-          setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(firestoreData) }).catch(err => {
-            console.warn("Firebase sync warning:", err);
-          });
-        } else {
-          setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(next) }).catch(err => {
-            console.warn("Firebase sync warning:", err);
-          });
+            setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(firestoreData) }).catch(err => {
+              if (err?.message?.includes('resource-exhausted') || err?.message?.includes('Quota')) {
+                globalQuotaExceeded = true;
+              }
+            });
+          } else {
+            setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(next) }).catch(err => {
+              if (err?.message?.includes('resource-exhausted') || err?.message?.includes('Quota')) {
+                globalQuotaExceeded = true;
+              }
+            });
+          }
+        } catch (err: any) {
+          if (err?.message?.includes('resource-exhausted') || err?.message?.includes('Quota')) {
+            globalQuotaExceeded = true;
+          }
         }
-      } catch (err) {
-        console.warn("Firebase sync preparation error:", err);
       }
       return next;
     });

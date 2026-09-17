@@ -12,7 +12,8 @@ import {
   MapPin,
   Calendar,
   AlertCircle,
-  Printer
+  Printer,
+  Trash2
 } from 'lucide-react';
 import { OrderRecord, StoreSettings, PrintJobRecord } from '../types';
 
@@ -22,6 +23,7 @@ interface OrderTrackingModalProps {
   orders: OrderRecord[];
   printJobs?: PrintJobRecord[];
   onViewInvoice: (order: OrderRecord) => void;
+  onCustomerCancelJob?: (jobId: string) => void;
   storeSettings: StoreSettings;
 }
 
@@ -39,6 +41,7 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
   orders,
   printJobs,
   onViewInvoice,
+  onCustomerCancelJob,
   storeSettings
 }) => {
   const [searchInput, setSearchInput] = useState('');
@@ -308,6 +311,16 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                         <span className="bg-orange-100 text-orange-800 text-[10px] font-black px-2 py-0.5 rounded-md">
                           🖨️ ઓનલાઇન પ્રિન્ટ જોબ
                         </span>
+                        {job.status === 'received' && onCustomerCancelJob && (
+                          <button
+                            onClick={() => onCustomerCancelJob(job.id)}
+                            className="bg-red-100 hover:bg-red-200 text-red-700 text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 transition"
+                            title="ઓર્ડર રદ કરો અને ડિલીટ કરો"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            રદ કરો (Cancel)
+                          </button>
+                        )}
                       </div>
                       <p className="text-xs text-neutral-600 font-bold mt-0.5 flex items-center gap-2">
                         <span>👤 {job.customerName}</span>

@@ -45,10 +45,12 @@ import {
   Filter,
   Server,
   Share2,
-  Newspaper
+  Newspaper,
+  Heart,
+  ArrowDownUp
 } from 'lucide-react';
 
-import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
+import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem, RegisteredCustomer } from './types';
 import { DEFAULT_STORE_SETTINGS, INITIAL_PRODUCTS, INITIAL_STATS, INITIAL_ORDERS, INITIAL_PRINT_JOBS } from './data';
 import { InvoiceModal } from './components/InvoiceModal';
 import { CartDrawer } from './components/CartDrawer';
@@ -68,10 +70,14 @@ import { MobilePosterWidget } from './components/MobilePosterWidget';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
+import { OrderNotificationModal } from './components/OrderNotificationModal';
+import { CustomerAuthModal } from './components/CustomerAuthModal';
+import { AdminCustomerCRMModal } from './components/AdminCustomerCRMModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
+import { deleteFileFromCloudStorage } from './lib/fileStorage';
 
 export default function App() {
   // Navigation View: Default to 'customer' for all visitors
@@ -136,7 +142,30 @@ export default function App() {
   // Search & Filter Category
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [sortOption, setSortOption] = useState<'default' | 'price_low' | 'price_high' | 'latest' | 'wishlist'>('default');
+  const [wishlist, setWishlist] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('prisha_wishlist');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
 
+  useEffect(() => {
+    localStorage.setItem('prisha_wishlist', JSON.stringify(wishlist));
+  }, [wishlist]);
+
+  const toggleWishlist = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setWishlist(prev => {
+      if (prev.includes(id)) {
+        showToast('💔 પ્રોડક્ટ વિશલિસ્ટમાંથી કાઢી નંખાઈ');
+        return prev.filter(wId => wId !== id);
+      } else {
+        showToast('❤️ પ્રોડક્ટ વિશલિસ્ટમાં ઉમેરાઈ ગઈ');
+        return [...prev, id];
+      }
+    });
+  };
 
   // Auto ERP Real-time Calculations (100% NaN-proof)
   const now = new Date();
@@ -580,13 +609,17 @@ export default function App() {
     customerName: string;
     mobile: string;
     address: string;
-    paymentMode: 'UPI' | 'Cash';
+    paymentMode: 'UPI' | 'Cash' | 'Online';
     paymentScreenshot?: string;
+    discount?: number;
+    discountCode?: string;
   }) => {
     const orderId = getNextOrderNumber();
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const totalAmount = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const discountAmount = orderDetails.discount || 0;
+    const totalAmount = Math.max(0, subtotal - discountAmount);
     const totalProfit = cart.reduce((sum, item) => sum + (Math.max(0, item.product.price - item.product.costPrice) * item.quantity), 0);
 
     // Deduct stock
@@ -614,16 +647,18 @@ export default function App() {
         unit: c.product.unit,
         productId: c.product.id
       })),
-      subtotal: totalAmount,
-      discount: 0,
+      subtotal: subtotal,
+      discount: discountAmount,
       tax: 0,
       total: totalAmount,
-      paymentMode: orderDetails.paymentMode,
+      paymentMode: orderDetails.paymentMode as any,
       paymentStatus: 'Paid',
       orderType: 'online',
       orderStatus: 'placed',
       paymentScreenshot: orderDetails.paymentScreenshot,
-      statusUpdatedAt: dateFormatted
+      statusUpdatedAt: dateFormatted,
+      profit: totalProfit,
+      notes: orderDetails.discountCode ? `પ્રોમો કોડ: ${orderDetails.discountCode}` : ''
     };
 
     setOrders(prev => [newOrder, ...prev]);
@@ -1204,12 +1239,21 @@ export default function App() {
     // If not admin, hide items marked as hidden
     if (!isAdminUnlocked && item.isHidden) return false;
     
+    // If wishlist filter is active, only show wishlisted items
+    if (sortOption === 'wishlist' && !wishlist.includes(item.id)) return false;
+
     const matchesSearch =
       item.nameGu.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCat;
-  }).sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
+  }).sort((a, b) => {
+    if (sortOption === 'price_low') return (a.price || 0) - (b.price || 0);
+    if (sortOption === 'price_high') return (b.price || 0) - (a.price || 0);
+    if (sortOption === 'latest') return (b.createdAt || 0) - (a.createdAt || 0);
+    // default
+    return (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999);
+  });
 
   const cartTotalAmount = cart.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
   const totalCartCount = cart.reduce((sum, i) => sum + i.quantity, 0);
@@ -1658,16 +1702,33 @@ export default function App() {
           {/* SEARCH & CATEGORY FILTER BAR */}
           <div className="bg-white p-3 sm:p-4 rounded-xl border border-neutral-300 shadow-2xs space-y-3">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-              {/* Search Bar */}
-              <div className="relative w-full sm:w-96">
-                <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="નોટબુક, પેન, પાન કાર્ડ, આધાર સર્ચ કરો..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  className="w-full text-xs font-bold pl-9 pr-3 py-2 bg-neutral-50 border border-neutral-300 rounded-xl focus:border-blue-700 outline-none"
-                />
+              {/* Search Bar & Sort Dropdown */}
+              <div className="flex items-center gap-2 w-full sm:w-auto flex-1">
+                <div className="relative w-full sm:w-80">
+                  <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="નોટબુક, પેન, પાન કાર્ડ, આધાર સર્ચ કરો..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full text-xs font-bold pl-9 pr-3 py-2 bg-neutral-50 border border-neutral-300 rounded-xl focus:border-blue-700 outline-none"
+                  />
+                </div>
+                
+                <div className="relative">
+                  <ArrowDownUp className="w-3.5 h-3.5 text-neutral-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <select
+                    value={sortOption}
+                    onChange={e => setSortOption(e.target.value as any)}
+                    className="appearance-none pl-8 pr-6 py-2 bg-neutral-50 border border-neutral-300 rounded-xl text-xs font-bold text-neutral-700 focus:border-blue-700 outline-none cursor-pointer"
+                  >
+                    <option value="default">ક્રમ મુજબ (Default)</option>
+                    <option value="price_low">સસ્તું પહેલા (Price: Low - High)</option>
+                    <option value="price_high">મોંઘુ પહેલા (Price: High - Low)</option>
+                    <option value="latest">નવી પ્રોડક્ટ (Latest)</option>
+                    <option value="wishlist">❤️ મારું વિશલિસ્ટ</option>
+                  </select>
+                </div>
               </div>
 
               {/* View Cart Quick Bar */}
@@ -1785,6 +1846,17 @@ export default function App() {
                       </span>
                     </div>
                   )}
+
+                  {/* Wishlist Button (Customer) */}
+                  <div className={`absolute z-20 ${isAdminUnlocked ? 'top-10 right-2' : 'top-2 right-2'}`}>
+                    <button
+                      onClick={(e) => toggleWishlist(item.id, e)}
+                      className="p-1.5 bg-white/80 backdrop-blur-xs border border-neutral-200 rounded-full shadow-xs hover:bg-white transition-all group-hover:scale-110"
+                      title={wishlist.includes(item.id) ? 'વિશલિસ્ટમાંથી કાઢો' : 'વિશલિસ્ટમાં ઉમેરો'}
+                    >
+                      <Heart className={`w-4 h-4 ${wishlist.includes(item.id) ? 'fill-red-500 text-red-500' : 'text-neutral-400 hover:text-red-500'}`} />
+                    </button>
+                  </div>
 
                   {/* Admin Edit / Delete Shortcuts */}
                   {isAdminUnlocked && (
@@ -3544,6 +3616,19 @@ export default function App() {
             setActiveInvoiceOrder(order);
             setIsSuccessModal(false);
           }}
+          onCustomerCancelJob={async (jobId) => {
+            if (window.confirm('શું તમે ખરેખર તમારો આ ઓનલાઇન પ્રિન્ટ ઓર્ડર રદ કરવા માંગો છો?')) {
+              const jobToDelete = printJobs.find(j => j.id === jobId);
+              if (jobToDelete && Array.isArray(jobToDelete.files)) {
+                for (const f of jobToDelete.files) {
+                  if (f.id) {
+                    await deleteFileFromCloudStorage(f.id).catch(() => {});
+                  }
+                }
+              }
+              handleDeletePrintJob(jobId);
+            }
+          }}
           storeSettings={storeSettings}
         />
       )}
@@ -4100,6 +4185,17 @@ export default function App() {
 
       {/* OFFLINE STATE NOTIFICATION TOAST */}
       <OfflineIndicator />
+
+      {/* PRODUCT DETAIL MODAL WITH RELATED PRODUCTS */}
+      {selectedProductForModal && (
+        <ProductDetailModal
+          product={selectedProductForModal}
+          onClose={() => setSelectedProductForModal(null)}
+          onAddToCart={addToCart}
+          cartQuantity={cart.find(c => c.product.id === selectedProductForModal.id)?.quantity || 0}
+          relatedProducts={posItems.filter(p => p.category === selectedProductForModal.category && p.id !== selectedProductForModal.id).slice(0, 4)}
+        />
+      )}
     </div>
   );
 }

@@ -37,6 +37,8 @@ interface CartDrawerProps {
     address: string;
     paymentMode: 'UPI' | 'Cash' | 'Online';
     paymentScreenshot?: string;
+    discount?: number;
+    discountCode?: string;
   }) => void;
 }
 
@@ -51,6 +53,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 }) => {
   // Step in Checkout: 1 = Review Cart, 2 = Customer Info & Payment
   const [step, setStep] = useState<1 | 2>(1);
+  const [promoCode, setPromoCode] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<{code: string, discount: number} | null>(null);
 
   // Form Fields
   const [customerName, setCustomerName] = useState('');
