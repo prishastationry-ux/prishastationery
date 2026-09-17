@@ -2,6 +2,7 @@ import { PrintJobRecord, OrderRecord, ProductItem, StoreSettings } from '../type
 import { SyncMutation, SyncPushPayload, SyncPushResponse, SyncPullResponse, ConflictRecord } from '../types/sync';
 import { db } from './firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { sanitizeForFirestore } from '../hooks/useFirebaseSync';
 
 const CLIENT_ID_KEY = 'prisha_device_client_id';
 const PENDING_MUTATIONS_KEY = 'prisha_pending_sync_mutations';
@@ -225,7 +226,7 @@ export async function pushOfflineSync(): Promise<SyncPushResponse> {
           currentList.unshift(m.data);
         }
 
-        await setDoc(pjRef, { data: currentList });
+        await setDoc(pjRef, { data: sanitizeForFirestore(currentList) });
         processed++;
       }
     }

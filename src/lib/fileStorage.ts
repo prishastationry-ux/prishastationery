@@ -540,10 +540,8 @@ export async function dataUrlToBlobAsync(input: string): Promise<Blob | null> {
 // Create a safe Object URL for in-app viewing or printing
 export async function createBlobUrlAsync(input: string): Promise<string | null> {
   if (!input) return null;
-  if (input.startsWith('blob:')) {
-    if (isLocalBlobValid(input)) return input;
-    // Foreign or dead blob: do not use directly
-    return null;
+  if (input.startsWith('blob:') || input.startsWith('http:') || input.startsWith('https:')) {
+    return input;
   }
   const blob = await dataUrlToBlobAsync(input);
   if (!blob || blob.size === 0) return null;
@@ -552,9 +550,8 @@ export async function createBlobUrlAsync(input: string): Promise<string | null> 
 
 export function createBlobUrl(input: string): string | null {
   if (!input) return null;
-  if (input.startsWith('blob:')) {
-    if (isLocalBlobValid(input)) return input;
-    return null;
+  if (input.startsWith('blob:') || input.startsWith('http:') || input.startsWith('https:')) {
+    return input;
   }
   const blob = dataUrlToBlob(input);
   if (!blob || blob.size === 0) return null;
@@ -572,26 +569,7 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     let directBlobUrl: string | null = null;
     let shouldRevoke = false;
 
-    if (dataUrlOrBlobUrl.startsWith('blob:')) {
-      // If it's explicitly a foreign origin or stale blob, notify caller to retrieve fresh cloud chunks
-      if (isForeignBlobUrl(dataUrlOrBlobUrl)) {
-        console.warn('Stale or foreign Blob URL detected; caller will retrieve fresh chunks.');
-        return false;
-      }
-
-      // Test accessibility of the blob
-      try {
-        const testRes = await fetch(dataUrlOrBlobUrl);
-        if (!testRes.ok) throw new Error('Blob not reachable');
-        const testBlob = await testRes.blob();
-        if (!testBlob || testBlob.size === 0) throw new Error('Blob is empty');
-        directBlobUrl = dataUrlOrBlobUrl;
-        registerLocalBlobUrl(dataUrlOrBlobUrl);
-      } catch (e) {
-        console.warn('Blob URL cannot be accessed directly (stale session); caller will retrieve fresh chunks:', e);
-        return false;
-      }
-    } else if (dataUrlOrBlobUrl.startsWith('http:') || dataUrlOrBlobUrl.startsWith('https:')) {
+    if (dataUrlOrBlobUrl.startsWith('blob:') || dataUrlOrBlobUrl.startsWith('http:') || dataUrlOrBlobUrl.startsWith('https:')) {
       directBlobUrl = dataUrlOrBlobUrl;
     } else {
       const blob = await dataUrlToBlobAsync(dataUrlOrBlobUrl);
@@ -607,6 +585,7 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     const a = document.createElement('a');
     a.href = directBlobUrl;
     a.download = cleanFileName;
+    a.target = '_blank';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();
@@ -615,14 +594,35 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
       if (document.body.contains(a)) {
         document.body.removeChild(a);
       }
-      if (shouldRevoke && directBlobUrl) {
+      if (shouldRevoke && directBlobUrl && directBlobUrl.startsWith('blob:')) {
         URL.revokeObjectURL(directBlobUrl);
       }
-    }, 90000);
+    }, 10000);
 
     return true;
   } catch (err) {
     console.warn('Safe download attempt encountered issue:', err);
+    return false;
+  }
+}
+
+// Delete file and all its binary chunks from Cloud Firestore
+export async function deleteFileFromCloudStorage(fileId: string): Promise<boolean> {
+  if (!fileId) return false;
+  try {
+    const metaRef = doc(db, 'print_files', fileId);
+    const metaSnap = await getDoc(metaRef);
+    if (metaSnap.exists()) {
+      const data = metaSnap.data();
+      const totalChunks = data.totalChunks || 0;
+      for (let i = 0; i < totalChunks; i++) {
+        deleteDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${i}`)).catch(() => {});
+      }
+      await deleteDoc(metaRef);
+    }
+    return true;
+  } catch (e) {
+    console.error('Delete cloud file error:', e);
     return false;
   }
 }

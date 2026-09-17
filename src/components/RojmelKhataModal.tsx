@@ -63,7 +63,21 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
   showToast
 }) => {
   const [activeTab, setActiveTab] = useState<'rojmel' | 'khata_customers' | 'khata_suppliers' | 'khata_others'>('rojmel');
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  
+  // Date calculation helpers
+  const todayObj = new Date();
+  const todayIso = todayObj.toISOString().split('T')[0];
+  const [y1, m1, d1] = todayIso.split('-');
+  const todayFormatted = `${d1}/${m1}/${y1}`;
+
+  const yesterdayObj = new Date();
+  yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+  const yesterdayIso = yesterdayObj.toISOString().split('T')[0];
+  const [y2, m2, d2] = yesterdayIso.split('-');
+  const yesterdayFormatted = `${d2}/${m2}/${y2}`;
+
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'yesterday' | 'all' | 'custom'>('today');
+  const [selectedDate, setSelectedDate] = useState<string>(todayIso);
 
   // ROJMEL FORM STATE
   const [rojmelType, setRojmelType] = useState<'aavak' | 'javak'>('aavak');
@@ -106,14 +120,34 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Format date helper DD/MM/YYYY
+  // Format date helper DD/MM/YYYY for custom date picker
   const formattedSelectedDate = (() => {
-    const [y, m, d] = selectedDate.split('-');
-    return `${d}/${m}/${y}`;
+    if (!selectedDate) return todayFormatted;
+    const parts = selectedDate.split('-');
+    if (parts.length === 3) {
+      return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return selectedDate;
   })();
 
-  // Filter Rojmel for selected date
-  const filteredRojmel = rojmelEntries.filter(r => r.date === formattedSelectedDate || r.date === selectedDate);
+  // Filter Rojmel for selected view
+  const filteredRojmel = rojmelEntries.filter(r => {
+    if (dateFilterMode === 'all') return true;
+    if (dateFilterMode === 'today') {
+      return r.date === todayFormatted || r.date === todayIso;
+    }
+    if (dateFilterMode === 'yesterday') {
+      return r.date === yesterdayFormatted || r.date === yesterdayIso;
+    }
+    if (dateFilterMode === 'custom') {
+      return r.date === formattedSelectedDate || r.date === selectedDate;
+    }
+    return true;
+  });
+
+  // Entry counts for badges
+  const todayCount = rojmelEntries.filter(r => r.date === todayFormatted || r.date === todayIso).length;
+  const yesterdayCount = rojmelEntries.filter(r => r.date === yesterdayFormatted || r.date === yesterdayIso).length;
 
   // Today's Rojmel Totals
   const todayAavak = filteredRojmel.filter(r => r.type === 'aavak').reduce((sum, r) => sum + r.amount, 0);
@@ -137,14 +171,20 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
       setEditingRojmelId(null);
     }
 
+    const entryDate = (() => {
+      if (dateFilterMode === 'yesterday') return yesterdayFormatted;
+      if (dateFilterMode === 'custom') return formattedSelectedDate;
+      return todayFormatted;
+    })();
+
     onAddRojmelEntry({
-      date: formattedSelectedDate,
+      date: entryDate,
       type: rojmelType,
       category: rojmelCategory,
       amount: amt,
       paymentMode: rojmelMode,
-      personName: rojmelPerson || undefined,
-      notes: rojmelNotes || undefined
+      personName: rojmelPerson ? rojmelPerson.trim() : '',
+      notes: rojmelNotes ? rojmelNotes.trim() : ''
     });
 
     setRojmelAmount('');
@@ -400,17 +440,62 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
           </div>
 
           {activeTab === 'rojmel' && (
-            <div className="flex items-center gap-2 shrink-0">
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={e => setSelectedDate(e.target.value)}
-                className="p-1.5 border border-neutral-300 rounded-lg bg-white font-mono font-bold text-xs"
-              />
+            <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+              <div className="inline-flex bg-neutral-200 p-0.5 rounded-lg border border-neutral-300">
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode('today')}
+                  className={`px-2.5 py-1 rounded-md font-bold text-xs cursor-pointer transition-all ${
+                    dateFilterMode === 'today'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-neutral-700 hover:bg-neutral-300'
+                  }`}
+                >
+                  આજ ({todayCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode('yesterday')}
+                  className={`px-2.5 py-1 rounded-md font-bold text-xs cursor-pointer transition-all ${
+                    dateFilterMode === 'yesterday'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-neutral-700 hover:bg-neutral-300'
+                  }`}
+                >
+                  ગઈકાલ ({yesterdayCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode('all')}
+                  className={`px-2.5 py-1 rounded-md font-bold text-xs cursor-pointer transition-all ${
+                    dateFilterMode === 'all'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-neutral-700 hover:bg-neutral-300'
+                  }`}
+                >
+                  બધી ({rojmelEntries.length})
+                </button>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={e => {
+                    setSelectedDate(e.target.value);
+                    setDateFilterMode('custom');
+                  }}
+                  className={`p-1 border rounded-lg bg-white font-mono font-bold text-xs cursor-pointer ${
+                    dateFilterMode === 'custom' ? 'border-blue-600 ring-1 ring-blue-500' : 'border-neutral-300'
+                  }`}
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={handleExportRojmelExcel}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded-lg text-xs font-black shadow flex items-center gap-1 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white px-2.5 py-1.5 rounded-lg text-xs font-black shadow flex items-center gap-1 cursor-pointer"
+                title="Excel ડાઉનલોડ"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>Excel</span>
@@ -559,10 +644,12 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
 
               {/* ROJMEL TRANSACTIONS TABLE */}
               <div className="border border-neutral-300 rounded-xl overflow-hidden bg-white shadow-2xs">
-                <div className="bg-neutral-800 text-white p-2.5 font-black text-xs flex items-center justify-between">
-                  <span>📅 તારીખ {formattedSelectedDate} ની તમામ આવક-જાવક એન્ટ્રીઓ ({filteredRojmel.length}):</span>
+                <div className="bg-neutral-800 text-white p-2.5 font-black text-xs flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    📅 {dateFilterMode === 'all' ? 'બધી જ તારીખોની' : dateFilterMode === 'yesterday' ? `ગઈકાલ (${yesterdayFormatted}) ની` : dateFilterMode === 'today' ? `આજ (${todayFormatted}) ની` : `તારીખ ${formattedSelectedDate} ની`} તમામ આવક-જાવક એન્ટ્રીઓ ({filteredRojmel.length}):
+                  </span>
                   <span className="font-mono text-amber-400 text-sm">
-                    આજની પુરાંત (બેલેન્સ): ₹{todayNetBalance.toFixed(2)}
+                    પુરાંત (નેટ બેલેન્સ): ₹{todayNetBalance.toFixed(2)}
                   </span>
                 </div>
 
@@ -571,6 +658,7 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                     <thead>
                       <tr className="bg-neutral-100 text-neutral-700 border-b border-neutral-300 font-black">
                         <th className="p-2.5 text-center w-12">#</th>
+                        <th className="p-2.5">તારીખ</th>
                         <th className="p-2.5">પ્રકાર</th>
                         <th className="p-2.5">વિગત / કેટેગરી</th>
                         <th className="p-2.5">વ્યક્તિ / પેઢીનું નામ</th>
@@ -583,14 +671,24 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                     <tbody className="divide-y divide-neutral-200 font-bold">
                       {filteredRojmel.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="p-6 text-center text-neutral-400">
-                            આ તારીખે કોઈ રોજમેળ એન્ટ્રી નોંધાયેલ નથી. ઉપરના ફોર્મમાંથી નવી એન્ટ્રી ઉમેરો.
+                          <td colSpan={9} className="p-6 text-center text-neutral-500">
+                            <p className="font-bold">આ તારીખ/ફિલ્ટરમાં કોઈ રોજમેળ એન્ટ્રી નોંધાયેલ નથી.</p>
+                            {rojmelEntries.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setDateFilterMode('all')}
+                                className="mt-2 text-xs text-blue-700 font-black hover:underline cursor-pointer bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-300"
+                              >
+                                👉 તમારી પાસે અગાઉની કુલ {rojmelEntries.length} એન્ટ્રીઓ સુરક્ષિત સેવ છે! બધી જોવા અહીં ક્લિક કરો
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ) : (
                         filteredRojmel.map((entry, idx) => (
                           <tr key={entry.id} className="hover:bg-neutral-50">
                             <td className="p-2.5 text-center text-neutral-500">{idx + 1}</td>
+                            <td className="p-2.5 font-mono text-neutral-600 text-[11px] whitespace-nowrap">{entry.date || '-'}</td>
                             <td className="p-2.5">
                               {entry.type === 'aavak' ? (
                                 <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black text-[11px]">

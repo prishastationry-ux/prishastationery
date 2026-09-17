@@ -90,26 +90,6 @@ export default function App() {
   const [showMultiPlatformSyncModal, setShowMultiPlatformSyncModal] = useState<boolean>(false);
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
 
-  // Ensure clean initial state (no starter sample mock print jobs)
-  useEffect(() => {
-    if (printJobs && printJobs.some(j => 
-      j.id === 'prn-demo-1' || 
-      j.jobNo === 'PRN-8821' || 
-      j.jobNo === 'PRN-6065' || 
-      j.customerName?.toLowerCase().includes('sample') ||
-      j.files?.some(f => f.fileName?.toLowerCase().includes('sample'))
-    )) {
-      const cleaned = printJobs.filter(j => 
-        j.id !== 'prn-demo-1' && 
-        j.jobNo !== 'PRN-8821' && 
-        j.jobNo !== 'PRN-6065' && 
-        !j.customerName?.toLowerCase().includes('sample') &&
-        !j.files?.some(f => f.fileName?.toLowerCase().includes('sample'))
-      );
-      setPrintJobs(cleaned);
-    }
-  }, [printJobs]);
-
   // Order Tracking & Admin Order Management States
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [editingOrder, setEditingOrder] = useState<OrderRecord | null>(null);
@@ -140,28 +120,6 @@ export default function App() {
 
   // Orders & Invoices State
   const [orders, setOrders] = useFirebaseSync<OrderRecord[]>('orders', 'prisha_orders_v4', INITIAL_ORDERS);
-
-  // Clean old sample/demo orders if present
-  useEffect(() => {
-    if (orders && orders.some(o => 
-      o.id === 'ord-101' || 
-      o.invoiceNo === 'prisha000001' || 
-      o.customerName?.toLowerCase().includes('sample') ||
-      o.notes?.includes('PRN-6065') ||
-      o.notes?.toLowerCase().includes('sample') ||
-      o.items?.some(i => i.name.toLowerCase().includes('sample document') || i.name.toLowerCase().includes('sample'))
-    )) {
-      const cleanedOrders = orders.filter(o => 
-        o.id !== 'ord-101' && 
-        o.invoiceNo !== 'prisha000001' && 
-        !o.customerName?.toLowerCase().includes('sample') &&
-        !o.notes?.includes('PRN-6065') &&
-        !o.notes?.toLowerCase().includes('sample') &&
-        !o.items?.some(i => i.name.toLowerCase().includes('sample document') || i.name.toLowerCase().includes('sample'))
-      );
-      setOrders(cleanedOrders);
-    }
-  }, [orders]);
 
   // Expenses & Purchases
   const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v5', []);
@@ -375,10 +333,9 @@ export default function App() {
     setPosItems(prev =>
       prev.map(item => {
         if (item.id === itemId) {
-          if (typeof item.stock === 'number') {
-            const updated = Math.max(0, item.stock + delta);
-            return { ...item, stock: updated };
-          }
+          const currentStock = typeof item.stock === 'number' ? item.stock : (Number(item.stock) || 0);
+          const updated = Math.max(0, currentStock + delta);
+          return { ...item, stock: updated };
         }
         return item;
       })
@@ -987,17 +944,19 @@ export default function App() {
   // DIRECT INVENTORY STOCK NUMBER UPDATE (e.g. typing 100 directly)
   const handleDirectStockUpdate = (productId: string, newStockVal: string) => {
     const parsed = Number(newStockVal);
+    const validStock = isNaN(parsed) ? 0 : Math.max(0, parsed);
     setPosItems(prev =>
       prev.map(p => {
         if (p.id === productId) {
           return {
             ...p,
-            stock: isNaN(parsed) ? p.stock : Math.max(0, parsed)
+            stock: validStock
           };
         }
         return p;
       })
     );
+    showToast(`✅ સ્ટોક અપડેટ થયો (${validStock})`);
   };
 
   // SAVE EDITED ORDER

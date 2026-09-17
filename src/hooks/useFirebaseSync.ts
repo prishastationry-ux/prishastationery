@@ -3,6 +3,32 @@ import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { saveFileToStorage, saveFileToCloudStorage } from '../lib/fileStorage';
 
+/**
+ * Recursively removes all `undefined` values and properties from objects and arrays,
+ * because Firebase Firestore setDoc() throws an error if any field is undefined:
+ * "Unsupported field value: undefined"
+ */
+export function sanitizeForFirestore(val: any): any {
+  if (val === undefined) {
+    return null;
+  }
+  if (val === null || typeof val !== 'object') {
+    return val;
+  }
+  if (Array.isArray(val)) {
+    return val
+      .filter(item => item !== undefined)
+      .map(item => sanitizeForFirestore(item));
+  }
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(val)) {
+    if (v !== undefined) {
+      result[k] = sanitizeForFirestore(v);
+    }
+  }
+  return result;
+}
+
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
@@ -40,7 +66,10 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
   // Load from local storage first for instant boot, but Firebase will overwrite once it connects
   const [data, setData] = useState<T>(() => {
-    const saved = localStorage.getItem(localKey);
+    let saved = localStorage.getItem(localKey);
+    if (!saved) {
+      saved = localStorage.getItem(localKey + '_backup');
+    }
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -59,16 +88,22 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     
     // Migration check: If Firebase is empty, upload what we have in localStorage
     getDoc(docRef).then(snapshot => {
-      if (!snapshot.exists()) {
-        const saved = localStorage.getItem(localKey);
-        // ONLY write to Firebase if this device actually has some saved data.
-        if (saved) {
-          try {
-            const parsed = JSON.parse(saved);
-            const cleaned = filterMockData(parsed);
-            setDoc(docRef, { data: cleaned }).catch(() => {});
-          } catch(e) {}
-        }
+      const saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const cleaned = filterMockData(parsed);
+          if (Array.isArray(cleaned) && cleaned.length > 0) {
+            if (!snapshot.exists()) {
+              setDoc(docRef, { data: sanitizeForFirestore(cleaned) }).catch(() => {});
+            } else {
+              const cloudData = snapshot.data()?.data;
+              if (!Array.isArray(cloudData) || cloudData.length === 0) {
+                setDoc(docRef, { data: sanitizeForFirestore(cleaned) }).catch(() => {});
+              }
+            }
+          }
+        } catch(e) {}
       }
     }).catch(() => {});
 
@@ -107,12 +142,34 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
               });
               try {
                 localStorage.setItem(localKey, JSON.stringify(merged));
+                localStorage.setItem(localKey + '_backup', JSON.stringify(merged));
+              } catch (e) {}
+              return merged as unknown as T;
+            }
+
+            // For all array records (rojmel, orders, expenses, purchases, products, khata):
+            if (Array.isArray(cleaned) && Array.isArray(prevData)) {
+              // SAFEGUARD: Never let an empty cloud document wipe out local PC entries!
+              if (cleaned.length === 0 && prevData.length > 0) {
+                setDoc(docRef, { data: sanitizeForFirestore(prevData) }).catch(() => {});
+                return prevData;
+              }
+
+              // Merge items by id: Keep cloud updates while preserving any local entries not yet synced
+              const cloudIds = new Set(cleaned.map((item: any) => item?.id).filter(Boolean));
+              const localOnly = prevData.filter((item: any) => item?.id && !cloudIds.has(item.id));
+              const merged = [...cleaned, ...localOnly];
+
+              try {
+                localStorage.setItem(localKey, JSON.stringify(merged));
+                localStorage.setItem(localKey + '_backup', JSON.stringify(merged));
               } catch (e) {}
               return merged as unknown as T;
             }
 
             try {
               localStorage.setItem(localKey, JSON.stringify(cleaned));
+              localStorage.setItem(localKey + '_backup', JSON.stringify(cleaned));
             } catch (e) {}
             return cleaned as T;
           });
@@ -152,9 +209,10 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         });
       }
 
-      // 2. Save locally
+      // 2. Save locally with backup copy
       try {
         localStorage.setItem(localKey, JSON.stringify(next));
+        localStorage.setItem(localKey + '_backup', JSON.stringify(next));
       } catch (err) {
         console.warn("LocalStorage save warning (preserving metadata):", err);
         try {
@@ -170,6 +228,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
               })
             }));
             localStorage.setItem(localKey, JSON.stringify(lightNext));
+            localStorage.setItem(localKey + '_backup', JSON.stringify(lightNext));
           }
         } catch (e) {}
       }
@@ -203,11 +262,11 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
             }))
           }));
 
-          setDoc(doc(db, "store_data", docName), { data: firestoreData }).catch(err => {
+          setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(firestoreData) }).catch(err => {
             console.warn("Firebase sync size/network warning (saved locally):", err);
           });
         } else {
-          setDoc(doc(db, "store_data", docName), { data: next }).catch(err => {
+          setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(next) }).catch(err => {
             console.warn("Firebase sync warning:", err);
           });
         }

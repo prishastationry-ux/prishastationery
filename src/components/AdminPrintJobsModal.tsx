@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Printer,
   X,
@@ -23,13 +23,17 @@ import {
   Eye,
   Loader2,
   Zap,
-  UploadCloud
+  UploadCloud,
+  RefreshCw
 } from 'lucide-react';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
 import {
   getFileFromCloudStorage,
   getFileFromStorage,
   uploadFileObjectInChunks,
+  deleteFileFromCloudStorage,
   isForeignBlobUrl,
   createBlobUrl,
   createBlobUrlAsync,
@@ -58,10 +62,85 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   onDeleteJob,
   onConvertToInvoice
 }) => {
-  const effectiveJobs = printJobs || [];
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(
-    effectiveJobs.length > 0 ? effectiveJobs[0].id : null
-  );
+  const [cloudFiles, setCloudFiles] = useState<any[]>([]);
+
+  // Real-time listener for files uploaded directly to cloud storage (collection 'print_files')
+  useEffect(() => {
+    if (!isOpen) return;
+    const unsub = onSnapshot(collection(db, 'print_files'), (snap) => {
+      const files: any[] = [];
+      snap.forEach(doc => {
+        files.push(doc.data());
+      });
+      files.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+      setCloudFiles(files);
+    }, (err) => {
+      console.warn('print_files sync notice:', err);
+    });
+    return () => unsub();
+  }, [isOpen]);
+
+  const effectiveJobs = useMemo(() => {
+    const baseJobs = Array.isArray(printJobs) ? [...printJobs] : [];
+    
+    // Check if any cloudFile is missing from baseJobs
+    const existingFileIds = new Set<string>();
+    baseJobs.forEach(job => {
+      (job.files || []).forEach(f => existingFileIds.add(f.id));
+    });
+
+    const unlinkedFiles = cloudFiles.filter(cf => cf && cf.id && !existingFileIds.has(cf.id));
+    
+    const synthesizedJobs: PrintJobRecord[] = unlinkedFiles.map((cf) => {
+      const isImg = cf.fileType?.includes('image') || cf.fileName?.match(/\.(jpg|jpeg|png|webp|ico|bmp|svg|gif)$/i);
+      const isPdf = cf.fileType?.includes('pdf') || cf.fileName?.toLowerCase().endsWith('.pdf');
+      const dateStr = cf.uploadedAt ? new Date(cf.uploadedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'તાજેતરમાં અપલોડ';
+      return {
+        id: `cloud-${cf.id}`,
+        jobNo: `PRN-${cf.id.slice(-4).toUpperCase()}`,
+        customerName: 'ઓનલાઇન કસ્ટમર (મોબાઇલ ફાઇલ)',
+        mobile: storeSettings?.phone || '9723712381',
+        address: 'દુકાન પિકઅપ',
+        deliveryType: 'pickup',
+        files: [{
+          id: cf.id,
+          fileName: cf.fileName || 'ડોક્યુમેન્ટ ફાઇલ',
+          fileSize: cf.fileSize || 0,
+          fileType: cf.fileType || (isImg ? 'image/jpeg' : isPdf ? 'application/pdf' : 'application/octet-stream'),
+          copies: 1,
+          colorMode: isImg ? 'color' : 'black_white',
+          sideOption: 'single_side',
+          paperSize: isImg ? '4x6 Photo' : 'A4',
+          lamination: false,
+          notes: 'મોબાઇલ લિંક પરથી સીધું અપલોડ',
+          uploadedToCloud: true,
+          uploadStatus: 'completed',
+          uploadProgress: 100,
+          fileDataUrl: ''
+        }],
+        totalJobSize: cf.fileSize || 0,
+        createdAt: dateStr,
+        status: 'received',
+        subtotal: isImg ? 15 : 5,
+        extraCharges: 0,
+        discount: 0,
+        totalAmount: isImg ? 15 : 5,
+        paymentStatus: 'Pending',
+        paymentMode: 'UPI'
+      };
+    });
+
+    return [...synthesizedJobs, ...baseJobs];
+  }, [printJobs, cloudFiles, storeSettings]);
+
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if ((!selectedJobId || !effectiveJobs.some(j => j.id === selectedJobId)) && effectiveJobs.length > 0) {
+      setSelectedJobId(effectiveJobs[0].id);
+    }
+  }, [effectiveJobs, selectedJobId]);
+
   const [filterStatus, setFilterStatus] = useState<string>('all');
   
   // Custom price editing state for active job
@@ -93,6 +172,23 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setTimeout(() => setToastMessage(''), 4500);
   };
 
+  const handleDeleteJobWithCloud = async (job: PrintJobRecord) => {
+    if (job.files && Array.isArray(job.files)) {
+      for (const f of job.files) {
+        if (f.id) {
+          deleteFileFromCloudStorage(f.id).catch(() => {});
+        }
+      }
+    }
+    if (job.id.startsWith('cloud-')) {
+      const rawFileId = job.id.replace('cloud-', '');
+      deleteFileFromCloudStorage(rawFileId).catch(() => {});
+      setCloudFiles(prev => prev.filter(cf => cf.id !== rawFileId));
+    }
+    onDeleteJob(job.id);
+    showToast('🗑️ પ્રિન્ટ જોબ ડિલીટ કરાઈ!');
+  };
+
   if (!isOpen) return null;
 
   const filteredJobs = effectiveJobs.filter(j => {
@@ -116,8 +212,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'શોધી રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      const isDeadBlob = isForeignBlobUrl(fileUrl);
-      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isDeadBlob;
+      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:');
       if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
@@ -135,7 +230,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         fileUrl = await getFileFromStorage(file.id);
       }
 
-      if (!fileUrl || isForeignBlobUrl(fileUrl)) {
+      if (!fileUrl) {
         if (activeJob) {
           setMissingFileData({ file, job: activeJob });
         } else {
@@ -149,19 +244,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       if (success) {
         showToast(`✅ ફાઇલ "${file.fileName}" તમારા PC માં ડાઉનલોડ થઈ ગઈ!`);
       } else {
-        const freshUrl = await getFileFromCloudStorage(file.id);
-        if (freshUrl) {
-          await downloadFileSafely(freshUrl, file.fileName || `Print_Document_${Date.now()}`);
-          showToast(`✅ ફાઇલ "${file.fileName}" ડાઉનલોડ થઈ ગઈ!`);
-        } else {
-          const blobUrl = await createBlobUrlAsync(fileUrl);
-          if (blobUrl) {
-            setViewingFile({ file, blobUrl, dataUrl: fileUrl });
-            showToast(`ℹ️ પ્રિવ્યૂ સ્ક્રીન ખુલી છે, ત્યાંથી ડાઉનલોડ અથવા પ્રિન્ટ કરો.`);
-          } else {
-            showToast('⚠️ ફાઇલ ડાઉનલોડ કરવામાં સમસ્યા આવી.');
-          }
-        }
+        showToast('⚠️ ફાઇલ ડાઉનલોડ કરવામાં સમસ્યા આવી.');
       }
     } catch (e) {
       console.error('Download error:', e);
@@ -178,8 +261,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'લોડ થઈ રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      const isDeadBlob = isForeignBlobUrl(fileUrl);
-      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || isDeadBlob;
+      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:');
       if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
@@ -197,7 +279,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         fileUrl = await getFileFromStorage(file.id);
       }
 
-      if (!fileUrl || isForeignBlobUrl(fileUrl)) {
+      if (!fileUrl) {
         if (activeJob) {
           setMissingFileData({ file, job: activeJob });
         } else {
@@ -206,12 +288,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         return;
       }
 
-      const blobUrl = await createBlobUrlAsync(fileUrl);
-      if (!blobUrl) {
-        showToast('⚠️ ફાઇલ ખોલવામાં સમસ્યા આવી.');
-        return;
-      }
-      setViewingFile({ file, blobUrl, dataUrl: fileUrl });
+      setViewingFile({ file, blobUrl: fileUrl, dataUrl: fileUrl });
     } catch (e) {
       console.error('Error opening file on screen:', e);
       showToast('⚠️ ફાઇલ સ્ક્રીન પર ખોલવામાં ભૂલ આવી.');
@@ -426,7 +503,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  effectiveJobs.forEach(j => onDeleteJob(j.id));
+                  effectiveJobs.forEach(j => handleDeleteJobWithCloud(j));
                 }}
                 className="bg-red-600/30 hover:bg-red-600 text-red-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer border border-red-500/40"
               >
@@ -531,7 +608,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onDeleteJob(job.id);
+                              handleDeleteJobWithCloud(job);
                             }}
                             className="p-1 text-neutral-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                             title="આ પ્રિન્ટ જોબ ડિલીટ કરો"
@@ -611,7 +688,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      onDeleteJob(activeJob.id);
+                      handleDeleteJobWithCloud(activeJob);
                     }}
                     className="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1.5 rounded-xl border border-red-200 text-xs font-black flex items-center gap-1.5 cursor-pointer"
                     title="આ જોબ ડિલીટ કરો"
@@ -1060,8 +1137,8 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                   className="w-full h-full rounded-2xl border border-neutral-300 bg-white shadow-inner"
                   title={viewingFile.file.fileName}
                 />
-              ) : viewingFile.file.fileType.includes('image') ||
-                ['jpg', 'jpeg', 'png', 'webp', 'bmp'].some(ext => viewingFile.file.fileName.toLowerCase().endsWith(ext)) ? (
+              ) : viewingFile.file.fileType?.includes('image') ||
+                ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'ico', 'gif', 'svg'].some(ext => viewingFile.file.fileName.toLowerCase().endsWith(ext)) ? (
                 <div className="w-full h-full flex items-center justify-center bg-neutral-900 rounded-2xl p-2 overflow-auto">
                   <img
                     src={viewingFile.blobUrl}

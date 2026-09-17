@@ -202,7 +202,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
     if (fileType.includes('pdf') || ext === 'pdf') {
       return <FileText className="w-7 h-7 text-red-600" />;
     }
-    if (fileType.includes('image') || ['jpg', 'jpeg', 'png', 'webp', 'bmp'].includes(ext || '')) {
+    if (fileType?.includes('image') || ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'ico', 'gif', 'svg'].includes(ext || '')) {
       return <ImageIcon className="w-7 h-7 text-blue-600" />;
     }
     if (fileType.includes('sheet') || fileType.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext || '')) {
