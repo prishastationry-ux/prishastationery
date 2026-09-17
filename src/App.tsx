@@ -440,8 +440,23 @@ export default function App() {
   // Save Item Modifications
   const handleSaveItemEdit = () => {
     if (editingItem) {
-      setPosItems(prev => prev.map(p => (p.id === editingItem.id ? editingItem : p)));
-      showToast(`✏️ "${editingItem.nameGu}" વિગતો સેવ થઈ ગઈ!`);
+      const isService = editingItem.category === 'service' || editingItem.isService === true;
+      const parsedStock = isService ? 'સેવા' : (typeof editingItem.stock === 'number' ? Math.max(0, editingItem.stock) : (Math.max(0, Number(editingItem.stock)) || 0));
+      
+      const updatedItem: ProductItem = {
+        ...editingItem,
+        nameGu: (editingItem.nameGu || '').trim(),
+        nameEn: (editingItem.nameEn || '').trim(),
+        category: ((editingItem.category as string) || 'stationery').trim(),
+        isService,
+        stock: parsedStock,
+        price: Math.max(0, Number(editingItem.price) || 0),
+        costPrice: Math.max(0, Number(editingItem.costPrice) || 0),
+        mrp: editingItem.mrp ? Math.max(0, Number(editingItem.mrp) || 0) : undefined,
+      };
+
+      setPosItems(prev => prev.map(p => (p.id === updatedItem.id ? updatedItem : p)));
+      showToast(`✏️ "${updatedItem.nameGu}" (${updatedItem.nameEn || updatedItem.category}) સેવ થઈ ગયું!`);
       setEditingItem(null);
     }
   };
@@ -1832,15 +1847,27 @@ export default function App() {
                     )}
 
                     {/* Stock status indicator */}
-                    <div className="absolute bottom-2 right-2 text-[10px] font-black z-10 shadow-xs">
+                    <div className="absolute bottom-2 right-2 text-[10px] font-black z-10 shadow-xs flex items-center gap-1">
                       {item.isService ? (
                         <span className="text-blue-800 bg-white/95 px-2 py-0.5 rounded-md border border-blue-200 font-extrabold backdrop-blur-xs">
                           ⚡ સેવા
                         </span>
                       ) : isOutOfStock ? (
-                        <span className="text-red-700 bg-white/95 px-2 py-0.5 rounded-md border border-red-300 font-extrabold backdrop-blur-xs">
-                          ❌ ખલાસ
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-red-700 bg-white/95 px-2 py-0.5 rounded-md border border-red-300 font-extrabold backdrop-blur-xs">
+                            ❌ ખલાસ
+                          </span>
+                          {isAdminUnlocked && (
+                            <button
+                              type="button"
+                              onClick={(e) => modifyStock(item.id, 10, e)}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded-md text-[10px] font-black shadow-xs cursor-pointer"
+                              title="સ્ટોક ૧૦ ઉમેરો"
+                            >
+                              +10 ભરો
+                            </button>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-neutral-800 bg-white/95 px-2 py-0.5 rounded-md border border-neutral-300 font-extrabold backdrop-blur-xs">
                           સ્ટોક: {item.stock} {item.unit}
@@ -1911,16 +1938,28 @@ export default function App() {
                       ) : (
                         /* Add Button */
                         <button
-                          onClick={(e) => { e.stopPropagation(); addToCart(item); }}
-                          disabled={isOutOfStock}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (isOutOfStock) {
+                              if (isAdminUnlocked) {
+                                setEditingItem(item);
+                                showToast(`📦 "${item.nameGu}" નો સ્ટોક વધારો.`);
+                              } else {
+                                showToast(`⚠️ "${item.nameGu}" હાલમાં સ્ટોકમાં ખલાસ છે!`);
+                              }
+                              return;
+                            }
+                            addToCart(item);
+                          }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 shadow-2xs transition-transform active:scale-95 cursor-pointer ${
                             isOutOfStock
-                              ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                              ? 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
                               : 'bg-orange-500 hover:bg-orange-600 text-black'
                           }`}
+                          title={isOutOfStock ? (isAdminUnlocked ? 'સ્ટોક વધારવા ક્લિક કરો' : 'હાલમાં સ્ટોક નથી') : 'કાર્ટમાં ઉમેરો'}
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>ઉમેરો</span>
+                          <span>{isOutOfStock ? (isAdminUnlocked ? 'સ્ટોક ભરો' : 'ખલાસ') : 'ઉમેરો'}</span>
                         </button>
                       )}
                     </div>
@@ -3024,26 +3063,91 @@ export default function App() {
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3 text-xs max-h-[75vh] overflow-y-auto pr-1">
               <div>
-                <label className="font-bold block mb-1">આઇટમ નામ (ગુજરાતી)</label>
+                <label className="font-bold block mb-1 text-neutral-800">આઇટમ નામ (ગુજરાતી) *</label>
                 <input
                   type="text"
                   value={editingItem.nameGu}
                   onChange={e => setEditingItem({ ...editingItem, nameGu: e.target.value })}
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                  placeholder="દા.ત. સાયન્ટિફિક કેલ્ક્યુલેટર"
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600 bg-white"
                 />
               </div>
 
               <div>
-                <label className="font-bold block mb-1">કેટેગરી</label>
+                <label className="font-bold block mb-1 text-neutral-800">
+                  અંગ્રેજી નામ (English Name - કાર્ડ પર દેખાશે) *
+                </label>
+                <input
+                  type="text"
+                  value={editingItem.nameEn || ''}
+                  onChange={e => setEditingItem({ ...editingItem, nameEn: e.target.value })}
+                  placeholder="દા.ત. Citizen / Casio 12 Digit Calculator"
+                  className="w-full font-bold p-2 border border-blue-300 bg-blue-50/50 rounded-lg outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+                <span className="text-[10px] text-neutral-500 font-medium">આ નામ હવે તમે ઇચ્છો તે મુજબ બદલી શકો છો.</span>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-bold text-neutral-800">કેટેગરી પસંદ કરો અથવા લખો *</label>
+                  <span className="text-[10px] text-blue-700 font-bold">વર્તમાન: {editingItem.category}</span>
+                </div>
+
+                {/* Quick Category Preset Buttons */}
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {[
+                    { id: 'stationery', label: '✏️ સ્ટેશનરી' },
+                    { id: 'books', label: '📚 ચોપડા/બુક્સ' },
+                    { id: 'service', label: '⚡ સેવા (Service)' },
+                    { id: 'printing', label: '🖨️ ઝેરોક્ષ/પ્રિન્ટ' },
+                    { id: 'office', label: '🏢 ઓફિસ' },
+                    { id: 'bags', label: '🎒 બેગ/કંપાસ' },
+                    { id: 'other', label: '📦 અન્ય' }
+                  ].map(c => {
+                    const isSelected = editingItem.category === c.id;
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          const isService = c.id === 'service';
+                          setEditingItem({
+                            ...editingItem,
+                            category: c.id as any,
+                            isService,
+                            stock: isService ? 'સેવા' : (typeof editingItem.stock === 'number' && editingItem.stock > 0 ? editingItem.stock : 10)
+                          });
+                        }}
+                        className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-blue-700 text-white border-blue-800 shadow-xs'
+                            : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border-neutral-300'
+                        }`}
+                      >
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <input
                   list="edit-category-list"
                   type="text"
                   value={editingItem.category}
-                  onChange={e => setEditingItem({ ...editingItem, category: e.target.value as any })}
-                  placeholder="કેટેગરી લખો અથવા પસંદ કરો"
-                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white"
+                  onChange={e => {
+                    const val = e.target.value;
+                    const isService = val === 'service';
+                    setEditingItem({
+                      ...editingItem,
+                      category: val as any,
+                      isService,
+                      stock: isService ? 'સેવા' : (editingItem.stock === 'સેવા' ? 10 : editingItem.stock)
+                    });
+                  }}
+                  placeholder="અથવા અહીં પોતાની કસ્ટમ કેટેગરી લખો..."
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white focus:border-blue-600"
                 />
                 <datalist id="edit-category-list">
                   {Array.from(new Set(posItems.map(p => p.category))).map(cat => (
@@ -3085,13 +3189,69 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="font-bold block mb-1">હાજર સ્ટોક</label>
-                  <input
-                    type="text"
-                    value={editingItem.stock}
-                    onChange={e => setEditingItem({ ...editingItem, stock: isNaN(Number(e.target.value)) ? e.target.value : Number(e.target.value) })}
-                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
-                  />
+                  <label className="font-bold block mb-1">
+                    {editingItem.category === 'service' || editingItem.isService ? 'સેવા પ્રકાર (Service)' : 'હાજર સ્ટોક જથ્થો'}
+                  </label>
+                  {editingItem.category === 'service' || editingItem.isService ? (
+                    <div className="p-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg font-black text-xs flex items-center gap-1">
+                      <span>⚡ સેવા (અનલિમિટેડ સ્ટોક)</span>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min="0"
+                          value={typeof editingItem.stock === 'number' ? editingItem.stock : (Number(editingItem.stock) || 0)}
+                          onChange={e => {
+                            const val = Math.max(0, Number(e.target.value) || 0);
+                            setEditingItem({ ...editingItem, stock: val });
+                          }}
+                          className={`w-full font-mono font-bold p-2 border rounded-lg outline-none ${
+                            Number(editingItem.stock) <= 0
+                              ? 'border-red-500 bg-red-50 text-red-700 ring-1 ring-red-400'
+                              : 'border-neutral-300 focus:border-blue-600'
+                          }`}
+                        />
+                        <span className="font-bold text-neutral-600 text-xs shrink-0">{editingItem.unit || 'નંગ'}</span>
+                      </div>
+                      <div className="flex items-center gap-1 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ ...editingItem, stock: 10 })}
+                          className="px-1.5 py-0.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded text-[10px] font-bold border border-neutral-300 cursor-pointer"
+                        >
+                          10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ ...editingItem, stock: 25 })}
+                          className="px-1.5 py-0.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded text-[10px] font-bold border border-neutral-300 cursor-pointer"
+                        >
+                          25
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ ...editingItem, stock: 50 })}
+                          className="px-1.5 py-0.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded text-[10px] font-bold border border-neutral-300 cursor-pointer"
+                        >
+                          50
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingItem({ ...editingItem, stock: 0 })}
+                          className="px-1.5 py-0.5 bg-red-100 hover:bg-red-200 text-red-800 rounded text-[10px] font-bold border border-red-300 cursor-pointer"
+                        >
+                          ખલાસ (0)
+                        </button>
+                      </div>
+                      {Number(editingItem.stock) <= 0 && (
+                        <p className="text-[10px] text-red-600 font-bold mt-1">
+                          ⚠️ સ્ટોક ૦ છે જેથી કાર્ડ પર &quot;❌ ખલાસ&quot; દેખાય છે. સ્ટોક ઉમેરવા ઉપર 10 કે 25 બટન દબાવો.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
               

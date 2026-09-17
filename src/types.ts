@@ -2,7 +2,7 @@ export interface ProductItem {
   id: string;
   nameGu: string;
   nameEn: string;
-  category: 'books' | 'stationery' | 'service' | 'printing' | 'office' | 'bags' | 'other';
+  category: 'books' | 'stationery' | 'service' | 'printing' | 'office' | 'bags' | 'other' | (string & {});
   price: number;
   costPrice: number;
   stock: number | string; // 'સેવા' or number

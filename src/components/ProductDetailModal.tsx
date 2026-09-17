@@ -154,9 +154,19 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
                 <span className="bg-blue-100 text-blue-900 px-2 py-0.5 rounded font-black text-[10.5px]">
                   કેટેગરી: {product.category}
                 </span>
-                <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black text-[10.5px]">
-                  {typeof product.stock === 'number' ? `સ્ટોક: ${product.stock} ${product.unit}` : 'સેવા ઉપલબ્ધ'}
-                </span>
+                {product.isService || product.category === 'service' ? (
+                  <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-black text-[10.5px]">
+                    ⚡ સેવા ઉપલબ્ધ
+                  </span>
+                ) : typeof product.stock === 'number' && product.stock <= 0 ? (
+                  <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded font-black text-[10.5px] border border-red-300">
+                    ❌ સ્ટોક ખલાસ (Out of Stock)
+                  </span>
+                ) : (
+                  <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-black text-[10.5px]">
+                    સ્ટોક: {product.stock} {product.unit}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -198,13 +208,22 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
             </button>
             <button
               type="button"
+              disabled={!product.isService && product.category !== 'service' && typeof product.stock === 'number' && product.stock <= 0}
               onClick={() => {
                 onAddToCart(product);
               }}
-              className="bg-orange-500 hover:bg-orange-600 text-black px-6 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer"
+              className={`px-6 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer ${
+                !product.isService && product.category !== 'service' && typeof product.stock === 'number' && product.stock <= 0
+                  ? 'bg-neutral-300 text-neutral-500 cursor-not-allowed'
+                  : 'bg-orange-500 hover:bg-orange-600 text-black'
+              }`}
             >
               <ShoppingCart className="w-4 h-4" />
-              <span>+ કાર્ટમાં ઉમેરો (Add to Cart)</span>
+              <span>
+                {!product.isService && product.category !== 'service' && typeof product.stock === 'number' && product.stock <= 0
+                  ? '❌ સ્ટોક ખલાસ છે'
+                  : '+ કાર્ટમાં ઉમેરો (Add to Cart)'}
+              </span>
             </button>
           </div>
         </div>
