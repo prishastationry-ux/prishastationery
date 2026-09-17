@@ -4283,8 +4283,9 @@ export default function App() {
           showToast('✅ પ્રિન્ટ જોબ સ્ટેટસ અપડેટ થઈ ગયું!');
         }}
         onViewOrderInvoice={(order) => {
-          setSelectedOrderForModal(order);
-          setShowInvoiceModal(true);
+          setActiveInvoiceOrder(order);
+          setIsSuccessModal(false);
+          setShowOrderNotificationModal(false);
         }}
         storeSettings={storeSettings}
       />
@@ -4305,8 +4306,9 @@ export default function App() {
         orders={orders}
         printJobs={printJobs}
         onViewOrderInvoice={(order) => {
-          setSelectedOrderForModal(order);
-          setShowInvoiceModal(true);
+          setActiveInvoiceOrder(order);
+          setIsSuccessModal(false);
+          setShowAdminCRMModal(false);
         }}
       />
     </div>
