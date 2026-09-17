@@ -2980,6 +2980,42 @@ export default function App() {
                 />
               </div>
 
+              <div>
+                <label className="font-bold block mb-1 text-neutral-600">પ્રોડક્ટ ટેગ / બેજ (Badge / Tag)</label>
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {['નવો સ્ટોક', 'બેસ્ટ સેલર', 'લો પ્રાઈસ', 'હોટ ડીલ'].map(b => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setNewProdBadge(newProdBadge === b ? '' : b)}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-all cursor-pointer ${
+                        newProdBadge === b
+                          ? 'bg-orange-500 text-black border-orange-600 shadow-xs'
+                          : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border-neutral-300'
+                      }`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                  {newProdBadge && (
+                    <button
+                      type="button"
+                      onClick={() => setNewProdBadge('')}
+                      className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-300"
+                    >
+                      ✕ હટાવો
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={newProdBadge}
+                  onChange={e => setNewProdBadge(e.target.value)}
+                  placeholder='અથવા કસ્ટમ ટેગ લખો (દા.ત. "સ્પેશિયલ ઓફર")'
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none text-xs bg-white"
+                />
+              </div>
+
               <div className="flex items-center gap-2 mt-2">
                 <input 
                   type="checkbox" 
@@ -3263,6 +3299,42 @@ export default function App() {
                   onChange={e => setEditingItem({ ...editingItem, bulkPricing: e.target.value })}
                   placeholder='દા.ત. "5 નંગ: ₹200, 10 નંગ: ₹350"'
                   className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none text-[11px]"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1 text-neutral-600">પ્રોડક્ટ ટેગ / બેજ (Badge / Tag)</label>
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {['નવો સ્ટોક', 'બેસ્ટ સેલર', 'લો પ્રાઈસ', 'હોટ ડીલ'].map(b => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setEditingItem({ ...editingItem, badge: editingItem.badge === b ? undefined : b })}
+                      className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-all cursor-pointer ${
+                        editingItem.badge === b
+                          ? 'bg-orange-500 text-black border-orange-600 shadow-xs'
+                          : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border-neutral-300'
+                      }`}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                  {editingItem.badge && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingItem({ ...editingItem, badge: undefined })}
+                      className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-300"
+                    >
+                      ✕ હટાવો
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  value={editingItem.badge || ''}
+                  onChange={e => setEditingItem({ ...editingItem, badge: e.target.value || undefined })}
+                  placeholder='અથવા કસ્ટમ ટેગ લખો (દા.ત. "સ્પેશિયલ ઓફર")'
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none text-xs bg-white"
                 />
               </div>
               

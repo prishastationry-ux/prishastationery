@@ -33,7 +33,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
 
-  // Helper to filter out any legacy sample / starter mock printing requests or test invoices
+  // Helper to filter out legacy sample/starter mock records
   const filterMockData = (val: any): any => {
     if (!Array.isArray(val)) return val;
     if (docName === 'printJobs') {
@@ -64,42 +64,67 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     return val;
   };
 
-  // Load from local storage first for instant boot, but Firebase will overwrite once it connects
+  // Load deleted IDs tracking from localStorage
+  const getDeletedIds = (): Set<string> => {
+    try {
+      const stored = localStorage.getItem(localKey + '_deleted_ids');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed)) return new Set(parsed);
+      }
+    } catch (e) {}
+    return new Set<string>();
+  };
+
+  const saveDeletedIds = (deletedSet: Set<string>) => {
+    try {
+      localStorage.setItem(localKey + '_deleted_ids', JSON.stringify(Array.from(deletedSet)));
+    } catch (e) {}
+  };
+
+  // Load from local storage first for instant offline boot
   const [data, setData] = useState<T>(() => {
     let saved = localStorage.getItem(localKey);
     if (!saved) {
       saved = localStorage.getItem(localKey + '_backup');
     }
+    let initialVal = initialData;
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         const cleaned = filterMockData(parsed);
-        if (Array.isArray(parsed) && cleaned.length !== parsed.length) {
-          localStorage.setItem(localKey, JSON.stringify(cleaned));
-        }
-        return cleaned as T;
+        initialVal = cleaned as T;
       } catch (e) { console.error(e); }
     }
-    return initialData;
+
+    // Filter out any locally deleted items
+    const deletedIds = getDeletedIds();
+    if (Array.isArray(initialVal) && deletedIds.size > 0) {
+      initialVal = (initialVal as any[]).filter(item => item?.id && !deletedIds.has(item.id)) as unknown as T;
+    }
+    return initialVal;
   });
 
   useEffect(() => {
     const docRef = doc(db, "store_data", docName);
     
-    // Migration check: If Firebase is empty, upload what we have in localStorage
+    // Initial check: If Firebase is empty, upload what we have in localStorage
     getDoc(docRef).then(snapshot => {
       const saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           const cleaned = filterMockData(parsed);
-          if (Array.isArray(cleaned) && cleaned.length > 0) {
+          const deletedIds = getDeletedIds();
+          const activeCleaned = Array.isArray(cleaned) ? cleaned.filter((item: any) => !item?.id || !deletedIds.has(item.id)) : cleaned;
+          
+          if (Array.isArray(activeCleaned) && activeCleaned.length > 0) {
             if (!snapshot.exists()) {
-              setDoc(docRef, { data: sanitizeForFirestore(cleaned) }).catch(() => {});
+              setDoc(docRef, { data: sanitizeForFirestore(activeCleaned) }).catch(() => {});
             } else {
               const cloudData = snapshot.data()?.data;
               if (!Array.isArray(cloudData) || cloudData.length === 0) {
-                setDoc(docRef, { data: sanitizeForFirestore(cleaned) }).catch(() => {});
+                setDoc(docRef, { data: sanitizeForFirestore(activeCleaned) }).catch(() => {});
               }
             }
           }
@@ -122,9 +147,12 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
             : rawCleaned;
 
           setData((prevData) => {
-            // If this is printJobs, preserve existing local full fileDataUrls so cloud updates never wipe them
+            const deletedIds = getDeletedIds();
+
+            // If printJobs, preserve existing local files
             if (docName === 'printJobs' && Array.isArray(cleaned) && Array.isArray(prevData)) {
-              const merged = cleaned.map((newJob: any) => {
+              const activeCleaned = cleaned.filter((item: any) => !item?.id || !deletedIds.has(item.id));
+              const merged = activeCleaned.map((newJob: any) => {
                 const existingJob = (prevData as any[]).find(j => j.id === newJob.id);
                 if (existingJob && Array.isArray(existingJob.files)) {
                   return {
@@ -140,27 +168,35 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
                 }
                 return newJob;
               });
+
+              // Also keep any local items not yet in cloud
+              const cloudIds = new Set(merged.map((item: any) => item?.id).filter(Boolean));
+              const localOnly = (prevData as any[]).filter((item: any) => item?.id && !cloudIds.has(item.id) && !deletedIds.has(item.id));
+              const finalMerged = [...merged, ...localOnly];
+
               try {
-                localStorage.setItem(localKey, JSON.stringify(merged));
-                localStorage.setItem(localKey + '_backup', JSON.stringify(merged));
+                localStorage.setItem(localKey, JSON.stringify(finalMerged));
+                localStorage.setItem(localKey + '_backup', JSON.stringify(finalMerged));
               } catch (e) {}
-              return merged as unknown as T;
+              return finalMerged as unknown as T;
             }
 
-            // For all array records (rojmel, orders, expenses, purchases, products, khata):
+            // For all array records:
             if (Array.isArray(cleaned) && Array.isArray(prevData)) {
               // SAFEGUARD: Never let an empty cloud document wipe out local PC entries!
               if (cleaned.length === 0 && prevData.length > 0) {
-                setDoc(docRef, { data: sanitizeForFirestore(prevData) }).catch(() => {});
                 return prevData;
               }
 
-              // Merge items by id: Keep cloud updates while preserving any local entries not yet synced
-              const cloudIds = new Set(cleaned.map((item: any) => item?.id).filter(Boolean));
-              const localOnly = prevData.filter((item: any) => item?.id && !cloudIds.has(item.id));
-              const merged = [...cleaned, ...localOnly];
+              // Filter out any items that were deleted locally
+              const activeCloudItems = cleaned.filter((item: any) => !item?.id || !deletedIds.has(item.id));
 
-              // Push any un-synced local items to Firestore so other devices (e.g. mobile) receive them immediately
+              // Merge cloud items with local-only items (adds made offline or pending sync)
+              const cloudIds = new Set(activeCloudItems.map((item: any) => item?.id).filter(Boolean));
+              const localOnly = (prevData as any[]).filter((item: any) => item?.id && !cloudIds.has(item.id) && !deletedIds.has(item.id));
+              const merged = [...activeCloudItems, ...localOnly];
+
+              // Push any un-synced local items to Firestore
               if (localOnly.length > 0) {
                 setDoc(docRef, { data: sanitizeForFirestore(merged) }).catch(err => {
                   console.warn(`Auto-pushing ${localOnly.length} local items to cloud (${docName}):`, err);
@@ -183,27 +219,45 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         }
       },
       error: (err) => {
-        // Handle Firestore quota / network issues gracefully without breaking UI
-        console.warn(`Firestore sync note for ${docName} (using local persistence):`, err.message || err);
+        const msg = err?.message || String(err);
+        if (!msg.includes('transport errored') && !msg.includes('WebChannel') && !msg.includes('offline')) {
+          console.warn(`Firestore sync note for ${docName} (using local persistence):`, msg);
+        }
       }
     });
     
     return () => unsubscribe();
   }, [docName, localKey]);
 
-  // Provide a wrapped setter that also saves to Firebase immediately
+  // Provide a wrapped setter that saves locally and pushes to Firebase immediately
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
 
-      // Avoid unnecessary database writes and state triggers if data has not changed
+      // Track deletions if items were removed
+      if (Array.isArray(prev) && Array.isArray(next)) {
+        const nextIds = new Set(next.map((item: any) => item?.id).filter(Boolean));
+        const deletedIds = getDeletedIds();
+        let hasNewDeletions = false;
+        prev.forEach((item: any) => {
+          if (item?.id && !nextIds.has(item.id)) {
+            deletedIds.add(item.id);
+            hasNewDeletions = true;
+          }
+        });
+        if (hasNewDeletions) {
+          saveDeletedIds(deletedIds);
+        }
+      }
+
+      // Avoid unnecessary database writes if unchanged
       try {
         if (JSON.stringify(prev) === JSON.stringify(next)) {
           return prev;
         }
       } catch (e) {}
 
-      // 1. If this contains files (printJobs), save full uncorrupted files into IndexedDB
+      // 1. Save full files into IndexedDB for printJobs
       if (docName === 'printJobs' && Array.isArray(next)) {
         next.forEach((job: any) => {
           if (Array.isArray(job.files)) {
@@ -216,18 +270,17 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         });
       }
 
-      // 2. Save locally with backup copy
+      // 2. Save locally immediately (Offline authoritative storage)
       try {
         localStorage.setItem(localKey, JSON.stringify(next));
         localStorage.setItem(localKey + '_backup', JSON.stringify(next));
       } catch (err) {
-        console.warn("LocalStorage save warning (preserving metadata):", err);
+        console.warn("LocalStorage save warning:", err);
         try {
           if (Array.isArray(next)) {
             const lightNext = next.map((item: any) => ({
               ...item,
               files: item.files?.map((f: any) => {
-                // If local storage is full, keep metadata and rely on IndexedDB
                 if (f.fileDataUrl && (f.fileDataUrl.startsWith('blob:') || f.fileDataUrl.length > 300000)) {
                   return { ...f, fileDataUrl: '' };
                 }
@@ -240,7 +293,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         } catch (e) {}
       }
 
-      // 3. Save to Firebase: Upload files with chunking so files of ANY size never fail
+      // 3. Save to Firebase asynchronously
       try {
         if (docName === 'printJobs' && Array.isArray(next)) {
           next.forEach((job: any) => {
@@ -259,8 +312,6 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
             }
           });
 
-          // In the main printJobs collection list, omit huge inline base64 if it exceeds 300KB to stay safely under 1MB
-          // Also NEVER save client-side blob URLs to Firestore
           const firestoreData = next.map((item: any) => ({
             ...item,
             files: item.files?.map((f: any) => ({
@@ -270,7 +321,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           }));
 
           setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(firestoreData) }).catch(err => {
-            console.warn("Firebase sync size/network warning (saved locally):", err);
+            console.warn("Firebase sync warning:", err);
           });
         } else {
           setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(next) }).catch(err => {
@@ -286,3 +337,4 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
   return [data, setSyncData] as const;
 }
+
