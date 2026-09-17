@@ -448,7 +448,8 @@ app.get('/api/sqlite/schema', (req, res) => {
 // 6. VITE MIDDLEWARE (DEV) & STATIC SERVING (PROD)
 // =========================================================================
 async function start() {
-  if (process.env.NODE_ENV !== 'production') {
+  const isProduction = process.env.NODE_ENV === 'production' || process.cwd().includes('dist');
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
