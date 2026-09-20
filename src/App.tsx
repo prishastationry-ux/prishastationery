@@ -2059,6 +2059,27 @@ export default function App() {
                 <Settings className="w-4 h-4 text-emerald-200" />
                 <span>વેબસાઇટ / દુકાન સેટિંગ્સ</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const nextState = !storeSettings.cloudSyncEnabled;
+                  setStoreSettings(prev => ({ ...prev, cloudSyncEnabled: nextState }));
+                  try {
+                    localStorage.setItem('prisha_cloud_sync_enabled', nextState ? 'true' : 'false');
+                  } catch(e) {}
+                  showToast(nextState ? '🌐 ક્લાઉડ સિન્ક ચાલુ (Cloud Sync ON)' : '🔌 ઑફલાઇન મોડ ચાલુ (Offline Only - 100% Safe & Never Delete)');
+                  setTimeout(() => window.location.reload(), 800);
+                }}
+                className={`px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer transition-all ${
+                  storeSettings.cloudSyncEnabled
+                    ? 'bg-blue-700 hover:bg-blue-800 text-white'
+                    : 'bg-rose-700 hover:bg-rose-800 text-white animate-pulse'
+                }`}
+                title="ક્લાઉડ સિન્ક ચાલુ કે બંધ કરવા માટે ક્લિક કરો"
+              >
+                <span>{storeSettings.cloudSyncEnabled ? '🌐 ક્લાઉડ સિન્ક: ON' : '🔌 ઑફલાઇન મોડ: OFF (ડેટા ક્યારેય ડીલીટ નહીં થાય)'}</span>
+              </button>
             </div>
           </div>
 

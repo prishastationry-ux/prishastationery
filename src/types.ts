@@ -111,6 +111,7 @@ export interface StoreSettings {
   invoiceFooterNote: string;
   adminPassword: string;
   developerCredit: string;
+  cloudSyncEnabled?: boolean; // ઑફલાઇન મોડ / ક્લાઉડ સિન્ક સ્વિચ
   // Bill / Invoice Customization & Security Fields
   whatsappNumber?: string;
   email?: string;

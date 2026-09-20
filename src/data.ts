@@ -25,6 +25,7 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   invoiceFooterNote: 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર! માલ પરત લેવામાં આવશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે.',
   adminPassword: 'Bharat@1994',
   developerCredit: 'Bharat Chaudhary',
+  cloudSyncEnabled: false, // 100% Offline-first by default to prevent any accidental cloud deletions
   whatsappNumber: '8140430395',
   email: 'prishastationry@gmail.com',
   billFraudWarning: '⚠️ સાવચેતી: કોઈપણ ઓનલાઇન છેતરપિંડીથી બચવા ફક્ત આ જ સત્તાવાર UPI QR / પ્રિષા સ્ટેશનરી પર પેમેન્ટ કરવું.',

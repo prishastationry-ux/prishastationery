@@ -106,6 +106,11 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   });
 
   useEffect(() => {
+    const isCloudSyncOn = localStorage.getItem('prisha_cloud_sync_enabled') === 'true';
+    if (!isCloudSyncOn) {
+      return; // Offline mode: strictly local persistence, zero cloud interaction or remote overwrites!
+    }
+
     const docRef = doc(db, "store_data", docName);
     
     // Initial check: If Firebase is empty, upload what we have in localStorage
@@ -311,43 +316,46 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         } catch (e) {}
       }
 
-      // 3. Save to Firebase asynchronously
-      try {
-        if (docName === 'printJobs' && Array.isArray(next)) {
-          next.forEach((job: any) => {
-            if (Array.isArray(job.files)) {
-              job.files.forEach((f: any) => {
-                if (f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length > 50) {
-                  saveFileToCloudStorage(
-                    f.id,
-                    f.fileDataUrl,
-                    f.fileName || 'file',
-                    f.fileType || '',
-                    f.fileSize || 0
-                  );
-                }
-              });
-            }
-          });
+      // 3. Save to Firebase asynchronously only if cloud sync is enabled
+      const isCloudSyncOn = localStorage.getItem('prisha_cloud_sync_enabled') === 'true';
+      if (isCloudSyncOn) {
+        try {
+          if (docName === 'printJobs' && Array.isArray(next)) {
+            next.forEach((job: any) => {
+              if (Array.isArray(job.files)) {
+                job.files.forEach((f: any) => {
+                  if (f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length > 50) {
+                    saveFileToCloudStorage(
+                      f.id,
+                      f.fileDataUrl,
+                      f.fileName || 'file',
+                      f.fileType || '',
+                      f.fileSize || 0
+                    );
+                  }
+                });
+              }
+            });
 
-          const firestoreData = next.map((item: any) => ({
-            ...item,
-            files: item.files?.map((f: any) => ({
-              ...f,
-              fileDataUrl: f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length < 300000 ? f.fileDataUrl : ''
-            }))
-          }));
+            const firestoreData = next.map((item: any) => ({
+              ...item,
+              files: item.files?.map((f: any) => ({
+                ...f,
+                fileDataUrl: f.fileDataUrl && !f.fileDataUrl.startsWith('blob:') && f.fileDataUrl.length < 300000 ? f.fileDataUrl : ''
+              }))
+            }));
 
-          setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(firestoreData) }).catch(err => {
-            console.warn("Firebase sync warning:", err);
-          });
-        } else {
-          setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(next) }).catch(err => {
-            console.warn("Firebase sync warning:", err);
-          });
+            setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(firestoreData) }).catch(err => {
+              console.warn("Firebase sync warning:", err);
+            });
+          } else {
+            setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(next) }).catch(err => {
+              console.warn("Firebase sync warning:", err);
+            });
+          }
+        } catch (err) {
+          console.warn("Firebase sync preparation error:", err);
         }
-      } catch (err) {
-        console.warn("Firebase sync preparation error:", err);
       }
       return next;
     });
