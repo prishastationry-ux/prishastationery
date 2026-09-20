@@ -1405,34 +1405,54 @@ export default function App() {
               <span>ઓર્ડર ટ્રેક કરો (Track)</span>
             </button>
 
-            {/* STORE SHARE LINK BUTTON */}
-            <button
-              onClick={() => {
-                const url = typeof window !== 'undefined' && window.location.origin.includes('netlify')
-                  ? window.location.origin
-                  : 'https://prishastationery.netlify.app';
-                navigator.clipboard.writeText(url);
-                setToastMessage('✅ દુકાનની લિંક કોપી થઈ ગઈ: ' + url);
-                setTimeout(() => setToastMessage(''), 3500);
-              }}
-              className="bg-blue-900 hover:bg-blue-800 text-amber-300 border border-blue-700 px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
-              title="ગ્રાહકોને મોકલવા માટે Prisha Stationery ની લિંક કોપી કરો"
-            >
-              <Share2 className="w-3.5 h-3.5 text-amber-400" />
-              <span>🔗 લિંક શેર કરો</span>
-            </button>
+            {/* STORE SHARE LINK, SAVE ALL, AND SYNC (ADMIN PANEL ONLY) */}
+            {activeTab !== 'customer' && (
+              <>
+                <button
+                  onClick={() => {
+                    const url = typeof window !== 'undefined' && window.location.origin.includes('netlify')
+                      ? window.location.origin
+                      : 'https://prishastationery.netlify.app';
+                    navigator.clipboard.writeText(url);
+                    setToastMessage('✅ દુકાનની લિંક કોપી થઈ ગઈ: ' + url);
+                    setTimeout(() => setToastMessage(''), 3500);
+                  }}
+                  className="bg-blue-900 hover:bg-blue-800 text-amber-300 border border-blue-700 px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+                  title="ગ્રાહકોને મોકલવા માટે Prisha Stationery ની લિંક કોપી કરો"
+                >
+                  <Share2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span>🔗 લિંક શેર કરો</span>
+                </button>
 
-            {/* SYNC REFRESH BUTTON */}
-            <button
-              onClick={() => {
-                showToast('🔄 ડેટા સિન્ક અને રિફ્રेश થઈ રહ્યો છે...');
-                setTimeout(() => window.location.reload(), 600);
-              }}
-              className="bg-neutral-800 hover:bg-neutral-900 text-emerald-400 border border-neutral-700 px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
-              title="ક્લાઉડ અને લોકલ ડેટા તરત જ સિન્ક કરો"
-            >
-              <span>🔄 Sync</span>
-            </button>
+                <button
+                  onClick={() => {
+                    try {
+                      localStorage.setItem('prisha_store_settings_v4_backup', JSON.stringify(storeSettings));
+                      localStorage.setItem('prisha_products_v4_backup', JSON.stringify(posItems));
+                      localStorage.setItem('prisha_orders_v4_backup', JSON.stringify(orders));
+                      localStorage.setItem('prisha_khata_accounts_v2_backup', JSON.stringify(khataAccounts));
+                      localStorage.setItem('prisha_khata_tx_v1_backup', JSON.stringify(khataTransactions));
+                    } catch (e) {}
+                    showToast('💾 તમારો તમામ ડેટા લોકલ અને ક્લાઉડમાં સફળતાપૂર્વક સેવ થઈ ગયો છે!');
+                  }}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-white border border-emerald-600 px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+                  title="તમારો તમામ ડેટા સુરક્ષિત રીતે સેવ કરો"
+                >
+                  <span>💾 Save All</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    showToast('🔄 ડેટા સિન્ક અને રિફ્રेश થઈ રહ્યો છે...');
+                    setTimeout(() => window.location.reload(), 600);
+                  }}
+                  className="bg-neutral-800 hover:bg-neutral-900 text-emerald-400 border border-neutral-700 px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+                  title="ક્લાઉડ અને લોકલ ડેટા તરત જ સિન્ક કરો"
+                >
+                  <span>🔄 Sync</span>
+                </button>
+              </>
+            )}
 
             {/* PWA INSTALL BUTTON */}
             <PWAInstallButton />
