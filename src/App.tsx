@@ -63,6 +63,7 @@ import { BillSettingsModal } from './components/BillSettingsModal';
 import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDeleteModal';
 import { MultiPlatformSyncModal } from './components/MultiPlatformSyncModal';
 import { RojmelKhataModal } from './components/RojmelKhataModal';
+import { CaAuditModal } from './components/CaAuditModal';
 import { StoreSettingsModal } from './components/StoreSettingsModal';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
@@ -124,6 +125,7 @@ export default function App() {
 
   // Rojmel (Daily Income/Expense) & Khata (Customer & Supplier Ledger) ERP States
   const [showRojmelModal, setShowRojmelModal] = useState<boolean>(false);
+  const [showCaAuditModal, setShowCaAuditModal] = useState<boolean>(false);
   const [showStoreSettingsModal, setShowStoreSettingsModal] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
   const [rojmelEntries, setRojmelEntries] = useFirebaseSync<RojmelEntry[]>('rojmel', 'prisha_rojmel_v1', []);
@@ -1950,17 +1952,15 @@ export default function App() {
                 <span>📈 રોજમેળ (Daily ERP)</span>
               </button>
 
-
-
-              {/* MULTI-PLATFORM ECOSYSTEM & SYNC HUB BUTTON */}
+              {/* CA AUDIT & GST EXPORT BUTTON */}
               <button
                 type="button"
-                onClick={() => setShowMultiPlatformSyncModal(true)}
-                className="bg-neutral-900 hover:bg-black text-amber-300 border border-amber-400/80 px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer"
-                title="Desktop App (SQLite) & Mobile App રિયલ-ટાઇમ સિન્ક અને 4K સ્ટોરેજ કન્ટ્રોલ"
+                onClick={() => setShowCaAuditModal(true)}
+                className="bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-900 hover:to-teal-950 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-emerald-400"
+                title="CA (Chartered Accountant) માટે ઑડિટ રિપોર્ટ, GSTR-1, GSTR-2, નફા-નુકસાન અને 1-Page બેલેન્સ સ્ટેટમેન્ટ"
               >
-                <Server className="w-4 h-4 text-amber-400" />
-                <span>🌐 મલ્ટિ-પ્લેટફોર્મ સિન્ક</span>
+                <BarChart3 className="w-4 h-4 text-amber-300" />
+                <span>📊 CA ઑડિટ & GST</span>
               </button>
 
               <button
@@ -3937,6 +3937,21 @@ export default function App() {
           }}
           storeSettings={storeSettings}
           showToast={showToast}
+        />
+      )}
+
+      {/* 13.B CA AUDIT & GST REPORT MODAL */}
+      {showCaAuditModal && (
+        <CaAuditModal
+          isOpen={showCaAuditModal}
+          onClose={() => setShowCaAuditModal(false)}
+          orders={orders}
+          products={posItems}
+          purchases={purchases}
+          expenses={expenses}
+          rojmelEntries={rojmelEntries}
+          khataAccounts={khataAccounts}
+          storeSettings={storeSettings}
         />
       )}
 

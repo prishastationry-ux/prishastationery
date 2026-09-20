@@ -40,18 +40,18 @@ export function ImageCropModal({
     };
   }, [imageSrc]);
 
-  // Target aspect ratio
+  // Target aspect ratio with optimized dimensions to ensure fast performance and prevent storage quota limits
   const getAspectDimensions = useCallback(() => {
     switch (selectedAspect) {
       case 'square':
-        return { width: 500, height: 500 };
+        return { width: 320, height: 320 };
       case 'banner':
-        return { width: 900, height: 350 };
+        return { width: 720, height: 280 };
       case 'standard':
-        return { width: 600, height: 450 };
+        return { width: 400, height: 300 };
       case 'free':
       default:
-        return { width: 600, height: 500 };
+        return { width: 360, height: 300 };
     }
   }, [selectedAspect]);
 
@@ -140,11 +140,11 @@ export function ImageCropModal({
     setIsDragging(false);
   };
 
-  // Perform crop & return base64
+  // Perform crop & return compact base64
   const handleSaveCrop = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.78);
     onCropComplete(croppedDataUrl);
   };
 

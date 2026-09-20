@@ -1,7 +1,9 @@
 import QRCode from 'qrcode';
 
 /**
- * Build standard NPCI UPI Payment URI with exact amount, payee name, and bill note
+ * Build standard NPCI UPI Payment URI with exact amount, payee name, and bill note.
+ * Note: NPCI specification requires 'pa=id@bank' with literal '@' for mobile UPI apps
+ * (PhonePe, Google Pay, Paytm, BHIM, etc.) to correctly recognize the payee address.
  */
 export function buildUpiPaymentUri(
   upiId: string,
@@ -12,8 +14,10 @@ export function buildUpiPaymentUri(
   const cleanUpi = (upiId || '8140430395@apl').trim();
   const cleanPayee = (payeeName || 'PRISHA STATIONERY').trim();
   const cleanAmount = Number(amount || 0).toFixed(2);
-  const cleanNote = `Bill ${invoiceNo || 'INV'}`.slice(0, 30);
-  return `upi://pay?pa=${encodeURIComponent(cleanUpi)}&pn=${encodeURIComponent(cleanPayee)}&am=${cleanAmount}&cu=INR&tn=${encodeURIComponent(cleanNote)}`;
+  const cleanNote = `Bill-${(invoiceNo || 'INV').replace(/[^a-zA-Z0-9_-]/g, '')}`.slice(0, 30);
+  
+  // Keep @ unencoded in the pa parameter as required by NPCI standard specification
+  return `upi://pay?pa=${cleanUpi}&pn=${encodeURIComponent(cleanPayee)}&am=${cleanAmount}&cu=INR&tn=${encodeURIComponent(cleanNote)}`;
 }
 
 /**

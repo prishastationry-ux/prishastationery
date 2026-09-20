@@ -26,6 +26,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 }) => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
+  const [billFormat, setBillFormat] = useState<'a4' | 'thermal'>('a4');
   const billContentRef = useRef<HTMLDivElement>(null);
 
   // Generate Automatic Dynamic UPI Payment QR Code with exact bill amount
@@ -46,7 +47,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     };
   }, [storeSettings.upiId, storeSettings.payeeName, storeSettings.storeNameEn, order.total, order.invoiceNo]);
 
-  // Determine effective logos and QR code (with guaranteed instant fallback so QR is NEVER missing)
+  // Determine effective logos and QR code (Guaranteed dynamic UPI QR with exact bill amount)
   const effectiveLeftLogo = storeSettings.leftLogoUrl || getDefaultLeftLogoSvg();
   const effectiveRightLogo = storeSettings.rightLogoUrl || getDefaultRightLogoSvg();
   const fallbackImmediateQr = getImmediateQrFallbackUrl(
@@ -55,9 +56,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     order.total,
     order.invoiceNo
   );
-  const effectiveQrCode = (storeSettings.qrCodeMode === 'custom' && storeSettings.customQrUrl)
-    ? storeSettings.customQrUrl
-    : (upiQrDataUrl || fallbackImmediateQr);
+  // User Requirement: The bill must ALWAYS generate and display the QR code with the EXACT BILL AMOUNT
+  const effectiveQrCode = upiQrDataUrl || fallbackImmediateQr;
   const words = numberToWordsINR(order.total);
 
   // Visibility Flags from Admin Toggles
@@ -672,6 +672,184 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 </html>`;
   };
 
+  // Dedicated POS Thermal Receipt (58mm / 80mm continuous roll slip)
+  const getThermalInvoiceHtmlString = (widthMm: 58 | 80 = 58) => {
+    const printableWidth = widthMm === 58 ? 52 : 72;
+    return `<!DOCTYPE html>
+<html lang="gu">
+<head>
+  <meta charset="utf-8">
+  <title>Thermal Bill - ${order.invoiceNo}</title>
+  <style>
+    @page {
+      size: ${widthMm}mm auto;
+      margin: 1mm;
+    }
+    @media print {
+      body { width: ${printableWidth}mm; margin: 0 auto; }
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Courier New", Courier, monospace, sans-serif;
+      width: ${printableWidth}mm;
+      margin: 0 auto;
+      padding: 2mm 0;
+      color: #000000;
+      font-size: 11px;
+      line-height: 1.25;
+      background: #ffffff;
+    }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .bold { font-weight: bold; }
+    .shop-title { font-size: 14px; font-weight: 900; line-height: 1.15; margin: 0; }
+    .shop-sub { font-size: 9.5px; margin: 1px 0; color: #111; }
+    .dashed-line { border-top: 1px dashed #000; margin: 4px 0; }
+    .solid-line { border-top: 1px solid #000; margin: 4px 0; }
+    .double-line { border-top: 2px solid #000; margin: 4px 0; }
+    .meta-row { display: flex; justify-content: space-between; font-size: 10px; margin: 1.5px 0; }
+    .items-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    .items-table th { border-bottom: 1px dashed #000; padding: 2px 0; text-align: left; }
+    .items-table td { padding: 2.5px 0; vertical-align: top; }
+    .qr-container { text-align: center; margin: 6px 0; }
+    .qr-image { width: 125px; height: 125px; display: block; margin: 0 auto 3px auto; }
+    .footer-text { font-size: 9.5px; text-align: center; margin-top: 5px; line-height: 1.25; }
+  </style>
+</head>
+<body>
+  <div class="text-center">
+    <div class="shop-title">${storeSettings.storeNameGu}</div>
+    <div style="font-size: 11px; font-weight: 800;">${storeSettings.storeNameEn}</div>
+    <div class="shop-sub">${storeSettings.address}</div>
+    <div class="shop-sub">📞 +91 ${storeSettings.phone}</div>
+    ${storeSettings.gstNumber ? `<div class="shop-sub"><b>GSTIN:</b> ${storeSettings.gstNumber}</div>` : ''}
+  </div>
+
+  <div class="dashed-line"></div>
+
+  <div class="meta-row"><span>બિલ: <b>#${order.invoiceNo}</b></span><span>${order.date}</span></div>
+  <div class="meta-row"><span>ગ્રાહક: <b>${order.customerName}</b></span><span>${order.mobile ? `+91 ${order.mobile}` : ''}</span></div>
+
+  <div class="solid-line"></div>
+
+  <table class="items-table">
+    <thead>
+      <tr>
+        <th style="width: 52%;">આઇટમ</th>
+        <th style="width: 18%; text-align: center;">જથ્થો</th>
+        <th style="width: 30%; text-align: right;">રકમ</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${order.items.map(it => `
+        <tr>
+          <td>${it.name}</td>
+          <td style="text-align: center;">${it.qty}</td>
+          <td style="text-align: right;">₹${(it.qty * it.price).toFixed(2)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="dashed-line"></div>
+
+  <div class="meta-row"><span>સબટોટલ:</span><span>₹${Number(order.subtotal).toFixed(2)}</span></div>
+  ${order.discount > 0 ? `<div class="meta-row" style="color: red;"><span>ડિસ્કાઉન્ટ:</span><span>-₹${Number(order.discount).toFixed(2)}</span></div>` : ''}
+
+  <div class="double-line"></div>
+
+  <div class="meta-row" style="font-size: 13px; font-weight: 900;">
+    <span>કુલ રકમ (TOTAL):</span>
+    <span>₹${Number(order.total).toFixed(2)}</span>
+  </div>
+
+  <div class="meta-row" style="margin-top: 2px;">
+    <span>ચૂકવણી:</span>
+    <span><b>${order.paymentMode}</b> (${order.paymentStatus === 'Paid' ? 'ચૂકવેલ' : 'બાકી'})</span>
+  </div>
+
+  <div class="dashed-line"></div>
+
+  ${showQr && effectiveQrCode ? `
+    <div class="qr-container">
+      <div style="font-weight: 800; font-size: 10px; margin-bottom: 2px;">
+        📱 ઓટોમેટિક UPI QR કોડ
+      </div>
+      <img src="${effectiveQrCode}" class="qr-image" alt="UPI QR" />
+      <div style="font-size: 10.5px; font-weight: 900;">
+        સ્કેન કરી ₹${Number(order.total).toFixed(2)} ચૂકવો
+      </div>
+      <div style="font-size: 9px; color: #333;">(GPay / PhonePe / Paytm / BHIM)</div>
+    </div>
+    <div class="dashed-line"></div>
+  ` : ''}
+
+  <div class="footer-text">
+    <div>${storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'}</div>
+    <div>માલ પરત લેવાશે નહિ • વિવાદ સ્થળ: થરાદ</div>
+  </div>
+</body>
+</html>`;
+  };
+
+  // Thermal Slip Direct Print
+  const handleThermalPrint = (widthMm: 58 | 80 = 58) => {
+    try {
+      const printWin = window.open('', '_blank', 'width=420,height=650');
+      if (printWin) {
+        printWin.document.open();
+        printWin.document.write(getThermalInvoiceHtmlString(widthMm));
+        printWin.document.close();
+        printWin.focus();
+        setTimeout(() => {
+          try {
+            printWin.print();
+          } catch (e) {
+            console.error('Thermal print error:', e);
+          }
+        }, 300);
+        return;
+      }
+    } catch (e) {
+      console.warn('Popup blocked, using iframe');
+    }
+
+    try {
+      let iframe = document.getElementById('prisha-thermal-print-frame') as HTMLIFrameElement;
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'prisha-thermal-print-frame';
+        iframe.style.position = 'fixed';
+        iframe.style.left = '-9999px';
+        iframe.style.top = '0';
+        iframe.style.width = '300px';
+        iframe.style.height = '600px';
+        iframe.style.border = 'none';
+        iframe.style.zIndex = '-9999';
+        document.body.appendChild(iframe);
+      }
+
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (doc) {
+        doc.open();
+        doc.write(getThermalInvoiceHtmlString(widthMm));
+        doc.close();
+
+        setTimeout(() => {
+          try {
+            iframe.contentWindow?.focus();
+            iframe.contentWindow?.print();
+          } catch (e) {
+            window.print();
+          }
+        }, 300);
+      } else {
+        window.print();
+      }
+    } catch (err) {
+      window.print();
+    }
+  };
+
   // 1. Direct Print: Opens dedicated print window or full-sized A4 frame (100% single page, non-blank)
   const handleDirectPrint = () => {
     try {
@@ -838,37 +1016,84 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
           </div>
 
-          {/* Action Buttons in Header */}
+          {/* Format Switcher & Action Buttons in Header */}
           <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={handleDirectPrint}
-              className="bg-orange-500 hover:bg-orange-600 text-black px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
-              title="૧ પેજમાં બિલ પ્રિન્ટ કરો"
-            >
-              <Printer className="w-4 h-4" />
-              <span>🖨️ પ્રિન્ટ (૧ પેજ)</span>
-            </button>
+            {/* Format Selector */}
+            <div className="flex items-center bg-blue-950/80 p-0.5 rounded-xl border border-blue-700/60 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setBillFormat('a4')}
+                className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
+                  billFormat === 'a4' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
+                }`}
+              >
+                📄 A4 બિલ
+              </button>
+              <button
+                type="button"
+                onClick={() => setBillFormat('thermal')}
+                className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
+                  billFormat === 'thermal' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
+                }`}
+              >
+                🧾 નાનું થર્મલ
+              </button>
+            </div>
+
+            {billFormat === 'thermal' ? (
+              <button
+                type="button"
+                onClick={() => handleThermalPrint(58)}
+                className="bg-amber-400 hover:bg-amber-500 text-black px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
+                title="૫૮mm નાનું પોસ થર્મલ બિલ પ્રિન્ટ કરો"
+              >
+                <Printer className="w-4 h-4" />
+                <span>🧾 નાનું પ્રિન્ટર (58mm)</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleDirectPrint}
+                className="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
+                title="૧ પેજમાં A4 બિલ પ્રિન્ટ કરો"
+              >
+                <Printer className="w-4 h-4" />
+                <span>🖨️ A4 પ્રિન્ટ</span>
+              </button>
+            )}
+
+            {/* Quick 1-click alternative print */}
+            {billFormat === 'a4' && (
+              <button
+                type="button"
+                onClick={() => handleThermalPrint(58)}
+                className="bg-blue-800 hover:bg-blue-700 text-amber-300 px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 border border-blue-600"
+                title="નાના પ્રિન્ટર માટે સીધું પ્રિન્ટ કરો"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>નાનું પ્રિન્ટર</span>
+              </button>
+            )}
 
             <button
               type="button"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs disabled:opacity-50"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs disabled:opacity-50"
               title="PDF ડાઉનલોડ કરો"
             >
               {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-              <span>PDF ડાઉનલોડ</span>
+              <span className="hidden sm:inline">PDF</span>
             </button>
 
             <button
               type="button"
               onClick={handleWhatsAppShare}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
               title="WhatsApp પર શેર કરો"
             >
               <Share2 className="w-4 h-4" />
-              <span>WhatsApp</span>
+              <span className="hidden sm:inline">WhatsApp</span>
             </button>
 
             <button
@@ -881,12 +1106,129 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </div>
         </div>
 
-        {/* PRINTABLE BILL CANVAS - 100% GOVERNMENT RECOGNIZED SINGLE-PAGE DESIGN */}
-        <div
-          ref={billContentRef}
-          id="printable-bill-area"
-          className="relative overflow-hidden p-4 sm:p-6 bg-white text-black text-[12px] font-sans space-y-2.5 print:p-0 print:space-y-2 print:text-[11px] print:w-full"
-        >
+        {/* CONDITIONAL BILL PREVIEW: THERMAL POS SLIP OR A4 GOVT TAX INVOICE */}
+        {billFormat === 'thermal' ? (
+          <div className="p-4 sm:p-6 bg-neutral-100 flex flex-col items-center">
+            <div className="max-w-[340px] w-full bg-white border-2 border-dashed border-neutral-400 p-4 shadow-md font-mono text-[11px] text-black space-y-2">
+              {/* Header */}
+              <div className="text-center space-y-0.5">
+                <div className="text-base font-black tracking-tight">{storeSettings.storeNameGu}</div>
+                <div className="text-xs font-bold text-neutral-800">{storeSettings.storeNameEn}</div>
+                <div className="text-[10px] text-neutral-600">{storeSettings.address}</div>
+                <div className="text-[10px] text-neutral-600">📞 +91 {storeSettings.phone}</div>
+                {storeSettings.gstNumber && <div className="text-[10px] font-bold">GSTIN: {storeSettings.gstNumber}</div>}
+              </div>
+
+              <div className="border-t border-dashed border-neutral-400 my-1"></div>
+
+              <div className="flex justify-between text-[10.5px]">
+                <span>બિલ: <b>#{order.invoiceNo}</b></span>
+                <span>{order.date}</span>
+              </div>
+              <div className="flex justify-between text-[10.5px]">
+                <span>ગ્રાહક: <b>{order.customerName}</b></span>
+                <span>{order.mobile ? `+91 ${order.mobile}` : ''}</span>
+              </div>
+
+              <div className="border-t border-neutral-900 my-1"></div>
+
+              {/* Items Table */}
+              <table className="w-full text-[10px]">
+                <thead>
+                  <tr className="border-b border-dashed border-neutral-400 text-left">
+                    <th className="pb-1">આઇટમ</th>
+                    <th className="pb-1 text-center">જથ્થો</th>
+                    <th className="pb-1 text-right">રકમ</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-dotted divide-neutral-200">
+                  {order.items.map((it, idx) => (
+                    <tr key={idx} className="py-1">
+                      <td className="py-0.5 pr-1 font-bold">{it.name}</td>
+                      <td className="py-0.5 text-center">{it.qty}</td>
+                      <td className="py-0.5 text-right font-bold">₹{(it.qty * it.price).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="border-t border-dashed border-neutral-400 my-1"></div>
+
+              <div className="flex justify-between text-[10.5px]">
+                <span>સબટોટલ:</span>
+                <span>₹{Number(order.subtotal).toFixed(2)}</span>
+              </div>
+              {order.discount > 0 && (
+                <div className="flex justify-between text-[10.5px] text-red-600">
+                  <span>ડિસ્કાઉન્ટ:</span>
+                  <span>-₹{Number(order.discount).toFixed(2)}</span>
+                </div>
+              )}
+
+              <div className="border-t-2 border-neutral-900 my-1"></div>
+
+              <div className="flex justify-between text-sm font-black">
+                <span>કુલ રકમ (TOTAL):</span>
+                <span>₹{Number(order.total).toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between text-[10px] text-neutral-600">
+                <span>ચૂકવણી:</span>
+                <span><b>{order.paymentMode}</b> ({order.paymentStatus === 'Paid' ? 'ચૂકવેલ' : 'બાકી'})</span>
+              </div>
+
+              <div className="border-t border-dashed border-neutral-400 my-1"></div>
+
+              {/* Dynamic QR */}
+              {showQr && effectiveQrCode && (
+                <div className="text-center py-1 space-y-1">
+                  <div className="text-[10px] font-bold text-neutral-700">📱 UPI QR કોડ (GPay/PhonePe)</div>
+                  <img
+                    src={effectiveQrCode}
+                    alt="Thermal UPI QR"
+                    className="w-28 h-28 mx-auto border border-neutral-300 p-0.5 bg-white"
+                  />
+                  <div className="text-[11px] font-black text-emerald-800">
+                    સ્કેન કરી ₹{Number(order.total).toFixed(2)} ચૂકવો
+                  </div>
+                  <div className="text-[9px] text-neutral-500">UPI ID: {storeSettings.upiId}</div>
+                </div>
+              )}
+
+              <div className="border-t border-dashed border-neutral-400 my-1"></div>
+
+              <div className="text-center text-[9.5px] text-neutral-600 space-y-0.5 pt-1">
+                <div>{storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'}</div>
+                <div>માલ પરત લેવાશે નહિ • થરાદ</div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mt-3.5">
+              <button
+                type="button"
+                onClick={() => handleThermalPrint(58)}
+                className="bg-amber-400 hover:bg-amber-500 text-black px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-transform active:scale-95"
+              >
+                <Printer className="w-4 h-4" />
+                <span>પ્રિન્ટ 58mm (નાનું રોલ સ્લિપ)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleThermalPrint(80)}
+                className="bg-neutral-800 hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-transform active:scale-95"
+              >
+                <Printer className="w-4 h-4" />
+                <span>પ્રિન્ટ 80mm સ્લિપ</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* PRINTABLE BILL CANVAS - 100% GOVERNMENT RECOGNIZED SINGLE-PAGE DESIGN */
+          <div
+            ref={billContentRef}
+            id="printable-bill-area"
+            className="relative overflow-hidden p-4 sm:p-6 bg-white text-black text-[12px] font-sans space-y-2.5 print:p-0 print:space-y-2 print:text-[11px] print:w-full"
+          >
           {/* Watermark Overlay for On-Screen & PDF (~30% Opacity) */}
           {showWatermark && (
             <div
@@ -1178,6 +1520,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
           </div>
         </div>
+        )}
 
         {/* BOTTOM ACTION BAR (NO-PRINT) */}
         <div className="no-print bg-neutral-100 p-3 sm:p-4 border-t border-neutral-200 flex flex-col sm:flex-row items-center justify-end gap-3">
