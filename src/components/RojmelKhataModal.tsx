@@ -76,7 +76,7 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
   const [y2, m2, d2] = yesterdayIso.split('-');
   const yesterdayFormatted = `${d2}/${m2}/${y2}`;
 
-  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'yesterday' | 'all' | 'custom'>('today');
+  const [dateFilterMode, setDateFilterMode] = useState<'today' | 'yesterday' | 'month' | 'year' | 'all' | 'custom'>('today');
   const [selectedDate, setSelectedDate] = useState<string>(todayIso);
 
   // ROJMEL FORM STATE
@@ -130,6 +130,9 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
     return selectedDate;
   })();
 
+  const currentMonthStr = `/${m1}/${y1}`; // e.g. /09/2026 or MM/YYYY
+  const currentYearStr = `/${y1}`; // e.g. /2026
+
   // Filter Rojmel for selected view
   const filteredRojmel = rojmelEntries.filter(r => {
     if (dateFilterMode === 'all') return true;
@@ -138,6 +141,12 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
     }
     if (dateFilterMode === 'yesterday') {
       return r.date === yesterdayFormatted || r.date === yesterdayIso;
+    }
+    if (dateFilterMode === 'month') {
+      return r.date.includes(`/${m1}/${y1}`) || r.date.includes(`${y1}-${m1}`);
+    }
+    if (dateFilterMode === 'year') {
+      return r.date.includes(y1);
     }
     if (dateFilterMode === 'custom') {
       return r.date === formattedSelectedDate || r.date === selectedDate;
@@ -148,8 +157,10 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
   // Entry counts for badges
   const todayCount = rojmelEntries.filter(r => r.date === todayFormatted || r.date === todayIso).length;
   const yesterdayCount = rojmelEntries.filter(r => r.date === yesterdayFormatted || r.date === yesterdayIso).length;
+  const monthCount = rojmelEntries.filter(r => r.date.includes(`/${m1}/${y1}`) || r.date.includes(`${y1}-${m1}`)).length;
+  const yearCount = rojmelEntries.filter(r => r.date.includes(y1)).length;
 
-  // Today's Rojmel Totals
+  // Rojmel Totals for Selected Filter Mode
   const todayAavak = filteredRojmel.filter(r => r.type === 'aavak').reduce((sum, r) => sum + r.amount, 0);
   const todayJavak = filteredRojmel.filter(r => r.type === 'javak').reduce((sum, r) => sum + r.amount, 0);
   const todayNetBalance = todayAavak - todayJavak;
@@ -463,6 +474,28 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                   }`}
                 >
                   ગઈકાલ ({yesterdayCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode('month')}
+                  className={`px-2.5 py-1 rounded-md font-bold text-xs cursor-pointer transition-all ${
+                    dateFilterMode === 'month'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-neutral-700 hover:bg-neutral-300'
+                  }`}
+                >
+                  આ મહિનો ({monthCount})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateFilterMode('year')}
+                  className={`px-2.5 py-1 rounded-md font-bold text-xs cursor-pointer transition-all ${
+                    dateFilterMode === 'year'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-neutral-700 hover:bg-neutral-300'
+                  }`}
+                >
+                  આ વર્ષ ({yearCount})
                 </button>
                 <button
                   type="button"

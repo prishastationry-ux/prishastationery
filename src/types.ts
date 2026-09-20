@@ -22,6 +22,7 @@ export interface ProductItem {
   orderIdx?: number; // For admin reordering
   hsnCode?: string;
   minStockAlert?: number;
+  createdAt?: number;
 }
 
 export interface CartItem {
@@ -56,6 +57,7 @@ export interface OrderRecord {
   orderStatus?: 'placed' | 'confirmed' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled';
   statusUpdatedAt?: string;
   notes?: string;
+  profit?: number;
 }
 
 export interface StoryWidget {
