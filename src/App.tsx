@@ -75,6 +75,7 @@ import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { deleteFileFromCloudStorage, downloadFileSafely, saveFileToCloudStorage } from './lib/fileStorage';
 import { getDefaultLeftLogoSvg, getDefaultRightLogoSvg } from './lib/invoiceUtils';
+import { detectHsnAndGst, HSN_SAC_DIRECTORY } from './lib/gstHsnMaster';
 
 export default function App() {
   // Navigation View: Default to 'customer' for all visitors
@@ -264,6 +265,8 @@ export default function App() {
   const [newProdUnit, setNewProdUnit] = useState('નંગ');
   const [newProdCategory, setNewProdCategory] = useState<string>('પેન & સ્ટેશનરી');
   const [newProdBadge, setNewProdBadge] = useState('');
+  const [newProdHsn, setNewProdHsn] = useState('');
+  const [newProdGstRate, setNewProdGstRate] = useState<number>(18);
 
   // POS Direct Counter Billing Form & In-Bill Item Selection
   const [posCustomerName, setPosCustomerName] = useState('');
@@ -432,6 +435,10 @@ export default function App() {
       return;
     }
 
+    const detected = detectHsnAndGst(newProdName, newProdCategory);
+    const finalHsn = newProdHsn.trim() || detected.hsnCode;
+    const finalGst = newProdGstRate !== undefined ? Number(newProdGstRate) : detected.gstRate;
+
     const newItem: ProductItem = {
       id: `prod-${Date.now()}`,
       nameGu: newProdName,
@@ -447,7 +454,9 @@ export default function App() {
       unit: newProdUnit || 'નંગ',
       icon: newProdIcon || '📦',
       imageUrl: newProdImage || undefined,
-      badge: newProdBadge || undefined
+      badge: newProdBadge || undefined,
+      hsnCode: finalHsn || undefined,
+      gstRate: finalGst
     };
 
     setPosItems(prev => [newItem, ...prev]);
@@ -455,11 +464,13 @@ export default function App() {
     setNewProdEnName('');
     setNewProdImage('');
     setNewProdBadge('');
+    setNewProdHsn('');
+    setNewProdGstRate(18);
     setNewProdMrp('');
     setNewProdBulkPricing('');
     setNewProdIsHidden(false);
     setIsAddingNewItem(false);
-    showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu}`);
+    showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (HSN: ${finalHsn || 'N/A'}, GST: ${finalGst}%)`);
   };
 
   // Save Item Modifications
@@ -468,6 +479,10 @@ export default function App() {
       const isService = editingItem.category === 'service' || editingItem.isService === true;
       const parsedStock = isService ? 'સેવા' : (typeof editingItem.stock === 'number' ? Math.max(0, editingItem.stock) : (Math.max(0, Number(editingItem.stock)) || 0));
       
+      const detected = detectHsnAndGst(editingItem.nameGu || '', editingItem.category as string);
+      const finalHsn = (editingItem.hsnCode || '').trim() || detected.hsnCode;
+      const finalGst = editingItem.gstRate !== undefined ? Number(editingItem.gstRate) : detected.gstRate;
+
       const updatedItem: ProductItem = {
         ...editingItem,
         nameGu: (editingItem.nameGu || '').trim(),
@@ -478,10 +493,12 @@ export default function App() {
         price: Math.max(0, Number(editingItem.price) || 0),
         costPrice: Math.max(0, Number(editingItem.costPrice) || 0),
         mrp: editingItem.mrp ? Math.max(0, Number(editingItem.mrp) || 0) : undefined,
+        hsnCode: finalHsn || undefined,
+        gstRate: finalGst
       };
 
       setPosItems(prev => prev.map(p => (p.id === updatedItem.id ? updatedItem : p)));
-      showToast(`✏️ "${updatedItem.nameGu}" (${updatedItem.nameEn || updatedItem.category}) સેવ થઈ ગયું!`);
+      showToast(`✏️ "${updatedItem.nameGu}" (HSN: ${finalHsn || 'N/A'}, GST: ${finalGst}%) સેવ થઈ ગયું!`);
       setEditingItem(null);
     }
   };
@@ -729,12 +746,15 @@ export default function App() {
       items: cart.map(c => {
         const fnMatch = c.product.nameGu.match(/\[(ફાઇલ|આગળ|પાછળ):\s*([^\]]+)\]/);
         const fileName = fnMatch ? fnMatch[2].trim() : undefined;
+        const detected = detectHsnAndGst(c.product.nameGu, c.product.category);
         return {
           name: c.product.nameGu,
           qty: c.quantity,
           price: c.product.price,
           unit: c.product.unit,
           productId: c.product.id,
+          hsnCode: c.product.hsnCode || detected.hsnCode,
+          gstRate: c.product.gstRate !== undefined ? c.product.gstRate : detected.gstRate,
           fileDataUrl: c.product.imageUrl?.startsWith('data:') || c.product.imageUrl?.startsWith('http') || c.product.imageUrl?.startsWith('blob:') ? c.product.imageUrl : undefined,
           fileName: fileName
         };
@@ -1327,7 +1347,19 @@ export default function App() {
       customerName: posCustomerName || 'Walk-in Customer (કાઉન્ટર)',
       mobile: posCustomerMobile || storeSettings.phone,
       address: 'દુકાન કાઉન્ટર - થરાદ',
-      items: billItems.map(b => ({ name: b.name, qty: b.qty, price: b.price, unit: b.unit, productId: b.productId })),
+      items: billItems.map(b => {
+        const prod = b.productId ? posItems.find(p => p.id === b.productId) : undefined;
+        const detected = detectHsnAndGst(b.name, prod?.category);
+        return {
+          name: b.name,
+          qty: b.qty,
+          price: b.price,
+          unit: b.unit,
+          productId: b.productId,
+          hsnCode: prod?.hsnCode || detected.hsnCode,
+          gstRate: prod?.gstRate !== undefined ? prod.gstRate : detected.gstRate
+        };
+      }),
       subtotal: billSubtotal,
       discount: posDiscount,
       tax: 0,
@@ -3226,6 +3258,72 @@ export default function App() {
                   ))}
                 </datalist>
               </div>
+
+              {/* GST & HSN Tax Master Configuration */}
+              <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-black text-blue-950 flex items-center gap-1 text-xs">
+                    <span>🏛️ GST દર & HSN કોડ (ઓટોમેટિક ટેક્સ)</span>
+                  </label>
+                  {(() => {
+                    const detected = detectHsnAndGst(newProdName, newProdCategory);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewProdHsn(detected.hsnCode);
+                          setNewProdGstRate(detected.gstRate);
+                        }}
+                        className="text-[10px] font-black text-blue-800 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded cursor-pointer border border-blue-300"
+                        title="ઓટો-ડિટેક્ટ કરેલ HSN અને GST લાગુ કરો"
+                      >
+                        ⚡ ઓટો: {detected.hsnCode} ({detected.gstRate}%)
+                      </button>
+                    );
+                  })()}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-bold block mb-0.5 text-neutral-700 text-[11px]">HSN / SAC કોડ</label>
+                    <input
+                      list="hsn-directory-list"
+                      type="text"
+                      value={newProdHsn}
+                      onChange={e => setNewProdHsn(e.target.value)}
+                      placeholder={detectHsnAndGst(newProdName, newProdCategory).hsnCode}
+                      className="w-full font-bold p-1.5 border border-blue-300 rounded-lg outline-none bg-white text-xs"
+                    />
+                    <datalist id="hsn-directory-list">
+                      {HSN_SAC_DIRECTORY.map(h => (
+                        <option key={h.code} value={h.code}>
+                          {h.code} - {h.nameGu} ({h.gstRate}%)
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="font-bold block mb-0.5 text-neutral-700 text-[11px]">GST દર (%)</label>
+                    <div className="flex items-center gap-1">
+                      {[0, 5, 12, 18, 28].map(rate => (
+                        <button
+                          key={rate}
+                          type="button"
+                          onClick={() => setNewProdGstRate(rate)}
+                          className={`flex-1 py-1 rounded text-[11px] font-black border cursor-pointer transition-all ${
+                            newProdGstRate === rate
+                              ? 'bg-blue-800 text-white border-blue-900 shadow-xs'
+                              : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                          }`}
+                        >
+                          {rate}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
               
               <div>
                 <label className="font-bold block mb-1 text-neutral-600">હોલસેલ ભાવ / ઓફર વિગત</label>
@@ -3448,6 +3546,75 @@ export default function App() {
                     <option key={cat} value={cat} />
                   ))}
                 </datalist>
+              </div>
+
+              {/* GST & HSN Tax Master Configuration */}
+              <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-black text-blue-950 flex items-center gap-1 text-xs">
+                    <span>🏛️ GST દર & HSN કોડ (ઓટોમેટિક ટેક્સ)</span>
+                  </label>
+                  {(() => {
+                    const detected = detectHsnAndGst(editingItem.nameGu || '', editingItem.category as string);
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingItem({
+                            ...editingItem,
+                            hsnCode: detected.hsnCode,
+                            gstRate: detected.gstRate
+                          });
+                        }}
+                        className="text-[10px] font-black text-blue-800 bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded cursor-pointer border border-blue-300"
+                        title="ઓટો-ડિટેક્ટ કરેલ HSN અને GST લાગુ કરો"
+                      >
+                        ⚡ ઓટો: {detected.hsnCode} ({detected.gstRate}%)
+                      </button>
+                    );
+                  })()}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="font-bold block mb-0.5 text-neutral-700 text-[11px]">HSN / SAC કોડ</label>
+                    <input
+                      list="edit-hsn-directory-list"
+                      type="text"
+                      value={editingItem.hsnCode || ''}
+                      onChange={e => setEditingItem({ ...editingItem, hsnCode: e.target.value })}
+                      placeholder={detectHsnAndGst(editingItem.nameGu || '', editingItem.category as string).hsnCode}
+                      className="w-full font-bold p-1.5 border border-blue-300 rounded-lg outline-none bg-white text-xs"
+                    />
+                    <datalist id="edit-hsn-directory-list">
+                      {HSN_SAC_DIRECTORY.map(h => (
+                        <option key={h.code} value={h.code}>
+                          {h.code} - {h.nameGu} ({h.gstRate}%)
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="font-bold block mb-0.5 text-neutral-700 text-[11px]">GST દર (%)</label>
+                    <div className="flex items-center gap-1">
+                      {[0, 5, 12, 18, 28].map(rate => (
+                        <button
+                          key={rate}
+                          type="button"
+                          onClick={() => setEditingItem({ ...editingItem, gstRate: rate })}
+                          className={`flex-1 py-1 rounded text-[11px] font-black border cursor-pointer transition-all ${
+                            (editingItem.gstRate !== undefined ? editingItem.gstRate : 18) === rate
+                              ? 'bg-blue-800 text-white border-blue-900 shadow-xs'
+                              : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                          }`}
+                        >
+                          {rate}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

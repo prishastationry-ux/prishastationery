@@ -27,6 +27,7 @@ export interface ProductItem {
   bulkPricing?: string; // હોલસેલ ભાવ (e.g. "5 નંગ: ₹200")
   orderIdx?: number; // For admin reordering
   hsnCode?: string;
+  gstRate?: number; // e.g. 0, 5, 12, 18, 28
   minStockAlert?: number;
   createdAt?: number;
 }
@@ -42,6 +43,11 @@ export interface BillItem {
   price: number;
   unit?: string;
   productId?: string;
+  hsnCode?: string;
+  gstRate?: number;
+  taxableAmount?: number;
+  cgstAmount?: number;
+  sgstAmount?: number;
   fileDataUrl?: string;
   fileName?: string;
   fileSize?: number;

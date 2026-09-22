@@ -86,6 +86,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'નંગ',
     icon: '📖',
     badge: 'બેસ્ટ સેલર',
+    hsnCode: '4820',
+    gstRate: 12,
     description: 'ઉચ્ચ ગુણવત્તાવાળા સફેદ કાગળ સાથે સ્મૂથ રાઇટિંગ નોટબુક.'
   },
   {
@@ -99,7 +101,24 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'પેકેટ',
     icon: '✒️',
     badge: 'પોપ્યુલર',
+    hsnCode: '9608',
+    gstRate: 18,
     description: 'સ્મૂથ રાઇટિંગ અને લાંબા સમય સુધી ચાલતી બ્લુ/બ્લેક પેન.'
+  },
+  {
+    id: 'prod-a4-paper',
+    nameGu: 'A4 ઝેરોક્ષ પેપર રીમ (JK / Bilt 75 GSM - 500 Sheets)',
+    nameEn: 'A4 Copier Paper 75 GSM (500 Sheets Ream)',
+    category: 'stationery',
+    price: 320,
+    costPrice: 260,
+    stock: 80,
+    unit: 'રીમ',
+    icon: '📄',
+    badge: 'સૌથી વધુ વેચાણ',
+    hsnCode: '4802',
+    gstRate: 18,
+    description: 'પ્રિન્ટિંગ અને ઝેરોક્ષ માટે ઉચ્ચ ગુણવત્તાવાળો 75 GSM A4 કાગળ.'
   },
   {
     id: 'prod-3',
@@ -113,12 +132,14 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'અરજી',
     icon: '📄',
     badge: 'CSC સેવા',
+    hsnCode: '9983',
+    gstRate: 18,
     description: 'તમામ પ્રકારની સરકારી ભરતી અને યોજનાઓના ઓનલાઇન ફોર્મ.'
   },
   {
     id: 'prod-4',
-    nameGu: 'આધાર કાર્ડ પ્રિન્ટ & અપડેટ સેવા',
-    nameEn: 'Aadhaar PVC Print & Correction',
+    nameGu: 'આધાર કાર્ડ પ્રિન્ટ & અપડેટ સેવા (PVC Card)',
+    nameEn: 'Aadhaar PVC Smart Card Print & Correction',
     category: 'service',
     price: 50,
     costPrice: 15,
@@ -127,6 +148,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'કાર્ડ',
     icon: '🪪',
     badge: 'ઈન્સ્ટન્ટ',
+    hsnCode: '3926',
+    gstRate: 18,
     description: 'ઓરિજિનલ આધાર PVC સ્માર્ટ કાર્ડ પ્રિન્ટિંગ.'
   },
   {
@@ -141,6 +164,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'અરજી',
     icon: '💳',
     badge: 'CSC સેવા',
+    hsnCode: '9983',
+    gstRate: 18,
     description: 'નવું પાન કાર્ડ અને જૂના કાર્ડમાં નામ/તારીખ સુધારો.'
   },
   {
@@ -155,6 +180,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'પેજ',
     icon: '🖨️',
     badge: 'સસ્તો ભાવ',
+    hsnCode: '9983',
+    gstRate: 18,
     description: 'A4/FS સાઇઝ ઝેરોક્ષ અને હાઇ ક્વોલિટી કલર પ્રિન્ટ.'
   },
   {
@@ -168,6 +195,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     isService: true,
     unit: 'અરજી',
     icon: '📦',
+    hsnCode: '9983',
+    gstRate: 18,
     description: 'ડિજિટલ ગુજરાત પોર્ટલ પરથી તમામ પ્રમાણપત્ર અરજી.'
   },
   {
@@ -181,6 +210,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'સેટ',
     icon: '🎨',
     badge: 'બાળકો માટે',
+    hsnCode: '9609',
+    gstRate: 12,
     description: 'વોટર કલર, પેન્સિલ કલર, અને સ્કેચ બુક સેટ.'
   },
   {
@@ -193,6 +224,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     stock: 150,
     unit: 'નંગ',
     icon: '📁',
+    hsnCode: '4820',
+    gstRate: 12,
     description: 'દસ્તાવેજો સાચવવા માટે હેવી ક્વોલિટી કોબ્રા ફાઇલ.'
   },
   {
@@ -206,6 +239,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'નંગ',
     icon: '🎒',
     badge: 'સ્પેશિયલ ડિસ્કાઉન્ટ',
+    hsnCode: '4202',
+    gstRate: 18,
     description: 'મજબૂત ચેઇન અને વોટરપ્રૂફ મટીરીયલવાળી સ્કૂલ બેગ.'
   },
   {
@@ -218,6 +253,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     stock: 18,
     unit: 'નંગ',
     icon: '🔢',
+    hsnCode: '8470',
+    gstRate: 18,
     description: '12 ડિજિટ ચેક & કરેક્ટ બિઝનેસ કેલ્ક્યુલેટર.'
   },
   {
@@ -232,6 +269,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'ડોક્યુમેન્ટ',
     icon: '📤',
     isSpecial: true,
+    hsnCode: '9983',
+    gstRate: 18,
     description: 'હાઇ-ડેફિનેશન સ્કેનિંગ અને ઈમેઇલ સેન્ડિંગ.'
   },
   {
@@ -246,6 +285,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'કાર્ડ',
     icon: '🛡️',
     badge: 'PMJAY',
+    hsnCode: '3926',
+    gstRate: 18,
     description: '૫ લાખ સુધીની મફત સારવાર માટેનું આયુષ્માન કાર્ડ.'
   },
   {
@@ -259,6 +300,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     isService: true,
     unit: 'કાર્ડ',
     icon: '🗳️',
+    hsnCode: '3926',
+    gstRate: 18,
     description: 'નવું ચૂંટણી કાર્ડ અને સરનામું ફેરબદલ કરવા માટે.'
   },
   {
@@ -273,6 +316,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     unit: 'નંગ',
     icon: '📑',
     badge: 'વોટરપ્રૂફ',
+    hsnCode: '9983',
+    gstRate: 18,
     description: 'દસ્તાવેજોને સુરક્ષિત રાખવા માટે 125 માઇક્રોન લેમિનેશન.'
   },
   {
@@ -286,6 +331,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     isService: true,
     unit: 'બુક',
     icon: '📚',
+    hsnCode: '9989',
+    gstRate: 18,
     description: 'પ્રોજેક્ટ રિપોર્ટ અને મટીરીયલ માટે સ્પાઇરલ બાઇન્ડિંગ.'
   }
 ];

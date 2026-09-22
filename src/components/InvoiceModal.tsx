@@ -10,6 +10,7 @@ import {
   getDefaultRightLogoSvg,
   numberToWordsINR
 } from '../lib/invoiceUtils';
+import { calculateGstBreakup, detectHsnAndGst } from '../lib/gstHsnMaster';
 
 interface InvoiceModalProps {
   order: OrderRecord;
@@ -26,7 +27,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 }) => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
-  const [billFormat, setBillFormat] = useState<'a4' | 'gst_gem' | 'thermal'>('a4');
+  const [billFormat, setBillFormat] = useState<'a4' | 'corporate_gst' | 'thermal'>('a4');
   const billContentRef = useRef<HTMLDivElement>(null);
 
   // Generate Automatic Dynamic UPI Payment QR Code with exact bill amount
@@ -47,7 +48,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     };
   }, [storeSettings.upiId, storeSettings.payeeName, storeSettings.storeNameEn, order.total, order.invoiceNo]);
 
-  // Determine effective logos and QR code (Guaranteed dynamic UPI QR with exact bill amount)
+  // Determine effective logos and QR code
   const effectiveLeftLogo = storeSettings.leftLogoUrl || getDefaultLeftLogoSvg();
   const effectiveRightLogo = storeSettings.rightLogoUrl || getDefaultRightLogoSvg();
   const fallbackImmediateQr = getImmediateQrFallbackUrl(
@@ -56,7 +57,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     order.total,
     order.invoiceNo
   );
-  // User Requirement: The bill must ALWAYS generate and display the QR code with the EXACT BILL AMOUNT
   const effectiveQrCode = upiQrDataUrl || fallbackImmediateQr;
   const words = numberToWordsINR(order.total);
 
@@ -68,21 +68,22 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         order.paymentMode.toLowerCase().includes('credit') ||
         order.paymentMode.toLowerCase().includes('pending')));
 
-  const isPaidBill = !isPendingBill;
+  // Accurate Item-Level & Corporate HSN/SAC GST Calculation Engine
+  const gstBreakup = calculateGstBreakup(
+    order.items.map(it => ({
+      name: it.name,
+      qty: it.qty,
+      price: it.price,
+      hsnCode: it.hsnCode,
+      gstRate: it.gstRate
+    })),
+    order.discount || 0
+  );
 
-  // GST & GeM Tax Calculations (State Code: 24 Gujarat)
-  const isGstGemMode = billFormat === 'gst_gem';
-  const effectiveGstRate = storeSettings.taxRate || 18;
-  const taxableValue = Number((order.total / (1 + effectiveGstRate / 100)).toFixed(2));
-  const cgstRate = effectiveGstRate / 2;
-  const sgstRate = effectiveGstRate / 2;
-  const cgstAmount = Number(((order.total - taxableValue) / 2).toFixed(2));
-  const sgstAmount = Number((order.total - taxableValue - cgstAmount).toFixed(2));
-  const totalTaxAmount = Number((cgstAmount + sgstAmount).toFixed(2));
+  const isCorporateGstMode = billFormat === 'corporate_gst';
 
   // Visibility Flags from Admin Toggles
   const showLogos = storeSettings.billShowLogos !== false;
-  // Always show QR code when enabled in settings (never hide on paid bills!)
   const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill;
   const showUpi = storeSettings.billShowUpi !== false && !storeSettings.hideUpiOnBill;
   const showGst = storeSettings.billShowGst !== false && Boolean(storeSettings.gstNumber);
@@ -96,8 +97,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const showBankDetails = storeSettings.billShowBankDetails !== false;
   const showSignature = storeSettings.billShowSignature !== false;
   const showTerms = storeSettings.billShowTerms !== false;
-  const showFraud = storeSettings.billShowFraudWarning !== false;
-  const showOffer = storeSettings.billShowSpecialOffer !== false;
 
   // Watermark Settings (~30% default opacity control)
   const showWatermark = storeSettings.billShowWatermark !== false;
@@ -105,12 +104,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const watermarkText = storeSettings.billWatermarkText || storeSettings.storeNameEn || 'PRISHA STATIONERY & XEROX (THARAD)';
   const watermarkType = storeSettings.billWatermarkType || 'both';
 
-  // Generate self-contained HTML for rock-solid, single-page A4 printing (Government Recognized)
+  // Generate self-contained HTML for professional Corporate A4 printing (Tata/Birla/Reliance style)
   const getInvoiceHtmlString = (overrideQr?: string) => {
     const activeQr = overrideQr || effectiveQrCode;
     const itemsHtml = order.items
-      .map(
-        (it, idx) => `
+      .map((it, idx) => {
+        const itemHsn = it.hsnCode || detectHsnAndGst(it.name).hsnCode;
+        const itemRate = it.gstRate !== undefined ? it.gstRate : detectHsnAndGst(it.name).gstRate;
+        const lineTotal = Number(it.price * it.qty);
+        const taxableVal = itemRate > 0 ? lineTotal / (1 + itemRate / 100) : lineTotal;
+
+        return `
         <tr style="border-bottom: 1.2px solid #1a1a1a;">
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-weight: 700;">${idx + 1}</td>
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 6px; font-weight: 700;">
@@ -118,16 +122,39 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </td>
           ${
             showHsnColumn
-              ? `<td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-size: 10.5px;">
-                  ${it.name.includes('ઝેરોક્ષ') || it.name.includes('પ્રિન્ટ') || it.name.includes('સેવા') ? '9983' : '4901'}
+              ? `<td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-family: monospace; font-size: 10.5px;">
+                  ${itemHsn}
                 </td>`
               : ''
           }
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-weight: 800;">${it.qty}</td>
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 6px; text-align: right; font-weight: 600;">₹${Number(it.price).toFixed(2)}</td>
-          <td style="padding: 4px 6px; text-align: right; font-weight: 800;">₹${Number(it.price * it.qty).toFixed(2)}</td>
+          ${
+            isCorporateGstMode
+              ? `<td style="border-right: 1.2px solid #1a1a1a; padding: 4px 5px; text-align: right; font-size: 10px;">₹${taxableVal.toFixed(2)}</td>
+                 <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-size: 10px;">${itemRate}%</td>`
+              : ''
+          }
+          <td style="padding: 4px 6px; text-align: right; font-weight: 800;">₹${lineTotal.toFixed(2)}</td>
         </tr>
-      `
+      `;
+      })
+      .join('');
+
+    const hsnBreakupRowsHtml = gstBreakup.rows
+      .map(
+        r => `
+      <tr style="font-weight: 700; border-bottom: 1px solid #1a1a1a;">
+        <td style="padding: 3px 4px; border-right: 1px solid #1a1a1a; font-family: monospace;">${r.hsnCode}</td>
+        <td style="padding: 3px 4px; border-right: 1px solid #1a1a1a; text-align: left; font-size: 9px;">${r.description}</td>
+        <td style="padding: 3px 4px; border-right: 1px solid #1a1a1a; text-align: right;">₹${r.taxableValue.toFixed(2)}</td>
+        <td style="padding: 3px 4px; border-right: 1px solid #1a1a1a;">${r.cgstRate}%</td>
+        <td style="padding: 3px 4px; border-right: 1px solid #1a1a1a; text-align: right;">₹${r.cgstAmount.toFixed(2)}</td>
+        <td style="padding: 3px 4px; border-right: 1px solid #1a1a1a;">${r.sgstRate}%</td>
+        <td style="padding: 3px 4px; border-right: 1px solid #1a1a1a; text-align: right;">₹${r.sgstAmount.toFixed(2)}</td>
+        <td style="padding: 3px 4px; text-align: right; font-weight: 900;">₹${r.totalTax.toFixed(2)}</td>
+      </tr>
+    `
       )
       .join('');
 
@@ -165,7 +192,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       background: #ffffff;
       overflow: hidden;
     }
-    /* Watermark background container */
     .watermark-overlay {
       position: absolute;
       top: 50%;
@@ -179,24 +205,24 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       user-select: none;
     }
     .watermark-logo-img {
-      width: 110px;
-      height: 110px;
+      width: 100px;
+      height: 100px;
       object-fit: contain;
       filter: grayscale(100%);
       margin-bottom: 6px;
     }
     .watermark-title-text {
-      font-size: 32px;
+      font-size: 26px;
       font-weight: 900;
+      letter-spacing: 2px;
       text-transform: uppercase;
       font-family: monospace;
-      letter-spacing: 2px;
       color: #000000;
       line-height: 1.15;
     }
     .watermark-sub-text {
-      font-size: 13px;
-      font-weight: 800;
+      font-size: 11px;
+      font-weight: 900;
       letter-spacing: 1.5px;
       text-transform: uppercase;
       margin-top: 4px;
@@ -206,7 +232,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       position: relative;
       z-index: 1;
     }
-    /* Government Header Strip */
     .govt-strip {
       display: flex;
       justify-content: space-between;
@@ -218,7 +243,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       font-weight: 800;
       text-transform: uppercase;
     }
-    /* 3-Column Store Header with Passport-size Logos */
     .store-header-grid {
       display: table;
       width: 100%;
@@ -238,7 +262,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       text-align: center;
       padding: 0 8px;
     }
-    /* Passport Size Photo Specification */
     .passport-logo {
       width: 68px;
       height: 68px;
@@ -282,7 +305,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       margin-top: 3px;
       color: #000000;
     }
-    /* Two-Column Meta Grid */
     .meta-table {
       width: 100%;
       border-collapse: collapse;
@@ -313,7 +335,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       font-weight: 800;
       margin: 1px 0;
     }
-    /* Items Table */
     .items-table {
       width: 100%;
       border-collapse: collapse;
@@ -332,7 +353,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     .items-table td {
       border-left: 1.2px solid #000000;
     }
-    /* Summary Row (Amount in words & Totals) */
     .summary-grid {
       display: table;
       width: 100%;
@@ -374,7 +394,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       padding-top: 3px;
       margin-top: 3px;
     }
-    /* Bottom Section: QR & Terms on Left | Signatory on Right */
     .bottom-grid {
       display: table;
       width: 100%;
@@ -395,25 +414,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       vertical-align: bottom;
       text-align: center;
     }
-    /* Passport size QR Code */
-    .qr-container {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .passport-qr {
-      width: 78px;
-      height: 78px;
-      border: 1px solid #000000;
-      border-radius: 4px;
-      padding: 1px;
-      background: #ffffff;
-      shrink: 0;
-    }
-    .qr-details {
-      font-size: 10px;
-      line-height: 1.35;
-    }
     .terms-box {
       font-size: 9px;
       color: #374151;
@@ -422,16 +422,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       border-top: 1px dashed #d1d5db;
       padding-top: 3px;
     }
-    .bank-box {
-      font-size: 9.5px;
-      color: #1e3a8a;
-      background: #f0fdf4;
-      border: 1px solid #bbf7d0;
-      padding: 3px 5px;
-      border-radius: 4px;
-      margin-top: 4px;
-    }
-    /* Authorized Signatory Box */
     .signatory-box {
       text-align: center;
       padding: 2px;
@@ -482,7 +472,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         ${
           watermarkType === 'name' || watermarkType === 'both'
             ? `<div class="watermark-title-text">${watermarkText}</div>
-               <div class="watermark-sub-text">ORIGINAL TAX INVOICE • THARAD</div>`
+               <div class="watermark-sub-text">TAX INVOICE • ORIGINAL FOR RECIPIENT</div>`
             : ''
         }
       </div>
@@ -491,13 +481,13 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
 
     <div class="bill-main-content">
-      <!-- 1. Government Recognized Header Strip -->
+      <!-- 1. Corporate Header Strip -->
       <div class="govt-strip">
-        <span>🇮🇳 ટેક્સ ઇન્વોઇસ / વેચાણ બિલ (TAX INVOICE)</span>
+        <span>🇮🇳 ટેક્સ ઇન્વોઇસ (TAX INVOICE)</span>
         <span>અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)</span>
       </div>
 
-      <!-- 2. Store Header with Passport-size Logos -->
+      <!-- 2. Store Header with Logos -->
       <div class="store-header-grid">
         <div class="header-col-left">
           ${
@@ -540,13 +530,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <div class="customer-name">${order.customerName}</div>
             <div>📞 <b>મોબાઇલ:</b> +91 ${order.mobile}</div>
             <div>📍 <b>સરનામું:</b> ${order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
+            <div><b>રાજ્ય:</b> ગુજરાત (State Code: 24-Gujarat)</div>
           </td>
           <td class="meta-right">
             <div class="meta-title">ઇન્વોઇસ વિગત (INVOICE DETAILS):</div>
             <div><b>બિલ નં (Inv No):</b> <span style="font-weight: 800; font-size: 12px;">${order.invoiceNo}</span></div>
             <div><b>તારીખ (Date):</b> ${order.date}</div>
             <div><b>ચૂકવણી પદ્ધતિ:</b> ${order.paymentMode} (${order.paymentStatus})</div>
-            <div><b>સપ્લાય સ્થળ:</b> ગુજરાત (Place of Supply: 24-Gujarat)</div>
+            <div><b>સપ્લાય સ્થળ:</b> 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
+            <div><b>રિવર્સ ચાર્જ (Reverse Charge):</b> ના (No)</div>
           </td>
         </tr>
       </table>
@@ -558,9 +550,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <th style="width: 28px; text-align: center;">#</th>
             <th style="text-align: left;">વસ્તુ / સેવાની વિગત (Description of Goods & Services)</th>
             ${showHsnColumn ? `<th style="width: 55px; text-align: center;">HSN/SAC</th>` : ''}
-            <th style="width: 48px; text-align: center;">જથ્થો</th>
-            <th style="width: 70px; text-align: right;">દર (Rate)</th>
-            <th style="width: 80px; text-align: right;">કુલ (Amount)</th>
+            <th style="width: 44px; text-align: center;">જથ્થો</th>
+            <th style="width: 65px; text-align: right;">દર (Rate)</th>
+            ${
+              isCorporateGstMode
+                ? `<th style="width: 65px; text-align: right;">કરપાત્ર (Taxable)</th>
+                   <th style="width: 40px; text-align: center;">GST%</th>`
+                : ''
+            }
+            <th style="width: 75px; text-align: right;">કુલ (Amount)</th>
           </tr>
         </thead>
         <tbody>
@@ -578,10 +576,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <div class="words-text">${words.gu}</div>
             <div style="font-size: 10px; color: #4b5563; margin-top: 1px;">${words.en}</div>
           `
-              : `<div class="words-text">${storeSettings.storeNameGu} • અધિકૃત બિલ</div>`
+              : `<div class="words-text">${storeSettings.storeNameGu} • અધિકૃત ટેક્સ ઇન્વોઇસ</div>`
           }
           <div style="margin-top: 4px; font-size: 10px; font-weight: 700; color: #047857;">
-            ✓ પ્રમાણિત કેન્દ્ર • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે
+            ✓ પ્રમાણિત કર ઇન્વોઇસ • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે
           </div>
         </div>
         <div class="summary-right">
@@ -589,6 +587,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           ${
             order.discount > 0
               ? `<div style="color: #b91c1c;">ડિસ્કાઉન્ટ: -₹${Number(order.discount).toFixed(2)}</div>`
+              : ''
+          }
+          ${
+            isCorporateGstMode
+              ? `
+            <div style="font-size: 10px; color: #374151;">કરપાત્ર રકમ: ₹${gstBreakup.totalTaxableValue.toFixed(2)}</div>
+            <div style="font-size: 10px; color: #374151;">કુલ GST ટેક્સ (CGST+SGST): ₹${gstBreakup.totalTax.toFixed(2)}</div>
+          `
               : ''
           }
           <div class="grand-total-row">
@@ -601,34 +607,36 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       </div>
 
       ${
-        isGstGemMode
+        isCorporateGstMode
           ? `
-      <!-- 5.1 GeM & Government GST Tax Breakup Summary -->
+      <!-- 5.1 Corporate HSN/SAC GST Tax Summary Schedule -->
       <div style="margin: 4px 0;">
         <div style="font-size: 9.5px; font-weight: 900; color: #1e3a8a; margin-bottom: 2px;">
-          🏛️ GST ટેક્સ બ્રેકઅપ વિગત (GeM / Govt. Supply Schedule):
+          📊 GST ટેક્સ બ્રેકઅપ સમરી (HSN/SAC Summary - Corporate Tax Schedule):
         </div>
         <table style="width: 100%; border-collapse: collapse; border: 1.2px solid #000; font-size: 9.5px; text-align: center;">
           <thead>
             <tr style="background: #f1f5f9; border-bottom: 1.2px solid #000; font-weight: 800;">
               <th style="padding: 2.5px; border-right: 1px solid #000;">HSN / SAC</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000; text-align: left;">વસ્તુ / સેવા વર્ણન</th>
               <th style="padding: 2.5px; border-right: 1px solid #000;">કરપાત્ર રકમ (Taxable ₹)</th>
-              <th style="padding: 2.5px; border-right: 1px solid #000;">CGST (%)</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000;">CGST %</th>
               <th style="padding: 2.5px; border-right: 1px solid #000;">CGST રકમ (₹)</th>
-              <th style="padding: 2.5px; border-right: 1px solid #000;">SGST (%)</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000;">SGST %</th>
               <th style="padding: 2.5px; border-right: 1px solid #000;">SGST રકમ (₹)</th>
               <th style="padding: 2.5px;">કુલ ટેક્સ (₹)</th>
             </tr>
           </thead>
           <tbody>
-            <tr style="font-weight: 700;">
-              <td style="padding: 2.5px; border-right: 1px solid #000;">4901 / 9983</td>
-              <td style="padding: 2.5px; border-right: 1px solid #000;">₹${taxableValue.toFixed(2)}</td>
-              <td style="padding: 2.5px; border-right: 1px solid #000;">${cgstRate}%</td>
-              <td style="padding: 2.5px; border-right: 1px solid #000;">₹${cgstAmount.toFixed(2)}</td>
-              <td style="padding: 2.5px; border-right: 1px solid #000;">${sgstRate}%</td>
-              <td style="padding: 2.5px; border-right: 1px solid #000;">₹${sgstAmount.toFixed(2)}</td>
-              <td style="padding: 2.5px; font-weight: 900;">₹${totalTaxAmount.toFixed(2)}</td>
+            ${hsnBreakupRowsHtml}
+            <tr style="font-weight: 900; background: #fafafa; border-top: 1.2px solid #000;">
+              <td colspan="2" style="padding: 3px; border-right: 1px solid #000; text-align: center;">કુલ સરવાળો (Total)</td>
+              <td style="padding: 3px; border-right: 1px solid #000; text-align: right;">₹${gstBreakup.totalTaxableValue.toFixed(2)}</td>
+              <td style="padding: 3px; border-right: 1px solid #000;">-</td>
+              <td style="padding: 3px; border-right: 1px solid #000; text-align: right;">₹${gstBreakup.totalCgst.toFixed(2)}</td>
+              <td style="padding: 3px; border-right: 1px solid #000;">-</td>
+              <td style="padding: 3px; border-right: 1px solid #000; text-align: right;">₹${gstBreakup.totalSgst.toFixed(2)}</td>
+              <td style="padding: 3px; text-align: right;">₹${gstBreakup.totalTax.toFixed(2)}</td>
             </tr>
           </tbody>
         </table>
@@ -676,7 +684,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             showBankDetails
               ? `
             <div style="border: 1px solid #93c5fd; background: #eff6ff; border-radius: 4px; padding: 3px 6px; font-size: 9px; margin-bottom: 3px; line-height: 1.25; color: #1e3a8a;">
-              💳 <b>બેંક વિગતો (GeM/PFMS/RTGS):</b> ${storeSettings.bankName || 'State Bank of India (SBI)'} | A/c: <b>${storeSettings.accountNumber || '38947291039'}</b> | IFSC: <b>${storeSettings.ifscCode || 'SBIN0000488'}</b> | શાખા: થરાદ (Tharad)
+              💳 <b>બેંક ખાતાની વિગત (NEFT / RTGS / IMPS / Bank Transfer):</b> ${storeSettings.bankName || 'State Bank of India (SBI)'} | A/c: <b>${storeSettings.accountNumber || '38947291039'}</b> | IFSC: <b>${storeSettings.ifscCode || 'SBIN0000488'}</b> | શાખા: થરાદ (Tharad)
             </div>
           `
               : ''
@@ -686,8 +694,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             showTerms
               ? `
             <div class="terms-box">
-              <b>શરતો & નિયમો:</b> ${storeSettings.billTermsNote || '૧. ખરીદેલ માલ પરત લેવાશે નહિ. ૨. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
-              ${isGstGemMode ? ' • પ્રમાણિત કરવામાં આવે છે કે ઉપરોક્ત વિગતો ખરી અને સાચી છે.' : ''}
+              <b>શરતો & નિયમો:</b> ${storeSettings.billTermsNote || '૧. ખરીદેલ માલ પરત લેવાશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે. ૨. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
+              ${isCorporateGstMode ? ' • પ્રમાણિત કરવામાં આવે છે કે ઉપરોક્ત વિગતો ખરી અને સાચી છે.' : ''}
             </div>
           `
               : ''
@@ -723,7 +731,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
       <!-- 7. Footer Note -->
       <div class="footer-note">
-        ${storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'} • કમ્પ્યુટર જનરેટેડ ઇન્વોઇસ
+        ${storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'} • કમ્પ્યુટર જનરેટેડ ટેક્સ ઇન્વોઇસ
       </div>
     </div>
 
@@ -870,7 +878,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         );
         if (fresh) activeQr = fresh;
       } catch (e) {
-        // use fallback
+        // fallback
       }
     }
 
@@ -931,7 +939,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   };
 
-  // 1. Direct Print: Opens dedicated print window or full-sized A4 frame (100% single page, non-blank)
+  // Direct Print
   const handleDirectPrint = async () => {
     let activeQr = effectiveQrCode;
     if (showQr && (!activeQr || !activeQr.startsWith('data:image/'))) {
@@ -947,7 +955,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           setUpiQrDataUrl(fresh);
         }
       } catch (e) {
-        // use fallback
+        // fallback
       }
     }
 
@@ -1010,7 +1018,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   };
 
-  // 2. Direct A4 PDF Download with isolated clean rendering (never blank, QR code guaranteed)
+  // Direct A4 PDF Download
   const handleDownloadPdf = async () => {
     try {
       setIsGeneratingPdf(true);
@@ -1035,7 +1043,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
       let canvas: HTMLCanvasElement | null = null;
 
-      // Prefer directly capturing the on-screen rendered bill element
       if (billContentRef.current && billFormat !== 'thermal') {
         canvas = await html2canvas(billContentRef.current, {
           scale: 2,
@@ -1092,7 +1099,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const printHeight = (canvas.height * printWidth) / canvas.width;
 
       pdf.addImage(imgData, 'JPEG', margin, margin, printWidth, Math.min(printHeight, pdfHeight - margin * 2));
-      pdf.save(`Prisha_Bill_${order.invoiceNo}.pdf`);
+      pdf.save(`Prisha_Tax_Invoice_${order.invoiceNo}.pdf`);
     } catch (err) {
       console.error('PDF Generation error:', err);
       handleDirectPrint();
@@ -1101,7 +1108,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   };
 
-  // 3. WhatsApp Order Receipt Sharing
+  // WhatsApp Order Receipt Sharing
   const handleWhatsAppShare = () => {
     let itemsText = '';
     order.items.forEach((item, idx) => {
@@ -1109,9 +1116,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     });
 
     const msg =
-      `🧾 *ઓર્ડર રસીદ - ${storeSettings.storeNameGu}*\n` +
+      `🧾 *ટેક્સ ઇન્વોઇસ - ${storeSettings.storeNameGu}*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🆔 *બિલ / ઓર્ડર નં:* ${order.invoiceNo}\n` +
+      `🆔 *બિલ / ઇન્વોઇસ નં:* ${order.invoiceNo}\n` +
       `📅 *તારીખ:* ${order.date}\n` +
       `👤 *ગ્રાહક:* ${order.customerName}\n` +
       `📞 *મોબાઇલ:* +91 ${order.mobile}\n` +
@@ -1124,7 +1131,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📍 *દુકાન:* ${storeSettings.address}\n` +
       `📞 *સંપર્ક:* +91 ${storeSettings.phone}\n\n` +
-      `આભાર! ફરી પધારજો.`;
+      `ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!`;
 
     window.open(`https://wa.me/91${storeSettings.phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
@@ -1141,7 +1148,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
             <div>
               <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
-                <span>{isSuccessView ? '🎉 ઓર્ડર નોંધાઈ ગયો (બિલ તૈયાર)' : '🧾 બિલ'}</span>
+                <span>{isSuccessView ? '🎉 ઓર્ડર નોંધાઈ ગયો (ઇન્વોઇસ તૈયાર)' : '🧾 ટેક્સ ઇન્વોઇસ (Tax Invoice)'}</span>
               </h3>
               <p className="text-[11px] text-blue-200 font-bold">
                 બિલ નં: <span className="font-mono text-orange-400 font-black">{order.invoiceNo}</span> | {order.date}
@@ -1159,17 +1166,19 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
                   billFormat === 'a4' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
                 }`}
+                title="સ્ટાન્ડર્ડ A4 કોર્પોરેટ બિલ"
               >
-                📄 A4 બિલ
+                📄 સ્ટાન્ડર્ડ A4
               </button>
               <button
                 type="button"
-                onClick={() => setBillFormat('gst_gem')}
+                onClick={() => setBillFormat('corporate_gst')}
                 className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
-                  billFormat === 'gst_gem' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
+                  billFormat === 'corporate_gst' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
                 }`}
+                title="સંપૂર્ણ HSN & GST ટેક્સ બ્રેકઅપ સાથે કોર્પોરેટ ઇન્વોઇસ (Tata / Reliance Format)"
               >
-                🏛️ GeM/GST બિલ
+                🏢 કોર્પોરેટ GST બિલ
               </button>
               <button
                 type="button"
@@ -1177,6 +1186,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
                   billFormat === 'thermal' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
                 }`}
+                title="૫૮mm નાનું પોસ થર્મલ સ્લિપ"
               >
                 🧾 નાનું થર્મલ
               </button>
@@ -1235,7 +1245,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </div>
         </div>
 
-        {/* CONDITIONAL BILL PREVIEW: THERMAL POS SLIP OR A4 GOVT TAX INVOICE */}
+        {/* CONDITIONAL BILL PREVIEW: THERMAL POS SLIP OR A4 CORPORATE TAX INVOICE */}
         {billFormat === 'thermal' ? (
           <div className="p-4 sm:p-6 bg-neutral-100 flex flex-col items-center">
             <div className="max-w-[340px] w-full bg-white border-2 border-dashed border-neutral-400 p-4 shadow-md font-mono text-[11px] text-black space-y-2">
@@ -1252,7 +1262,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
               <div className="flex justify-between text-[10.5px]">
                 <span>બિલ: <b>#{order.invoiceNo}</b></span>
-                <span>{order.date}</span>
+                <span>${order.date}</span>
               </div>
               <div className="flex justify-between text-[10.5px]">
                 <span>ગ્રાહક: <b>{order.customerName}</b></span>
@@ -1352,7 +1362,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
           </div>
         ) : (
-          /* PRINTABLE BILL CANVAS - 100% GOVERNMENT RECOGNIZED SINGLE-PAGE DESIGN */
+          /* PRINTABLE BILL CANVAS - CORPORATE A4 TAX INVOICE (Tata / Reliance / Adani standard) */
           <div
             ref={billContentRef}
             id="printable-bill-area"
@@ -1377,7 +1387,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     {watermarkText}
                   </div>
                   <div className="text-[11px] font-black uppercase tracking-wider text-neutral-800 text-center mt-0.5">
-                    ORIGINAL TAX INVOICE • THARAD
+                    TAX INVOICE • ORIGINAL FOR RECIPIENT
                   </div>
                 </>
               )}
@@ -1385,11 +1395,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           )}
 
           <div className="relative z-10 space-y-2.5">
-            {/* A. GOVT RECOGNIZED TOP STRIP */}
+            {/* A. CORPORATE TOP STRIP */}
             <div className="flex items-center justify-between border-b-2 border-black pb-1 text-[11px] sm:text-xs font-black uppercase tracking-wide">
               <span className="flex items-center gap-1">
                 <span>🇮🇳</span>
-                <span>ટેક્સ ઇન્વોઇસ / વેચાણ બિલ (TAX INVOICE)</span>
+                <span>ટેક્સ ઇન્વોઇસ (TAX INVOICE)</span>
               </span>
               <span className="text-[10px] sm:text-[11px] text-neutral-700 font-bold">
                 અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)
@@ -1465,6 +1475,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 <div className="text-xs sm:text-sm font-black text-black">{order.customerName}</div>
                 <div className="font-bold text-black">📞 +91 {order.mobile}</div>
                 <div className="text-black font-medium">📍 {order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
+                <div className="text-[10px] text-neutral-700">રાજ્ય: ગુજરાત (State: 24-Gujarat)</div>
               </div>
 
               {/* Right: Invoice */}
@@ -1477,7 +1488,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 </div>
                 <div className="font-bold text-black">તારીખ: {order.date}</div>
                 <div className="font-bold text-black">ચૂકવણી: {order.paymentMode} ({order.paymentStatus})</div>
-                <div className="text-black text-[10px]">સપ્લાય સ્થળ: ગુજરાત (24-Gujarat)</div>
+                <div className="text-black text-[10px]">સપ્લાય સ્થળ: 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
+                <div className="text-[10px] text-neutral-600">રિવર્સ ચાર્જ: ના (No)</div>
               </div>
             </div>
 
@@ -1489,63 +1501,99 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     <th className="p-1.5 text-center w-8 border-r border-black">#</th>
                     <th className="p-1.5 border-r border-black">વસ્તુ / સેવાની વિગત (Description of Goods & Services)</th>
                     {showHsnColumn && <th className="p-1.5 text-center w-16 border-r border-black">HSN/SAC</th>}
-                    <th className="p-1.5 text-center w-14 border-r border-black">જથ્થો</th>
+                    <th className="p-1.5 text-center w-12 border-r border-black">જથ્થો</th>
                     <th className="p-1.5 text-right w-16 border-r border-black">દર (₹)</th>
+                    {isCorporateGstMode && (
+                      <>
+                        <th className="p-1.5 text-right w-16 border-r border-black">કરપાત્ર (₹)</th>
+                        <th className="p-1.5 text-center w-12 border-r border-black">GST%</th>
+                      </>
+                    )}
                     <th className="p-1.5 text-right w-20">કુલ (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {order.items.map((it, idx) => (
-                    <tr key={idx} className="border-b border-black">
-                      <td className="p-1.5 text-center font-bold text-black border-r border-black">{idx + 1}</td>
-                      <td className="p-1.5 font-bold text-black border-r border-black">
-                        {it.name} {it.unit ? `(${it.unit})` : ''}
-                      </td>
-                      {showHsnColumn && (
-                        <td className="p-1.5 text-center text-[10px] text-neutral-600 border-r border-black">
-                          {it.name.includes('ઝેરોક્ષ') || it.name.includes('પ્રિન્ટ') || it.name.includes('સેવા') ? '9983' : '4901'}
+                  {order.items.map((it, idx) => {
+                    const itemHsn = it.hsnCode || detectHsnAndGst(it.name).hsnCode;
+                    const itemGstRate = it.gstRate !== undefined ? it.gstRate : detectHsnAndGst(it.name).gstRate;
+                    const itemLineTotal = Number(it.price * it.qty);
+                    const itemTaxable = itemGstRate > 0 ? itemLineTotal / (1 + itemGstRate / 100) : itemLineTotal;
+
+                    return (
+                      <tr key={idx} className="border-b border-black">
+                        <td className="p-1.5 text-center font-bold text-black border-r border-black">{idx + 1}</td>
+                        <td className="p-1.5 font-bold text-black border-r border-black">
+                          {it.name} {it.unit ? `(${it.unit})` : ''}
                         </td>
-                      )}
-                      <td className="p-1.5 text-center font-black text-black border-r border-black">{it.qty}</td>
-                      <td className="p-1.5 text-right font-medium text-black border-r border-black">
-                        ₹{Number(it.price).toFixed(2)}
-                      </td>
-                      <td className="p-1.5 text-right font-black text-black">
-                        ₹{Number(it.price * it.qty).toFixed(2)}
-                      </td>
-                    </tr>
-                  ))}
+                        {showHsnColumn && (
+                          <td className="p-1.5 text-center font-mono text-[10.5px] text-neutral-800 border-r border-black">
+                            {itemHsn}
+                          </td>
+                        )}
+                        <td className="p-1.5 text-center font-black text-black border-r border-black">{it.qty}</td>
+                        <td className="p-1.5 text-right font-medium text-black border-r border-black">
+                          ₹{Number(it.price).toFixed(2)}
+                        </td>
+                        {isCorporateGstMode && (
+                          <>
+                            <td className="p-1.5 text-right font-mono text-[10px] text-neutral-800 border-r border-black">
+                              ₹{itemTaxable.toFixed(2)}
+                            </td>
+                            <td className="p-1.5 text-center font-bold text-[10px] border-r border-black">
+                              {itemGstRate}%
+                            </td>
+                          </>
+                        )}
+                        <td className="p-1.5 text-right font-black text-black">
+                          ₹{itemLineTotal.toFixed(2)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
 
-            {/* E.1 GeM & Government GST Tax Breakup Summary (Shown in GeM / GST mode) */}
-            {isGstGemMode && (
+            {/* E.1 Corporate HSN/SAC GST Tax Summary Schedule */}
+            {isCorporateGstMode && (
               <div className="p-2 border-x border-b border-black bg-blue-50/30">
                 <div className="text-[10px] font-black text-blue-900 mb-1">
-                  🏛️ GST ટેક્સ બ્રેકઅપ વિગત (GeM / Govt. Supply Schedule):
+                  📊 GST ટેક્સ બ્રેકઅપ સમરી (HSN/SAC Summary - Corporate Tax Schedule):
                 </div>
                 <table className="w-full border-collapse border border-black text-[10px] text-center bg-white">
                   <thead>
                     <tr className="bg-neutral-100 border-b border-black font-black">
                       <th className="p-1 border-r border-black">HSN / SAC</th>
+                      <th className="p-1 border-r border-black text-left">વસ્તુ / સેવા વર્ણન</th>
                       <th className="p-1 border-r border-black">કરપાત્ર રકમ (Taxable ₹)</th>
-                      <th className="p-1 border-r border-black">CGST (%)</th>
+                      <th className="p-1 border-r border-black">CGST %</th>
                       <th className="p-1 border-r border-black">CGST રકમ (₹)</th>
-                      <th className="p-1 border-r border-black">SGST (%)</th>
+                      <th className="p-1 border-r border-black">SGST %</th>
                       <th className="p-1 border-r border-black">SGST રકમ (₹)</th>
                       <th className="p-1 font-black">કુલ ટેક્સ (₹)</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="font-bold">
-                      <td className="p-1 border-r border-black font-mono">4901 / 9983</td>
-                      <td className="p-1 border-r border-black">₹{taxableValue.toFixed(2)}</td>
-                      <td className="p-1 border-r border-black">{cgstRate}%</td>
-                      <td className="p-1 border-r border-black">₹{cgstAmount.toFixed(2)}</td>
-                      <td className="p-1 border-r border-black">{sgstRate}%</td>
-                      <td className="p-1 border-r border-black">₹{sgstAmount.toFixed(2)}</td>
-                      <td className="p-1 font-black text-blue-900">₹{totalTaxAmount.toFixed(2)}</td>
+                    {gstBreakup.rows.map((r, rIdx) => (
+                      <tr key={rIdx} className="font-bold border-b border-neutral-200">
+                        <td className="p-1 border-r border-black font-mono">{r.hsnCode}</td>
+                        <td className="p-1 border-r border-black text-left text-[9px] truncate max-w-[140px]">{r.description}</td>
+                        <td className="p-1 border-r border-black font-mono">₹{r.taxableValue.toFixed(2)}</td>
+                        <td className="p-1 border-r border-black">{r.cgstRate}%</td>
+                        <td className="p-1 border-r border-black font-mono">₹{r.cgstAmount.toFixed(2)}</td>
+                        <td className="p-1 border-r border-black">{r.sgstRate}%</td>
+                        <td className="p-1 border-r border-black font-mono">₹{r.sgstAmount.toFixed(2)}</td>
+                        <td className="p-1 font-black font-mono text-blue-900">₹{r.totalTax.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                    <tr className="font-black bg-neutral-100 border-t border-black">
+                      <td colSpan={2} className="p-1 border-r border-black text-center">કુલ સરવાળો (Total)</td>
+                      <td className="p-1 border-r border-black font-mono">₹{gstBreakup.totalTaxableValue.toFixed(2)}</td>
+                      <td className="p-1 border-r border-black">-</td>
+                      <td className="p-1 border-r border-black font-mono">₹{gstBreakup.totalCgst.toFixed(2)}</td>
+                      <td className="p-1 border-r border-black">-</td>
+                      <td className="p-1 border-r border-black font-mono">₹{gstBreakup.totalSgst.toFixed(2)}</td>
+                      <td className="p-1 font-black font-mono text-blue-900">₹{gstBreakup.totalTax.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1565,7 +1613,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     <div className="text-[10px] text-neutral-600 italic">{words.en}</div>
                   </>
                 ) : (
-                  <div className="text-xs font-black text-black">{storeSettings.storeNameGu} • અધિકૃત બિલ</div>
+                  <div className="text-xs font-black text-black">{storeSettings.storeNameGu} • અધિકૃત ટેક્સ ઇન્વોઇસ</div>
                 )}
                 <div className="text-[10px] font-bold text-emerald-800 pt-0.5">
                   ✓ અધિકૃત પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ
@@ -1580,6 +1628,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 {order.discount > 0 && (
                   <div className="font-bold text-red-600">
                     ડિસ્કાઉન્ટ: -₹{Number(order.discount).toFixed(2)}
+                  </div>
+                )}
+                {isCorporateGstMode && (
+                  <div className="text-[10.5px] text-neutral-700 font-medium">
+                    કુલ કરપાત્ર: ₹{gstBreakup.totalTaxableValue.toFixed(2)} | GST: ₹{gstBreakup.totalTax.toFixed(2)}
                   </div>
                 )}
                 <div className="text-sm font-black text-black border-t border-black pt-1 mt-1">
@@ -1618,7 +1671,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                       )}
                       <div className="text-[9.5px] text-neutral-700 truncate">
                         {isPendingBill ? (
-                          <>બાકી રકમ: <b>₹{Number(order.total).toFixed(2)}</b> (Bill: #{order.invoiceNo})</>
+                          <>બાકી રકમ: <b>₹${Number(order.total).toFixed(2)}</b> (Bill: #{order.invoiceNo})</>
                         ) : (
                           <>ચૂકવણી: <b>{order.paymentMode}</b> • સ્ટેટસ: <b className="text-emerald-700">ચૂકતે (PAID)</b></>
                         )}
@@ -1643,14 +1696,14 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
                 {showBankDetails && (
                   <div className="text-[9.5px] text-blue-900 bg-blue-50/70 border border-blue-200 rounded p-1 mt-1 leading-tight">
-                    💳 <b>બેંક વિગતો (GeM/RTGS):</b> {storeSettings.bankName || 'SBI'} | A/c: <b>{storeSettings.accountNumber || '38947291039'}</b> | IFSC: <b>{storeSettings.ifscCode || 'SBIN0000488'}</b> | શાખા: થરાદ (Tharad)
+                    💳 <b>બેંક ખાતાની વિગત (NEFT / RTGS / IMPS / Bank Transfer):</b> {storeSettings.bankName || 'SBI'} | A/c: <b>{storeSettings.accountNumber || '38947291039'}</b> | IFSC: <b>{storeSettings.ifscCode || 'SBIN0000488'}</b> | શાખા: થરાદ (Tharad)
                   </div>
                 )}
 
                 {showTerms && (
                   <div className="text-[9px] text-neutral-700 pt-1.5 mt-1 border-t border-dashed border-neutral-300 leading-tight">
                     <b>શરતો:</b> {storeSettings.billTermsNote || 'ખરીદેલ માલ પરત લેવાશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
-                    {isGstGemMode && ' • પ્રમાણિત કરવામાં આવે છે કે ઉપરોક્ત વિગતો ખરી અને સાચી છે.'}
+                    {isCorporateGstMode && ' • પ્રમાણિત કરવામાં આવે છે કે ઉપરોક્ત વિગતો ખરી અને સાચી છે.'}
                   </div>
                 )}
               </div>
