@@ -637,8 +637,8 @@ export default function App() {
       mobile: orderDetails.mobile,
       address: orderDetails.address,
       items: cart.map(c => {
-        const fnMatch = c.product.nameGu.match(/\[ફાઇલ:\s*([^\]]+)\]/);
-        const fileName = fnMatch ? fnMatch[1].trim() : undefined;
+        const fnMatch = c.product.nameGu.match(/\[(ફાઇલ|આગળ|પાછળ):\s*([^\]]+)\]/);
+        const fileName = fnMatch ? fnMatch[2].trim() : undefined;
         return {
           name: c.product.nameGu,
           qty: c.quantity,
@@ -652,7 +652,7 @@ export default function App() {
       attachedFiles: cart
         .filter(c => c.product.imageUrl && (c.product.imageUrl.startsWith('data:') || c.product.imageUrl.startsWith('http') || c.product.imageUrl.startsWith('blob:')))
         .map(c => {
-          const fnMatch = c.product.nameGu.match(/\[ફાઇલ:\s*([^\]]+)\]/);
+          const fnMatch = c.product.nameGu.match(/\[([^\]]+)\]/);
           return {
             fileName: fnMatch ? fnMatch[1].trim() : `${c.product.nameGu.slice(0, 30)}.pdf`,
             fileDataUrl: c.product.imageUrl!,

@@ -15,7 +15,8 @@ import {
   Sparkles,
   X,
   Settings,
-  ArrowRight
+  ArrowRight,
+  Plus
 } from 'lucide-react';
 import { ProductItem, StoreSettings } from '../types';
 
@@ -53,6 +54,13 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   // PVC Card options
   const [pvcCardType, setPvcCardType] = useState<string>('આધાર કાર્ડ (Aadhaar Card)');
   const [pvcCardCount, setPvcCardCount] = useState<number>(1);
+  const [pvcSideOption, setPvcSideOption] = useState<'double' | 'single'>('double'); // બંને બાજુ (Front & Back) By Default!
+  const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [frontBase64, setFrontBase64] = useState<string>('');
+  const [backFile, setBackFile] = useState<File | null>(null);
+  const [backBase64, setBackBase64] = useState<string>('');
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
   
   // Call Letter options
   const [callLetterPages, setCallLetterPages] = useState<number>(1);
@@ -69,13 +77,15 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   const colorDoubleRate = storeSettings.xeroxColorDoubleRate ?? 15;
   const laminationRate = storeSettings.xeroxLaminationRate ?? 20;
   const pvcCardRate = storeSettings.pvcCardRate ?? 100;
+  const pvcSingleRate = Math.round(pvcCardRate * 0.7);
   const callLetterRate = storeSettings.callLetterRate ?? 0;
   const callLetterOfferText = storeSettings.callLetterOfferText || 'નવરાત્રી સ્પેશિયલ: કોલ લેટર પ્રિન્ટ ફ્રી!';
 
   // Calculate rate based on service type
   const totalAmount = useMemo(() => {
     if (serviceType === 'pvc_card') {
-      return Math.max(0, pvcCardCount * pvcCardRate);
+      const perCardPrice = pvcSideOption === 'double' ? pvcCardRate : pvcSingleRate;
+      return Math.max(0, pvcCardCount * perCardPrice);
     }
     if (serviceType === 'call_letter') {
       return Math.max(0, callLetterPages * callLetterCopies * callLetterRate);
@@ -92,6 +102,8 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     serviceType,
     pvcCardCount,
     pvcCardRate,
+    pvcSingleRate,
+    pvcSideOption,
     callLetterPages,
     callLetterCopies,
     callLetterRate,
@@ -124,6 +136,34 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     reader.readAsDataURL(selectedFile);
   };
 
+  const handleFrontFileSelect = (selectedFile: File) => {
+    if (selectedFile.size > 25 * 1024 * 1024) {
+      showToast('⚠️ મહત્તમ 25 MB સુધીની ફાઇલ અપલોડ કરી શકાય છે.');
+      return;
+    }
+    setFrontFile(selectedFile);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setFrontBase64(reader.result as string);
+      showToast(`💳 આગળની બાજુ (Front) ફાઇલ અપલોડ થઈ ગઈ.`);
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
+  const handleBackFileSelect = (selectedFile: File) => {
+    if (selectedFile.size > 25 * 1024 * 1024) {
+      showToast('⚠️ મહત્તમ 25 MB સુધીની ફાઇલ અપલોડ કરી શકાય છે.');
+      return;
+    }
+    setBackFile(selectedFile);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setBackBase64(reader.result as string);
+      showToast(`💳 પાછળની બાજુ (Back) ફાઇલ અપલોડ થઈ ગઈ.`);
+    };
+    reader.readAsDataURL(selectedFile);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -142,25 +182,34 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   };
 
   const createServiceProductItem = (): ProductItem => {
-    const fileLabel = file ? ` [ફાઇલ: ${file.name}]` : '';
-
     if (serviceType === 'pvc_card') {
+      const sideText = pvcSideOption === 'double' ? 'બંને બાજુ (આગળ + પાછળ)' : '૧ બાજુ (ફક્ત આગળ)';
+      const fileSummaryList: string[] = [];
+      if (frontFile) fileSummaryList.push(`આગળ: ${frontFile.name}`);
+      if (backFile) fileSummaryList.push(`પાછળ: ${backFile.name}`);
+      if (file) fileSummaryList.push(`ફાઇલ: ${file.name}`);
+
+      const fileLabel = fileSummaryList.length > 0 ? ` [${fileSummaryList.join(' | ')}]` : '';
+      const activeImage = frontBase64 || fileBase64 || backBase64 || '';
+
       return {
         id: `pvc-card-${Date.now()}`,
-        nameGu: `💳 PVC સ્માર્ટ કાર્ડ (${pvcCardType} - ${pvcCardCount} નંગ)${fileLabel}`,
-        nameEn: `PVC Smart Card (${pvcCardType} - ${pvcCardCount} Qty)`,
+        nameGu: `💳 PVC સ્માર્ટ કાર્ડ (${pvcCardType} - ${pvcCardCount} નંગ, ${sideText})${fileLabel}`,
+        nameEn: `PVC Smart Card (${pvcCardType} - ${pvcCardCount} Qty, ${pvcSideOption === 'double' ? 'Both Sides' : 'Front Only'})`,
         price: totalAmount,
-        costPrice: Math.round(pvcCardCount * 40),
+        costPrice: Math.round(pvcCardCount * (pvcSideOption === 'double' ? 40 : 25)),
         stock: 'સેવા',
         isService: true,
         unit: `${pvcCardCount} કાર્ડ`,
         category: 'services',
         icon: '💳',
-        imageUrl: fileBase64 || '',
-        badge: 'PVC કાર્ડ',
-        description: `પ્રકાર: ${pvcCardType} | નંગ: ${pvcCardCount} | ફાઇલ: ${file ? file.name : 'કાઉન્ટર પર આપશે'}${instructions ? ` | નોંધ: ${instructions}` : ''}`
+        imageUrl: activeImage,
+        badge: pvcSideOption === 'double' ? 'બંને બાજુ PVC' : 'સિંગલ PVC',
+        description: `પ્રકાર: ${pvcCardType} | બાજુ: ${sideText} | નંગ: ${pvcCardCount} | ફાઇલો: ${fileSummaryList.length > 0 ? fileSummaryList.join(', ') : 'કાઉન્ટર પર આપશે'}${instructions ? ` | નોંધ: ${instructions}` : ''}`
       };
     }
+
+    const fileLabel = file ? ` [ફાઇલ: ${file.name}]` : '';
 
     if (serviceType === 'call_letter') {
       return {
@@ -200,6 +249,23 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       badge: 'ઝેરોક્ષ ઓર્ડર',
       description: `ફાઇલ: ${file ? file.name : 'કાઉન્ટર પર આપશે'} | પેજ: ${pageCount} | કોપી: ${copies} | ${colorLabel} | ${sideLabel}${needLamination ? ' | લેમિનેશન: હા' : ''}${instructions ? ` | નોંધ: ${instructions}` : ''}`
     };
+  };
+
+  const handleAddToCartAndAddAnother = () => {
+    const item = createServiceProductItem();
+    onAddToCart(item);
+    showToast(`🛒 "${item.nameGu.slice(0, 35)}..." કાર્ટમાં ઉમેરાઈ ગયું! હવે બીજી ફાઇલ ઉમેરો.`);
+    // Reset file states so the customer can instantly add another document
+    setFile(null);
+    setFileBase64('');
+    setFrontFile(null);
+    setFrontBase64('');
+    setBackFile(null);
+    setBackBase64('');
+    setInstructions('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (frontInputRef.current) frontInputRef.current.value = '';
+    if (backInputRef.current) backInputRef.current.value = '';
   };
 
   const handleAddToCartClick = () => {
@@ -372,14 +438,48 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
 
               {/* Service-specific Options */}
               {serviceType === 'pvc_card' && (
-                <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 space-y-2.5">
+                <div className="bg-purple-50/70 p-3 rounded-xl border border-purple-200 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-purple-950">
-                      💳 PVC પ્લાસ્ટિક સ્માર્ટ કાર્ડ ઓપ્શન્સ
+                    <span className="text-xs font-black text-purple-950 flex items-center gap-1">
+                      <CreditCard className="w-4 h-4 text-purple-700" />
+                      <span>💳 PVC પ્લાસ્ટિક સ્માર્ટ કાર્ડ ઓપ્શન્સ</span>
                     </span>
                     <span className="text-[11px] font-black text-purple-800 bg-purple-200 px-2 py-0.5 rounded">
-                      ભાવ: ₹{pvcCardRate} / કાર્ડ
+                      ભાવ: ₹{pvcSideOption === 'double' ? pvcCardRate : pvcSingleRate} / કાર્ડ
                     </span>
+                  </div>
+
+                  {/* Side Selection: બંને બાજુ (Front & Back) vs ૧ બાજુ */}
+                  <div>
+                    <label className="block text-[11px] font-black text-purple-950 mb-1">
+                      પ્રિન્ટ સાઇડ (બાજુ પસંદ કરો):
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPvcSideOption('double')}
+                        className={`p-2 rounded-xl text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          pvcSideOption === 'double'
+                            ? 'bg-purple-900 text-white border-purple-950 shadow-xs'
+                            : 'bg-white text-neutral-800 border-purple-200 hover:bg-purple-100/50'
+                        }`}
+                      >
+                        <span>📑 બંને બાજુ (આગળ & પાછળ)</span>
+                        <span className="text-[10px] bg-purple-700 text-purple-100 px-1.5 py-0.2 rounded">₹{pvcCardRate}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPvcSideOption('single')}
+                        className={`p-2 rounded-xl text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                          pvcSideOption === 'single'
+                            ? 'bg-purple-900 text-white border-purple-950 shadow-xs'
+                            : 'bg-white text-neutral-800 border-purple-200 hover:bg-purple-100/50'
+                        }`}
+                      >
+                        <span>📄 ૧ બાજુ (ફક્ત આગળ)</span>
+                        <span className="text-[10px] bg-purple-700 text-purple-100 px-1.5 py-0.2 rounded">₹{pvcSingleRate}</span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -398,6 +498,8 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
                         <option value="ડ્રાઇવિંગ લાયસન્સ (Driving Licence)">ડ્રાઇવિંગ લાયસન્સ</option>
                         <option value="ચૂંટણી કાર્ડ (Voter ID Card)">ચૂંટણી કાર્ડ (Voter ID)</option>
                         <option value="ઇ-શ્રમ કાર્ડ (e-Shram Card)">ઇ-શ્રમ કાર્ડ</option>
+                        <option value="રેશન કાર્ડ (Ration Card)">રેશન કાર્ડ (Ration Card)</option>
+                        <option value="શાળા/કૉલેજ ID કાર્ડ">શાળા/કૉલેજ ID કાર્ડ</option>
                         <option value="અન્ય સ્માર્ટ કાર્ડ">અન્ય સ્માર્ટ કાર્ડ</option>
                       </select>
                     </div>
@@ -419,6 +521,100 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
                       </div>
                     </div>
                   </div>
+
+                  {/* PVC Dual Side File Upload Section */}
+                  {pvcSideOption === 'double' ? (
+                    <div className="space-y-2 pt-1 border-t border-purple-200">
+                      <label className="block text-[11px] font-black text-purple-950">
+                        આગળ અને પાછળ બંને બાજુની ફાઇલ / ફોટો અપલોડ કરો:
+                      </label>
+                      
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {/* Front Side Upload */}
+                        <div className="p-2.5 rounded-xl border border-dashed border-purple-300 bg-white space-y-1 text-center">
+                          <input
+                            ref={frontInputRef}
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            onChange={e => e.target.files?.[0] && handleFrontFileSelect(e.target.files[0])}
+                            className="hidden"
+                          />
+                          <p className="text-[10px] font-black text-purple-900">૧. આગળની બાજુ (Front)</p>
+                          {frontFile ? (
+                            <div className="flex items-center justify-between bg-purple-50 p-1.5 rounded border border-purple-200">
+                              <span className="text-[10px] font-bold text-purple-950 truncate max-w-[140px]">
+                                {frontFile.name}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setFrontFile(null);
+                                  setFrontBase64('');
+                                  if (frontInputRef.current) frontInputRef.current.value = '';
+                                }}
+                                className="text-red-600 hover:text-red-700 p-0.5 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => frontInputRef.current?.click()}
+                              className="w-full py-1.5 px-2 bg-purple-100 hover:bg-purple-200 text-purple-900 rounded-lg text-[10px] font-black cursor-pointer transition flex items-center justify-center gap-1"
+                            >
+                              <UploadCloud className="w-3.5 h-3.5" />
+                              <span>આગળનો ભાગ અપલોડ</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Back Side Upload */}
+                        <div className="p-2.5 rounded-xl border border-dashed border-purple-300 bg-white space-y-1 text-center">
+                          <input
+                            ref={backInputRef}
+                            type="file"
+                            accept=".pdf,.jpg,.jpeg,.png,.webp"
+                            onChange={e => e.target.files?.[0] && handleBackFileSelect(e.target.files[0])}
+                            className="hidden"
+                          />
+                          <p className="text-[10px] font-black text-purple-900">૨. પાછળની બાજુ (Back)</p>
+                          {backFile ? (
+                            <div className="flex items-center justify-between bg-purple-50 p-1.5 rounded border border-purple-200">
+                              <span className="text-[10px] font-bold text-purple-950 truncate max-w-[140px]">
+                                {backFile.name}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setBackFile(null);
+                                  setBackBase64('');
+                                  if (backInputRef.current) backInputRef.current.value = '';
+                                }}
+                                className="text-red-600 hover:text-red-700 p-0.5 cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => backInputRef.current?.click()}
+                              className="w-full py-1.5 px-2 bg-purple-100 hover:bg-purple-200 text-purple-900 rounded-lg text-[10px] font-black cursor-pointer transition flex items-center justify-center gap-1"
+                            >
+                              <UploadCloud className="w-3.5 h-3.5" />
+                              <span>પાછળનો ભાગ અપલોડ</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <p className="text-[9.5px] text-neutral-600 text-center">
+                        અથવા જો આખું આધાર કાર્ડ ૧ જ PDF ફાઇલમાં હોય તો નીચે આપેલા મુખ્ય બોક્સમાં PDF અપલોડ કરી શકો છો.
+                      </p>
+                    </div>
+                  ) : null}
+
                   <p className="text-[10px] text-purple-700 font-medium">
                     * ઓરિજિનલ પ્લાસ્ટિક PVC વોટરપ્રૂફ કાર્ડ, લાઈફટાઇમ પ્રિન્ટિંગ કલર ગેરેંટી.
                   </p>
@@ -663,42 +859,61 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
               </div>
 
               {/* Live Calculation Summary & Action Buttons */}
-              <div className="bg-neutral-900 text-white p-3.5 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <span className="text-[11px] text-neutral-400 font-bold block">
-                    કુલ ઓર્ડર રકમ (Live Calculation):
-                  </span>
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="text-2xl font-black text-orange-400">₹{totalAmount}</span>
-                    <span className="text-xs text-neutral-400">
-                      {serviceType === 'pvc_card'
-                        ? `(${pvcCardCount} કાર્ડ x ₹${pvcCardRate})`
-                        : serviceType === 'call_letter'
-                        ? callLetterRate === 0
-                          ? '(નવરાત્રી ફ્રી)'
-                          : `(${callLetterPages * callLetterCopies} પેજ)`
-                        : `(${pageCount} પેજ x ${copies} કોપી)`}
+              <div className="bg-neutral-900 text-white p-3.5 rounded-xl flex flex-col gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-800 pb-2.5">
+                  <div>
+                    <span className="text-[11px] text-neutral-400 font-bold block">
+                      કુલ ઓર્ડર રકમ (Live Calculation):
                     </span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-2xl font-black text-orange-400">₹{totalAmount}</span>
+                      <span className="text-xs text-neutral-400">
+                        {serviceType === 'pvc_card'
+                          ? `(${pvcCardCount} કાર્ડ x ₹${pvcSideOption === 'double' ? pvcCardRate : pvcSingleRate} ${pvcSideOption === 'double' ? '[બંને બાજુ]' : '[૧ બાજુ]'})`
+                          : serviceType === 'call_letter'
+                          ? callLetterRate === 0
+                            ? '(નવરાત્રી ફ્રી)'
+                            : `(${callLetterPages * callLetterCopies} પેજ)`
+                          : `(${pageCount} પેજ x ${copies} કોપી)`}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="text-[11px] text-emerald-400 bg-emerald-950/80 px-2.5 py-1 rounded-lg border border-emerald-800/60 font-bold flex items-center gap-1.5 self-start sm:self-auto">
+                    <span>⚡ એક જ ઓર્ડરમાં વધુ પ્રિન્ટ/કાર્ડ પણ ઉમેરી શકો છો!</span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {/* Option 1: Add to Cart and configure another file */}
+                  <button
+                    type="button"
+                    onClick={handleAddToCartAndAddAnother}
+                    className="px-3 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition"
+                    title="આ આઇટમ ઉમેરીને બીજી ફાઇલ/પ્રિન્ટ ઉમેરો"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ બીજી ફાઇલ / પ્રિન્ટ ઉમેરો</span>
+                  </button>
+
+                  {/* Option 2: Add to cart and close */}
                   <button
                     type="button"
                     onClick={handleAddToCartClick}
-                    className="flex-1 sm:flex-none px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition"
                   >
                     <ShoppingCart className="w-4 h-4 text-orange-400" />
                     <span>કાર્ટમાં ઉમેરો</span>
                   </button>
 
+                  {/* Option 3: Direct Order */}
                   <button
                     type="button"
                     onClick={handleDirectOrderClick}
-                    className="flex-1 sm:flex-none px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
+                    className="px-4 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-black text-xs flex items-center justify-center gap-1.5 shadow-md cursor-pointer transition"
                   >
                     <Zap className="w-4 h-4 fill-black" />
-                    <span>ઓર્ડર કન્ફર્મ કરો</span>
+                    <span>સીધો ઓર્ડર કરો</span>
                   </button>
                 </div>
               </div>
