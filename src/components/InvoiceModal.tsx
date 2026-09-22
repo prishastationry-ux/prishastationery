@@ -1033,42 +1033,49 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         }
       }
 
-      const iframe = document.createElement('iframe');
-      iframe.id = 'prisha-pdf-render-frame';
-      iframe.style.position = 'fixed';
-      iframe.style.left = '-9999px';
-      iframe.style.top = '0';
-      iframe.style.width = '794px';
-      iframe.style.height = '1123px';
-      iframe.style.border = 'none';
-      iframe.style.zIndex = '-9999';
-      document.body.appendChild(iframe);
+      let canvas: HTMLCanvasElement | null = null;
 
-      const doc = iframe.contentDocument || iframe.contentWindow?.document;
-      if (!doc) {
-        throw new Error('Unable to access PDF iframe document');
+      // Prefer directly capturing the on-screen rendered bill element
+      if (billContentRef.current && billFormat !== 'thermal') {
+        canvas = await html2canvas(billContentRef.current, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false
+        });
+      } else {
+        const renderDiv = document.createElement('div');
+        renderDiv.id = 'prisha-pdf-temp-render';
+        renderDiv.style.position = 'fixed';
+        renderDiv.style.top = '0';
+        renderDiv.style.left = '0';
+        renderDiv.style.width = '794px';
+        renderDiv.style.backgroundColor = '#ffffff';
+        renderDiv.style.zIndex = '-9999';
+        renderDiv.style.opacity = '0';
+        renderDiv.style.pointerEvents = 'none';
+        renderDiv.innerHTML = getInvoiceHtmlString(activeQr);
+        document.body.appendChild(renderDiv);
+
+        await new Promise(resolve => setTimeout(resolve, 200));
+
+        const targetEl = (renderDiv.querySelector('.bill-wrapper') as HTMLElement) || renderDiv;
+        canvas = await html2canvas(targetEl, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          windowWidth: 850
+        });
+
+        document.body.removeChild(renderDiv);
       }
 
-      doc.open();
-      doc.write(getInvoiceHtmlString(activeQr));
-      doc.close();
-
-      // Wait 300ms for iframe DOM and SVG/data URL images to render
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      const billWrapper = (doc.querySelector('.bill-wrapper') as HTMLElement) || doc.body;
-
-      const canvas = await html2canvas(billWrapper, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: 850
-      });
-
-      document.body.removeChild(iframe);
+      if (!canvas) {
+        throw new Error('Canvas generation failed');
+      }
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF({
@@ -1080,7 +1087,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
 
-      const margin = 8;
+      const margin = 6;
       const printWidth = pdfWidth - margin * 2;
       const printHeight = (canvas.height * printWidth) / canvas.width;
 

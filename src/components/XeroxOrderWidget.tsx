@@ -19,6 +19,7 @@ import {
   Plus
 } from 'lucide-react';
 import { ProductItem, StoreSettings } from '../types';
+import { saveFileToCloudStorage } from '../lib/fileStorage';
 
 interface XeroxOrderWidgetProps {
   storeSettings: StoreSettings;
@@ -191,6 +192,45 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
 
       const fileLabel = fileSummaryList.length > 0 ? ` [${fileSummaryList.join(' | ')}]` : '';
       const activeImage = frontBase64 || fileBase64 || backBase64 || '';
+      const gallery = [frontBase64, backBase64].filter(Boolean);
+
+      const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string }> = [];
+
+      if (frontBase64) {
+        const fId = `f-pvc-front-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const fName = `આગળની બાજુ (Front) - ${frontFile ? frontFile.name : `${pvcCardType}_Front.jpg`}`;
+        attachedFilesList.push({
+          id: fId,
+          fileName: fName,
+          fileDataUrl: frontBase64,
+          fileSize: frontFile?.size || Math.round(frontBase64.length * 0.75)
+        });
+        saveFileToCloudStorage(fId, frontBase64, fName, frontFile?.type || 'image/jpeg', frontFile?.size).catch(() => {});
+      }
+
+      if (pvcSideOption === 'double' && backBase64) {
+        const bId = `f-pvc-back-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const bName = `પાછળની બાજુ (Back) - ${backFile ? backFile.name : `${pvcCardType}_Back.jpg`}`;
+        attachedFilesList.push({
+          id: bId,
+          fileName: bName,
+          fileDataUrl: backBase64,
+          fileSize: backFile?.size || Math.round(backBase64.length * 0.75)
+        });
+        saveFileToCloudStorage(bId, backBase64, bName, backFile?.type || 'image/jpeg', backFile?.size).catch(() => {});
+      }
+
+      if (fileBase64 && attachedFilesList.length === 0) {
+        const docId = `f-pvc-doc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const docName = file ? file.name : `${pvcCardType}.pdf`;
+        attachedFilesList.push({
+          id: docId,
+          fileName: docName,
+          fileDataUrl: fileBase64,
+          fileSize: file?.size || Math.round(fileBase64.length * 0.75)
+        });
+        saveFileToCloudStorage(docId, fileBase64, docName, file?.type || 'application/pdf', file?.size).catch(() => {});
+      }
 
       return {
         id: `pvc-card-${Date.now()}`,
@@ -204,6 +244,8 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
         category: 'services',
         icon: '💳',
         imageUrl: activeImage,
+        galleryImages: gallery.length > 0 ? gallery : undefined,
+        attachedFiles: attachedFilesList.length > 0 ? attachedFilesList : undefined,
         badge: pvcSideOption === 'double' ? 'બંને બાજુ PVC' : 'સિંગલ PVC',
         description: `પ્રકાર: ${pvcCardType} | બાજુ: ${sideText} | નંગ: ${pvcCardCount} | ફાઇલો: ${fileSummaryList.length > 0 ? fileSummaryList.join(', ') : 'કાઉન્ટર પર આપશે'}${instructions ? ` | નોંધ: ${instructions}` : ''}`
       };
@@ -212,6 +254,19 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     const fileLabel = file ? ` [ફાઇલ: ${file.name}]` : '';
 
     if (serviceType === 'call_letter') {
+      const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string }> = [];
+      if (fileBase64) {
+        const cId = `f-call-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const cName = file ? file.name : 'કોલ લેટર.pdf';
+        attachedFilesList.push({
+          id: cId,
+          fileName: cName,
+          fileDataUrl: fileBase64,
+          fileSize: file?.size || Math.round(fileBase64.length * 0.75)
+        });
+        saveFileToCloudStorage(cId, fileBase64, cName, file?.type || 'application/pdf', file?.size).catch(() => {});
+      }
+
       return {
         id: `call-letter-${Date.now()}`,
         nameGu: `🎫 કોલ લેટર પ્રિન્ટ (${callLetterPages} પેજ, ${callLetterCopies} નકલ)${callLetterRate === 0 ? ' [નવરાત્રી ફ્રી]' : ''}${fileLabel}`,
@@ -224,6 +279,7 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
         category: 'services',
         icon: '🎫',
         imageUrl: fileBase64 || '',
+        attachedFiles: attachedFilesList.length > 0 ? attachedFilesList : undefined,
         badge: 'કોલ લેટર',
         description: `કોલ લેટર / હોલ ટિકિટ | પેજ: ${callLetterPages} | નકલ: ${callLetterCopies} | ભાવ: ₹${totalAmount} | ફાઇલ: ${file ? file.name : 'કાઉન્ટર પર આપશે'}${instructions ? ` | નોંધ: ${instructions}` : ''}`
       };
@@ -233,6 +289,19 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     const colorLabel = colorMode === 'bw' ? 'બ્લેક & વ્હાઇટ' : 'કલર';
     const sideLabel = sideOption === 'single' ? 'એક બાજુ' : 'બંને બાજુ (Back-to-Back)';
     const lamText = needLamination ? ' + લેમિનેશન' : '';
+
+    const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string }> = [];
+    if (fileBase64) {
+      const pId = `f-xerox-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const pName = file ? file.name : 'પ્રિન્ટ દસ્તાવેજ.pdf';
+      attachedFilesList.push({
+        id: pId,
+        fileName: pName,
+        fileDataUrl: fileBase64,
+        fileSize: file?.size || Math.round(fileBase64.length * 0.75)
+      });
+      saveFileToCloudStorage(pId, fileBase64, pName, file?.type || 'application/pdf', file?.size).catch(() => {});
+    }
 
     return {
       id: `print-service-${Date.now()}`,
@@ -246,6 +315,7 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       category: 'printing',
       icon: '🖨️',
       imageUrl: fileBase64 || '',
+      attachedFiles: attachedFilesList.length > 0 ? attachedFilesList : undefined,
       badge: 'ઝેરોક્ષ ઓર્ડર',
       description: `ફાઇલ: ${file ? file.name : 'કાઉન્ટર પર આપશે'} | પેજ: ${pageCount} | કોપી: ${copies} | ${colorLabel} | ${sideLabel}${needLamination ? ' | લેમિનેશન: હા' : ''}${instructions ? ` | નોંધ: ${instructions}` : ''}`
     };

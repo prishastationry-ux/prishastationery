@@ -11,6 +11,12 @@ export interface ProductItem {
   icon?: string;
   imageUrl?: string; // Main display photo
   galleryImages?: string[]; // Multiple photos (ક્લિક કરવાથી બધા ફોટા દેખાય)
+  attachedFiles?: Array<{
+    fileName: string;
+    fileDataUrl: string;
+    fileSize?: number;
+    id?: string;
+  }>;
   badge?: string;
   isSpecial?: boolean;
   description?: string;
@@ -61,6 +67,7 @@ export interface OrderRecord {
     fileDataUrl: string;
     fileSize?: number;
     itemName?: string;
+    id?: string;
   }>;
   orderType?: 'online' | 'counter';
   orderStatus?: 'placed' | 'confirmed' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled';

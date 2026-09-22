@@ -569,7 +569,7 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     let directBlobUrl: string | null = null;
     let shouldRevoke = false;
 
-    if (dataUrlOrBlobUrl.startsWith('blob:') || dataUrlOrBlobUrl.startsWith('http:') || dataUrlOrBlobUrl.startsWith('https:')) {
+    if (dataUrlOrBlobUrl.startsWith('blob:')) {
       directBlobUrl = dataUrlOrBlobUrl;
     } else {
       const blob = await dataUrlToBlobAsync(dataUrlOrBlobUrl);
@@ -585,7 +585,6 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     const a = document.createElement('a');
     a.href = directBlobUrl;
     a.download = cleanFileName;
-    a.target = '_blank';
     a.style.display = 'none';
     document.body.appendChild(a);
     a.click();

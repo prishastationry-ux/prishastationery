@@ -73,7 +73,7 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
-import { deleteFileFromCloudStorage, downloadFileSafely } from './lib/fileStorage';
+import { deleteFileFromCloudStorage, downloadFileSafely, saveFileToCloudStorage } from './lib/fileStorage';
 import { getDefaultLeftLogoSvg, getDefaultRightLogoSvg } from './lib/invoiceUtils';
 
 export default function App() {
@@ -629,6 +629,96 @@ export default function App() {
       })
     );
 
+    // Collect ALL attached files across all cart items (including PVC front & back, multi-file print jobs, etc.)
+    const collectedAttachedFiles: Array<{
+      id: string;
+      fileName: string;
+      fileDataUrl: string;
+      fileSize?: number;
+      itemName?: string;
+      copies?: number;
+      colorMode?: 'black_white' | 'color' | 'pvc_card';
+      sideOption?: 'single_side' | 'double_side';
+      paperSize?: 'A4' | 'A5' | 'Legal' | '4x6 Photo' | 'PVC Card';
+      lamination?: boolean;
+    }> = [];
+
+    cart.forEach(c => {
+      const isPvc = c.product.nameGu.includes('PVC');
+      const isColor = c.product.nameGu.includes('કલર');
+      const isDouble = c.product.nameGu.includes('બંને બાજુ');
+      const isLam = c.product.nameGu.includes('લેમિનેશન');
+
+      if (c.product.attachedFiles && c.product.attachedFiles.length > 0) {
+        c.product.attachedFiles.forEach((af, idx) => {
+          const fileId = af.id || `f-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`;
+          collectedAttachedFiles.push({
+            id: fileId,
+            fileName: af.fileName || `${c.product.nameGu.slice(0, 25)}.pdf`,
+            fileDataUrl: af.fileDataUrl,
+            fileSize: af.fileSize || Math.round(af.fileDataUrl.length * 0.75),
+            itemName: c.product.nameGu,
+            copies: c.quantity || 1,
+            colorMode: isPvc ? 'pvc_card' : isColor ? 'color' : 'black_white',
+            sideOption: isDouble ? 'double_side' : 'single_side',
+            paperSize: isPvc ? 'PVC Card' : 'A4',
+            lamination: isLam
+          });
+          // Save to Firestore & IndexedDB storage immediately
+          if (af.fileDataUrl) {
+            saveFileToCloudStorage(
+              fileId,
+              af.fileDataUrl,
+              af.fileName,
+              af.fileName?.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image/jpeg' : 'application/pdf',
+              af.fileSize
+            ).catch(() => {});
+          }
+        });
+      } else if (c.product.galleryImages && c.product.galleryImages.length > 0) {
+        c.product.galleryImages.forEach((img, idx) => {
+          const fileId = `f-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`;
+          const sideName = idx === 0 ? 'આગળની બાજુ (Front)' : 'પાછળની બાજુ (Back)';
+          const fName = isPvc ? `${sideName} - ${c.product.nameGu.slice(0, 25)}.jpg` : `ફોટો-${idx + 1}.jpg`;
+          collectedAttachedFiles.push({
+            id: fileId,
+            fileName: fName,
+            fileDataUrl: img,
+            fileSize: Math.round(img.length * 0.75),
+            itemName: c.product.nameGu,
+            copies: c.quantity || 1,
+            colorMode: isPvc ? 'pvc_card' : 'color',
+            sideOption: isDouble ? 'double_side' : 'single_side',
+            paperSize: isPvc ? 'PVC Card' : 'A4',
+            lamination: isLam
+          });
+          saveFileToCloudStorage(fileId, img, fName, 'image/jpeg').catch(() => {});
+        });
+      } else if (c.product.imageUrl && (c.product.imageUrl.startsWith('data:') || c.product.imageUrl.startsWith('http') || c.product.imageUrl.startsWith('blob:'))) {
+        const fileId = `f-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const fnMatch = c.product.nameGu.match(/\[([^\]]+)\]/);
+        const fName = fnMatch ? fnMatch[1].trim() : `${c.product.nameGu.slice(0, 30)}.pdf`;
+        collectedAttachedFiles.push({
+          id: fileId,
+          fileName: fName,
+          fileDataUrl: c.product.imageUrl,
+          fileSize: Math.round(c.product.imageUrl.length * 0.75),
+          itemName: c.product.nameGu,
+          copies: c.quantity || 1,
+          colorMode: isPvc ? 'pvc_card' : isColor ? 'color' : 'black_white',
+          sideOption: isDouble ? 'double_side' : 'single_side',
+          paperSize: isPvc ? 'PVC Card' : 'A4',
+          lamination: isLam
+        });
+        saveFileToCloudStorage(
+          fileId,
+          c.product.imageUrl,
+          fName,
+          fName.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image/jpeg' : 'application/pdf'
+        ).catch(() => {});
+      }
+    });
+
     const newOrder: OrderRecord = {
       id: `ord-${Date.now()}`,
       invoiceNo: orderId,
@@ -649,16 +739,13 @@ export default function App() {
           fileName: fileName
         };
       }),
-      attachedFiles: cart
-        .filter(c => c.product.imageUrl && (c.product.imageUrl.startsWith('data:') || c.product.imageUrl.startsWith('http') || c.product.imageUrl.startsWith('blob:')))
-        .map(c => {
-          const fnMatch = c.product.nameGu.match(/\[([^\]]+)\]/);
-          return {
-            fileName: fnMatch ? fnMatch[1].trim() : `${c.product.nameGu.slice(0, 30)}.pdf`,
-            fileDataUrl: c.product.imageUrl!,
-            itemName: c.product.nameGu
-          };
-        }),
+      attachedFiles: collectedAttachedFiles.map(af => ({
+        id: af.id,
+        fileName: af.fileName,
+        fileDataUrl: af.fileDataUrl,
+        fileSize: af.fileSize,
+        itemName: af.itemName
+      })),
       subtotal: subtotal,
       discount: discountAmount,
       tax: 0,
@@ -676,7 +763,7 @@ export default function App() {
     setOrders(prev => [newOrder, ...prev]);
 
     // Also register in Print Jobs collection if files or print services are attached
-    if (newOrder.attachedFiles && newOrder.attachedFiles.length > 0) {
+    if (collectedAttachedFiles.length > 0) {
       const newPrintJob: PrintJobRecord = {
         id: `job-${Date.now()}`,
         jobNo: `PRN-${orderId.slice(-4).toUpperCase()}`,
@@ -684,28 +771,29 @@ export default function App() {
         mobile: orderDetails.mobile,
         address: orderDetails.address || 'ઓનલાઇન ઓર્ડર',
         deliveryType: 'pickup',
-        files: newOrder.attachedFiles.map((af, idx) => {
+        files: collectedAttachedFiles.map((af, idx) => {
           const fname = af.fileName || `document-${idx + 1}.pdf`;
           const isImg = Boolean(fname.match(/\.(jpg|jpeg|png|webp|bmp|gif)$/i));
           const isPdf = Boolean(fname.match(/\.pdf$/i));
           const isExcel = Boolean(fname.match(/\.(xls|xlsx|csv)$/i));
           return {
-            id: `f-${Date.now()}-${idx}`,
+            id: af.id || `f-${Date.now()}-${idx}`,
             fileName: fname,
-            fileSize: 1024 * 200,
+            fileSize: af.fileSize || 1024 * 200,
             fileType: isImg ? 'image/jpeg' : isPdf ? 'application/pdf' : isExcel ? 'application/vnd.ms-excel' : 'application/octet-stream',
             fileDataUrl: af.fileDataUrl,
-            copies: 1,
-            colorMode: af.itemName.includes('કલર') ? 'color' : 'black_white',
-            sideOption: af.itemName.includes('બંને બાજુ') ? 'double_side' : 'single_side',
-            paperSize: af.itemName.includes('PVC') ? 'PVC Card' : 'A4',
-            lamination: af.itemName.includes('લેમિનેશન'),
+            copies: af.copies || 1,
+            colorMode: af.colorMode || (isImg ? 'color' : 'black_white'),
+            sideOption: af.sideOption || 'single_side',
+            paperSize: af.paperSize || (isImg ? '4x6 Photo' : 'A4'),
+            lamination: af.lamination || false,
             notes: af.itemName,
+            uploadedToCloud: true,
             uploadStatus: 'completed',
             uploadProgress: 100
           };
         }),
-        totalJobSize: 1024 * 200 * newOrder.attachedFiles.length,
+        totalJobSize: collectedAttachedFiles.reduce((sum, af) => sum + (af.fileSize || 1024 * 200), 0),
         createdAt: dateFormatted,
         status: 'received',
         subtotal: subtotal,
