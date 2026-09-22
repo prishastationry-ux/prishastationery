@@ -60,9 +60,24 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const effectiveQrCode = upiQrDataUrl || fallbackImmediateQr;
   const words = numberToWordsINR(order.total);
 
+  // User Requirement:
+  // "paisha ni niche jo baki ma aapne print karie to j tya qr aave evu rakh ane paisha onlain thai gaya hoy to nahi evi ok"
+  // If the bill is PENDING / CREDIT (બાકી), show the QR code under the amount so customer can scan & pay.
+  // If payment has already been completed online or cash (ચૂકતે / ઓનલાઇન થઈ ગયા હોય), DO NOT show the payment QR code!
+  const isPendingBill =
+    order.paymentStatus === 'Pending' ||
+    order.paymentStatus === 'બાકી' ||
+    (typeof order.paymentMode === 'string' &&
+      (order.paymentMode.includes('બાકી') ||
+        order.paymentMode.toLowerCase().includes('credit') ||
+        order.paymentMode.toLowerCase().includes('pending')));
+
+  const isPaidBill = !isPendingBill;
+
   // Visibility Flags from Admin Toggles
   const showLogos = storeSettings.billShowLogos !== false;
-  const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill;
+  // Show QR code ONLY if enabled in settings AND payment is pending (બાકી)
+  const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill && isPendingBill;
   const showUpi = storeSettings.billShowUpi !== false && !storeSettings.hideUpiOnBill;
   const showGst = storeSettings.billShowGst !== false && Boolean(storeSettings.gstNumber);
   const showPan = storeSettings.billShowPan !== false && Boolean(storeSettings.panNumber);
@@ -85,7 +100,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const watermarkType = storeSettings.billWatermarkType || 'both';
 
   // Generate self-contained HTML for rock-solid, single-page A4 printing (Government Recognized)
-  const getInvoiceHtmlString = () => {
+  const getInvoiceHtmlString = (overrideQr?: string) => {
+    const activeQr = overrideQr || effectiveQrCode;
     const itemsHtml = order.items
       .map(
         (it, idx) => `
@@ -573,7 +589,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             ચૂકવવાપાત્ર રકમ: ₹${Number(order.total).toFixed(2)}
           </div>
           <div style="font-size: 10px; margin-top: 1px;">
-            સ્થિતિ: <b>${order.paymentStatus === 'Paid' ? '✅ ચૂકવેલ (PAID)' : '⚠️ બાકી (PENDING)'}</b>
+            સ્થિતિ: <b>${isPendingBill ? '⚠️ બાકી (PENDING)' : '✅ ચૂકતે / જમા (PAID)'}</b> (${order.paymentMode})
           </div>
         </div>
       </div>
@@ -582,33 +598,33 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       <div class="bottom-grid">
         <div class="bottom-left">
           ${
-            showQr && effectiveQrCode
+            showQr && activeQr
               ? `
             <div class="qr-container">
-              <img src="${effectiveQrCode}" alt="Payment QR" class="passport-qr" />
+              <img src="${activeQr}" alt="Payment QR" class="passport-qr" />
               <div class="qr-details">
-                <div style="font-weight: 800; font-size: 10.5px; color: #000000;">
-                  📱 ઓટોમેટિક પેમેન્ટ QR કોડ
+                <div style="font-weight: 800; font-size: 10.5px; color: #b91c1c;">
+                  📱 બાકી રકમ ચૂકવવા UPI QR કોડ
                 </div>
                 <div style="font-weight: 700; color: #15803d; font-size: 9.5px;">
-                  કોઈપણ UPI (GPay / PhonePe / Paytm) થી સ્કેન કરો
+                  GPay / PhonePe / Paytm થી સ્કેન કરી ચૂકવો
                 </div>
                 ${showUpi ? `<div style="font-size: 9.5px; margin-top: 1px;">UPI ID: <b>${storeSettings.upiId}</b></div>` : ''}
                 <div style="font-size: 9.5px; color: #1f2937;">
-                  Payee: <b>${storeSettings.payeeName || storeSettings.storeNameEn}</b>
+                  બાકી રકમ: <b>₹${Number(order.total).toFixed(2)}</b> (Bill: #${order.invoiceNo})
                 </div>
               </div>
             </div>
           `
-              : showUpi
-              ? `
-            <div style="font-weight: 700; font-size: 10.5px;">
-              📞 પેમેન્ટ હેલ્પલાઇન: +91 ${storeSettings.phone} • UPI ID: <b>${storeSettings.upiId}</b>
-            </div>
-          `
               : `
-            <div style="font-weight: 700; font-size: 10.5px; color: #111827;">
-              ${showHelpline ? `📞 ગ્રાહક સહાય / સંપર્ક: +91 ${storeSettings.phone}${storeSettings.email ? ` • ${storeSettings.email}` : ''}` : `✓ પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ (Tharad)`}
+            <div style="border: 1.2px solid #10b981; background: #ecfdf5; border-radius: 4px; padding: 5px 8px; margin-bottom: 4px;">
+              <div style="font-weight: 800; font-size: 10.5px; color: #047857;">
+                ✅ પેમેન્ટ ચૂકતે / ઓનલાઇન જમા (PAID IN FULL)
+              </div>
+              <div style="font-size: 9.5px; color: #1f2937; margin-top: 1px;">
+                ચૂકવણી પદ્ધતિ: <b>${order.paymentMode}</b> • કોઈ રકમ બાકી નથી
+              </div>
+              ${showHelpline ? `<div style="font-size: 9px; color: #4b5563; margin-top: 1px;">📞 સહાય / સંપર્ક: +91 ${storeSettings.phone}</div>` : ''}
             </div>
           `
           }
@@ -673,7 +689,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   // Dedicated POS Thermal Receipt (58mm / 80mm continuous roll slip)
-  const getThermalInvoiceHtmlString = (widthMm: 58 | 80 = 58) => {
+  const getThermalInvoiceHtmlString = (widthMm: 58 | 80 = 58, overrideQr?: string) => {
+    const activeQr = overrideQr || effectiveQrCode;
     const printableWidth = widthMm === 58 ? 52 : 72;
     return `<!DOCTYPE html>
 <html lang="gu">
@@ -769,19 +786,24 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   <div class="dashed-line"></div>
 
-  ${showQr && effectiveQrCode ? `
+  ${showQr && activeQr ? `
     <div class="qr-container">
       <div style="font-weight: 800; font-size: 10px; margin-bottom: 2px;">
-        📱 ઓટોમેટિક UPI QR કોડ
+        📱 બાકી રકમ ચૂકવવા UPI QR કોડ
       </div>
-      <img src="${effectiveQrCode}" class="qr-image" alt="UPI QR" />
+      <img src="${activeQr}" class="qr-image" alt="UPI QR" />
       <div style="font-size: 10.5px; font-weight: 900;">
         સ્કેન કરી ₹${Number(order.total).toFixed(2)} ચૂકવો
       </div>
       <div style="font-size: 9px; color: #333;">(GPay / PhonePe / Paytm / BHIM)</div>
     </div>
     <div class="dashed-line"></div>
-  ` : ''}
+  ` : `
+    <div style="text-align: center; margin: 4px 0; font-weight: 900; font-size: 10px; color: #047857;">
+      ✓ પેમેન્ટ ચૂકતે / ઓનલાઇન જમા (PAID)
+    </div>
+    <div class="dashed-line"></div>
+  `}
 
   <div class="footer-text">
     <div>${storeSettings.invoiceFooterNote || 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!'}</div>
@@ -792,12 +814,27 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   // Thermal Slip Direct Print
-  const handleThermalPrint = (widthMm: 58 | 80 = 58) => {
+  const handleThermalPrint = async (widthMm: 58 | 80 = 58) => {
+    let activeQr = effectiveQrCode;
+    if (showQr && (!activeQr || !activeQr.startsWith('data:image/'))) {
+      try {
+        const fresh = await generateUpiQrDataUrl(
+          storeSettings.upiId || '8140430395@apl',
+          storeSettings.payeeName || storeSettings.storeNameEn || 'PRISHA STATIONERY',
+          order.total,
+          order.invoiceNo
+        );
+        if (fresh) activeQr = fresh;
+      } catch (e) {
+        // use fallback
+      }
+    }
+
     try {
       const printWin = window.open('', '_blank', 'width=420,height=650');
       if (printWin) {
         printWin.document.open();
-        printWin.document.write(getThermalInvoiceHtmlString(widthMm));
+        printWin.document.write(getThermalInvoiceHtmlString(widthMm, activeQr));
         printWin.document.close();
         printWin.focus();
         setTimeout(() => {
@@ -831,7 +868,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (doc) {
         doc.open();
-        doc.write(getThermalInvoiceHtmlString(widthMm));
+        doc.write(getThermalInvoiceHtmlString(widthMm, activeQr));
         doc.close();
 
         setTimeout(() => {
@@ -851,12 +888,30 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   };
 
   // 1. Direct Print: Opens dedicated print window or full-sized A4 frame (100% single page, non-blank)
-  const handleDirectPrint = () => {
+  const handleDirectPrint = async () => {
+    let activeQr = effectiveQrCode;
+    if (showQr && (!activeQr || !activeQr.startsWith('data:image/'))) {
+      try {
+        const fresh = await generateUpiQrDataUrl(
+          storeSettings.upiId || '8140430395@apl',
+          storeSettings.payeeName || storeSettings.storeNameEn || 'PRISHA STATIONERY',
+          order.total,
+          order.invoiceNo
+        );
+        if (fresh) {
+          activeQr = fresh;
+          setUpiQrDataUrl(fresh);
+        }
+      } catch (e) {
+        // use fallback
+      }
+    }
+
     try {
       const printWin = window.open('', '_blank', 'width=850,height=1000');
       if (printWin) {
         printWin.document.open();
-        printWin.document.write(getInvoiceHtmlString());
+        printWin.document.write(getInvoiceHtmlString(activeQr));
         printWin.document.close();
         printWin.focus();
         setTimeout(() => {
@@ -890,7 +945,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       const doc = iframe.contentDocument || iframe.contentWindow?.document;
       if (doc) {
         doc.open();
-        doc.write(getInvoiceHtmlString());
+        doc.write(getInvoiceHtmlString(activeQr));
         doc.close();
 
         setTimeout(() => {
@@ -911,26 +966,53 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
   };
 
-  // 2. Direct A4 PDF Download with offscreen zero-scroll canvas (never blank)
+  // 2. Direct A4 PDF Download with isolated clean rendering (never blank, QR code guaranteed)
   const handleDownloadPdf = async () => {
     try {
       setIsGeneratingPdf(true);
 
-      const offscreenDiv = document.createElement('div');
-      offscreenDiv.id = 'prisha-pdf-render-div';
-      offscreenDiv.style.position = 'fixed';
-      offscreenDiv.style.left = '-9999px';
-      offscreenDiv.style.top = '0';
-      offscreenDiv.style.width = '794px';
-      offscreenDiv.style.backgroundColor = '#ffffff';
-      offscreenDiv.style.color = '#000000';
-      offscreenDiv.style.padding = '8px 12px';
-      offscreenDiv.style.zIndex = '-9999';
+      let activeQr = effectiveQrCode;
+      if (showQr) {
+        try {
+          const freshQr = await generateUpiQrDataUrl(
+            storeSettings.upiId || '8140430395@apl',
+            storeSettings.payeeName || storeSettings.storeNameEn || 'PRISHA STATIONERY',
+            order.total,
+            order.invoiceNo
+          );
+          if (freshQr) {
+            activeQr = freshQr;
+            setUpiQrDataUrl(freshQr);
+          }
+        } catch (e) {
+          console.warn('QR generation in PDF:', e);
+        }
+      }
 
-      offscreenDiv.innerHTML = getInvoiceHtmlString();
-      document.body.appendChild(offscreenDiv);
+      const iframe = document.createElement('iframe');
+      iframe.id = 'prisha-pdf-render-frame';
+      iframe.style.position = 'fixed';
+      iframe.style.left = '-9999px';
+      iframe.style.top = '0';
+      iframe.style.width = '794px';
+      iframe.style.height = '1123px';
+      iframe.style.border = 'none';
+      iframe.style.zIndex = '-9999';
+      document.body.appendChild(iframe);
 
-      const billWrapper = (offscreenDiv.querySelector('.bill-wrapper') as HTMLElement) || offscreenDiv;
+      const doc = iframe.contentDocument || iframe.contentWindow?.document;
+      if (!doc) {
+        throw new Error('Unable to access PDF iframe document');
+      }
+
+      doc.open();
+      doc.write(getInvoiceHtmlString(activeQr));
+      doc.close();
+
+      // Wait 300ms for iframe DOM and SVG/data URL images to render
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const billWrapper = (doc.querySelector('.bill-wrapper') as HTMLElement) || doc.body;
 
       const canvas = await html2canvas(billWrapper, {
         scale: 2,
@@ -942,7 +1024,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         windowWidth: 850
       });
 
-      document.body.removeChild(offscreenDiv);
+      document.body.removeChild(iframe);
 
       const imgData = canvas.toDataURL('image/jpeg', 0.98);
       const pdf = new jsPDF({
@@ -1424,7 +1506,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   કુલ રકમ (Total): ₹{Number(order.total).toFixed(2)}
                 </div>
                 <div className="text-[10px] font-bold text-neutral-700">
-                  સ્થિતિ: {order.paymentStatus === 'Paid' ? '✅ ચૂકવેલ' : '⚠️ બાકી'}
+                  સ્થિતિ: {isPendingBill ? '⚠️ બાકી (Pending)' : '✅ ચૂકતે (Paid)'} ({order.paymentMode})
                 </div>
               </div>
             </div>
@@ -1434,17 +1516,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               {/* Left 7 cols: Automatic QR Code / Support & Terms */}
               <div className="col-span-7 p-2.5 border-r border-black flex flex-col justify-between">
                 {showQr && effectiveQrCode ? (
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 bg-amber-50/50 p-1.5 rounded border border-amber-300">
                     {/* Passport-size QR Code (approx 78x78px) */}
                     <img
                       src={effectiveQrCode}
                       alt="Automatic UPI Payment QR Code"
                       className="w-[78px] h-[78px] object-contain border border-black rounded p-0.5 bg-white shrink-0"
-                      title="આ QR કોડ GPay/PhonePe થી સ્કેન કરી બિલનું પેમેન્ટ કરો"
+                      title="આ QR કોડ GPay/PhonePe થી સ્કેન કરી બાકી બિલનું પેમેન્ટ કરો"
                     />
                     <div className="space-y-0.5 min-w-0">
-                      <div className="font-black text-black text-xs flex items-center gap-1">
-                        <span>📱 ઓટોમેટિક પેમેન્ટ QR કોડ</span>
+                      <div className="font-black text-red-700 text-xs flex items-center gap-1">
+                        <span>📱 બાકી રકમ ચૂકવવા UPI QR કોડ</span>
                       </div>
                       <div className="text-[10px] font-bold text-emerald-700">
                         GPay / PhonePe / Paytm થી સ્કેન કરો
@@ -1455,17 +1537,23 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                         </div>
                       )}
                       <div className="text-[9.5px] text-neutral-600 truncate">
-                        રકમ: <b>₹{Number(order.total).toFixed(2)}</b> (Bill: {order.invoiceNo})
+                        બાકી રકમ: <b>₹{Number(order.total).toFixed(2)}</b> (Bill: #{order.invoiceNo})
                       </div>
                     </div>
                   </div>
-                ) : showUpi ? (
-                  <div className="font-bold text-xs text-neutral-800">
-                    📞 પેમેન્ટ સંપર્ક: +91 {storeSettings.phone} • UPI ID: {storeSettings.upiId}
-                  </div>
                 ) : (
-                  <div className="font-bold text-xs text-neutral-900">
-                    {showHelpline ? `📞 ગ્રાહક સહાય / સંપર્ક: +91 ${storeSettings.phone}${storeSettings.email ? ` • ${storeSettings.email}` : ''}` : `✓ પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ`}
+                  <div className="bg-emerald-50 border border-emerald-300 rounded p-1.5 text-neutral-800 space-y-0.5">
+                    <div className="font-black text-xs text-emerald-800 flex items-center gap-1">
+                      <span>✅ પેમેન્ટ ચૂકતે / ઓનલાઇન જમા (PAID IN FULL)</span>
+                    </div>
+                    <div className="text-[10.5px] font-bold text-neutral-700">
+                      પદ્ધતિ: <span className="text-black">{order.paymentMode}</span> • કોઈ રકમ બાકી નથી
+                    </div>
+                    {showHelpline && (
+                      <div className="text-[9px] text-neutral-600">
+                        📞 સંપર્ક / સહાય: +91 {storeSettings.phone}
+                      </div>
+                    )}
                   </div>
                 )}
 

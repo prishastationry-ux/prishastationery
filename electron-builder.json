@@ -1,0 +1,26 @@
+{
+  "appId": "com.prishastationery.app",
+  "productName": "PRISHA STATIONERY",
+  "asar": true,
+  "directories": {
+    "output": "out"
+  },
+  "files": [
+    "dist/**/*",
+    "main.cjs",
+    "package.json"
+  ],
+  "win": {
+    "target": [
+      "nsis"
+    ],
+    "icon": "public/pwa-512x512.png"
+  },
+  "nsis": {
+    "oneClick": true,
+    "allowToChangeInstallationDirectory": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "PRISHA STATIONERY"
+  }
+}

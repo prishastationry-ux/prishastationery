@@ -73,6 +73,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
 import { deleteFileFromCloudStorage } from './lib/fileStorage';
+import { getDefaultLeftLogoSvg, getDefaultRightLogoSvg } from './lib/invoiceUtils';
 
 export default function App() {
   // Navigation View: Default to 'customer' for all visitors
@@ -1180,21 +1181,21 @@ export default function App() {
 
   const getHeaderSizeClasses = () => {
     switch (storeSettings.headerNameSize) {
-      case 'small': return 'text-lg sm:text-xl md:text-2xl';
-      case 'medium': return 'text-xl sm:text-2xl md:text-3xl';
-      case 'xl': return 'text-3xl sm:text-5xl md:text-6xl';
+      case 'small': return 'text-base sm:text-lg md:text-xl lg:text-2xl';
+      case 'medium': return 'text-lg sm:text-xl md:text-2xl lg:text-3xl';
+      case 'xl': return 'text-2xl sm:text-3xl md:text-4xl lg:text-5xl';
       case 'large': 
-      default: return 'text-2xl sm:text-4xl md:text-5xl';
+      default: return 'text-xl sm:text-2xl md:text-3xl lg:text-4xl';
     }
   };
 
   const getSubHeaderSizeClasses = () => {
     switch (storeSettings.headerNameSize) {
-      case 'small': return 'text-base sm:text-lg md:text-xl';
-      case 'medium': return 'text-lg sm:text-xl md:text-2xl';
-      case 'xl': return 'text-2xl sm:text-4xl md:text-5xl';
+      case 'small': return 'text-[10px] sm:text-xs md:text-sm lg:text-base';
+      case 'medium': return 'text-xs sm:text-sm md:text-base lg:text-lg';
+      case 'xl': return 'text-sm sm:text-base md:text-lg lg:text-2xl';
       case 'large': 
-      default: return 'text-xl sm:text-3xl md:text-4xl';
+      default: return 'text-xs sm:text-sm md:text-base lg:text-xl';
     }
   };
 
@@ -1227,50 +1228,44 @@ export default function App() {
       {/* 1. PROFESSIONAL AMAZON / FLIPKART STYLE TOP HEADER */}
       {/* ========================================================================= */}
       <header className="bg-white border-b border-neutral-300 shadow-xs no-print sticky top-0 z-40">
-        <div className="max-w-[1550px] mx-auto px-3 sm:px-5 py-2 sm:py-3 flex items-center justify-between gap-2 sm:gap-4">
+        <div className="max-w-[1550px] mx-auto px-2 sm:px-4 py-1.5 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-3">
           
-          {/* LEFT LOGO (Admin Upload Triggerable - Enriched Size) */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* LEFT LOGO (Admin Upload Triggerable - Clean Fixed Ratio) */}
+          <div className="flex items-center shrink-0">
             {isAdminUnlocked ? (
-              <label className="cursor-pointer relative group" title="ડાબો લોગો બદલવા / ક્રોપ કરવા ક્લિક કરો">
+              <label className="cursor-pointer relative group" title="ડાબો લોગો બદલવા ક્લિક કરો">
                 <input
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={e => handleImageFileUpload(e, 'leftLogo')}
                 />
-                <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-orange-50 border-2 border-orange-500 flex flex-col items-center justify-center p-1 shadow-sm group-hover:scale-105 transition-transform overflow-hidden relative">
-                  {storeSettings.leftLogoUrl ? (
-                    <img src={storeSettings.leftLogoUrl} alt="Left Logo" className="w-full h-full object-contain" />
-                  ) : (
-                    <>
-                      <span className="text-[10px] sm:text-xs font-black text-orange-600 leading-none">PRISHA</span>
-                      <span className="text-sm sm:text-lg">🪪</span>
-                    </>
-                  )}
+                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-orange-50 border-2 border-orange-500 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative">
+                  <img
+                    src={storeSettings.leftLogoUrl || getDefaultLeftLogoSvg()}
+                    alt="Prisha Stationery Logo"
+                    className="w-full h-full object-contain"
+                  />
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
                     બદલો
                   </div>
                 </div>
               </label>
             ) : (
-              <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-orange-50 border-2 border-orange-500 flex flex-col items-center justify-center p-1 shadow-2xs overflow-hidden">
-                {storeSettings.leftLogoUrl ? (
-                  <img src={storeSettings.leftLogoUrl} alt="Left Logo" className="w-full h-full object-contain" />
-                ) : (
-                  <>
-                    <span className="text-[10px] sm:text-xs font-black text-orange-600 leading-none">PRISHA</span>
-                    <span className="text-sm sm:text-lg">🪪</span>
-                  </>
-                )}
+              <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-orange-50 border-2 border-orange-500 flex items-center justify-center p-1 shadow-2xs overflow-hidden">
+                <img
+                  src={storeSettings.leftLogoUrl || getDefaultLeftLogoSvg()}
+                  alt="Prisha Stationery Logo"
+                  className="w-full h-full object-contain"
+                />
               </div>
             )}
           </div>
 
-          {/* CENTER STORE TITLE (LARGER, HIGH CONTRAST TYPOGRAPHY) */}
-          <div className="text-center flex flex-col items-center flex-1 min-w-0 px-1">
-            <div className="flex items-center gap-1.5 sm:gap-3 flex-wrap justify-center">
-              <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight uppercase drop-shadow-xs`}>
+          {/* CENTER STORE TITLE (NON-OVERLAPPING RESPONSIVE TYPOGRAPHY) */}
+          <div className="flex-1 min-w-0 px-1 sm:px-2 flex flex-col items-center justify-center text-center overflow-hidden">
+            <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full overflow-hidden leading-tight">
+              <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight uppercase drop-shadow-xs shrink-0 whitespace-nowrap`}>
                 {storeSettings.storeNameEn.split(' ')[0] || 'PRISHA'}
               </span>
               <span className={`${getSubHeaderSizeClasses()} font-black text-[#1E40AF] tracking-tight uppercase truncate drop-shadow-xs`}>
@@ -1279,70 +1274,65 @@ export default function App() {
             </div>
             
             {/* Gujarati Subtitle & Badges */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5 mt-0.5 text-xs sm:text-sm font-bold text-neutral-800">
-              <span className="text-orange-900 bg-orange-100/90 px-2.5 py-0.5 rounded-md border border-orange-300 font-black text-xs sm:text-sm">
+            <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 max-w-full overflow-hidden justify-center">
+              <span className="text-orange-900 bg-orange-100/90 px-2 py-0.5 rounded-md border border-orange-300 font-black text-[11px] sm:text-xs truncate">
                 {storeSettings.storeNameGu}
               </span>
-              <span className="hidden sm:inline text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 text-xs font-black">
+              <span className="hidden md:inline text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 text-[10px] sm:text-xs font-bold truncate">
                 {storeSettings.tagline}
               </span>
             </div>
           </div>
 
           {/* RIGHT SIDE: RIGHT LOGO + CART + LOGIN/LOGOUT */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             
-            {/* RIGHT LOGO (Admin Upload Triggerable - Enriched Size) */}
+            {/* RIGHT LOGO (Admin Upload Triggerable - Clean Fixed Ratio) */}
             {isAdminUnlocked ? (
-              <label className="cursor-pointer relative group" title="જમણો લોગો બદલવા / ક્રોપ કરવા ક્લિક કરો">
+              <label className="cursor-pointer relative group" title="જમણો લોગો બદલવા ક્લિક કરો">
                 <input
                   type="file"
                   accept="image/*"
                   className="hidden"
                   onChange={e => handleImageFileUpload(e, 'rightLogo')}
                 />
-                <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-blue-50 border-2 border-blue-600 flex flex-col items-center justify-center p-1 shadow-sm group-hover:scale-105 transition-transform overflow-hidden relative">
-                  {storeSettings.rightLogoUrl ? (
-                    <img src={storeSettings.rightLogoUrl} alt="Right Logo" className="w-full h-full object-contain" />
-                  ) : (
-                    <>
-                      <span className="text-[10px] sm:text-xs font-black text-blue-700 leading-none">CSC</span>
-                      <span className="text-sm sm:text-lg">🏪</span>
-                    </>
-                  )}
+                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-blue-50 border-2 border-blue-600 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative">
+                  <img
+                    src={storeSettings.rightLogoUrl || getDefaultRightLogoSvg()}
+                    alt="CSC Digital Seva Emblem"
+                    className="w-full h-full object-contain"
+                  />
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-[9px] font-black transition-opacity">
                     બદલો
                   </div>
                 </div>
               </label>
             ) : (
-              <div className="w-13 h-13 sm:w-16 sm:h-16 md:w-18 md:h-18 rounded-2xl bg-blue-50 border-2 border-blue-600 flex flex-col items-center justify-center p-1 shadow-2xs overflow-hidden">
-                {storeSettings.rightLogoUrl ? (
-                  <img src={storeSettings.rightLogoUrl} alt="Right Logo" className="w-full h-full object-contain" />
-                ) : (
-                  <>
-                    <span className="text-[10px] sm:text-xs font-black text-blue-700 leading-none">CSC</span>
-                    <span className="text-sm sm:text-lg">🏪</span>
-                  </>
-                )}
+              <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-blue-50 border-2 border-blue-600 flex items-center justify-center p-1 shadow-2xs overflow-hidden">
+                <img
+                  src={storeSettings.rightLogoUrl || getDefaultRightLogoSvg()}
+                  alt="CSC Digital Seva Emblem"
+                  className="w-full h-full object-contain"
+                />
               </div>
             )}
 
             {/* CART BUTTON WITH LIVE BADGE */}
             <button
               onClick={() => setIsCartDrawerOpen(true)}
-              className="relative bg-orange-500 hover:bg-orange-600 text-black px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl font-black text-xs sm:text-sm flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 cursor-pointer"
+              className="relative bg-orange-500 hover:bg-orange-600 text-black px-2 sm:px-3.5 py-1.5 sm:py-2 rounded-xl font-black text-xs sm:text-sm flex items-center gap-1 shadow-xs transition-transform active:scale-95 cursor-pointer shrink-0"
+              title="કાર્ટ ખોલો"
             >
-              <ShoppingCart className="w-4 h-4 text-black" />
-              <span className="hidden sm:inline">કાર્ટ</span>
+              <ShoppingCart className="w-4 h-4 text-black shrink-0" />
+              <span className="hidden md:inline">કાર્ટ</span>
               {totalCartCount > 0 && (
-                <span className="bg-neutral-900 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-5 text-center">
+                <span className="bg-neutral-900 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4 text-center">
                   {totalCartCount}
                 </span>
               )}
             </button>
 
-            {/* SINGLE CLEAN LOGIN BUTTON / ADMIN LOGOUT */}
+            {/* SINGLE CLEAN LOGIN BUTTON / ADMIN CONTROLS */}
             {!isAdminUnlocked ? (
               <button
                 onClick={() => {
@@ -1350,32 +1340,34 @@ export default function App() {
                   setPasswordError('');
                   setShowPasswordModal(true);
                 }}
-                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1.5 shadow-xs cursor-pointer transition-transform active:scale-95"
+                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-black flex items-center gap-1 shadow-xs cursor-pointer transition-transform active:scale-95 shrink-0"
+                title="એડમિન લૉગિન"
               >
-                <KeyRound className="w-3.5 h-3.5 text-orange-400" />
-                <span>Login</span>
+                <KeyRound className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                <span className="hidden sm:inline">Login</span>
               </button>
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 sm:gap-1.5">
                 <button
                   onClick={() => setActiveTab(activeTab === 'customer' ? 'admin' : 'customer')}
-                  className={`px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1 border shadow-2xs transition-all ${
+                  className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-black flex items-center gap-1 border shadow-2xs transition-all cursor-pointer ${
                     activeTab === 'customer'
                       ? 'bg-orange-500 text-black border-orange-600'
                       : 'bg-[#1E40AF] text-white border-blue-900'
                   }`}
+                  title={activeTab === 'customer' ? 'Switch to Admin Panel' : 'Switch to Customer View'}
                 >
-                  <Eye className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">{activeTab === 'customer' ? 'Admin Panel' : 'Customer View'}</span>
+                  <Eye className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden md:inline">{activeTab === 'customer' ? 'Admin' : 'Customer'}</span>
                 </button>
 
                 <button
                   onClick={handleLockAdmin}
-                  className="bg-red-700 hover:bg-red-800 text-white px-2.5 py-2 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer"
+                  className="bg-red-700 hover:bg-red-800 text-white px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer"
                   title="લૉગઆઉટ"
                 >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Logout</span>
+                  <LogOut className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden md:inline">Logout</span>
                 </button>
               </div>
             )}

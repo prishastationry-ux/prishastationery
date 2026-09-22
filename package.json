@@ -3,47 +3,16 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "main.cjs",
-  "files": [
-    "dist",
-    "main.cjs"
-  ],
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
-    "start": "NODE_ENV=production node dist/server.cjs",
+    "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "electron:dev": "electron .",
-    "electron:build": "electron-builder",
-    "dist": "vite build && electron-builder"
-  },
-  "build": {
-    "appId": "com.prishastationery.app",
-    "productName": "PRISHA STATIONERY",
-    "asar": true,
-    "directories": {
-      "output": "out"
-    },
-    "files": [
-      "dist/**/*",
-      "main.cjs",
-      "package.json"
-    ],
-    "win": {
-      "target": [
-        "nsis"
-      ],
-      "icon": "public/pwa-512x512.png"
-    },
-    "nsis": {
-      "oneClick": true,
-      "allowToChangeInstallationDirectory": false,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "shortcutName": "PRISHA STATIONERY"
-    }
+    "electron:build": "electron-builder --config electron-builder.json",
+    "dist": "vite build && electron-builder --config electron-builder.json"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
