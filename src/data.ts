@@ -12,15 +12,15 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   payeeName: 'PRISHA STATIONERY',
   gstNumber: '24BTQPC3756D1Z5',
   address: '106, 107 Prince Arcade, Taluka Panchayat Same, Tharad, Dist: Vav-Tharad, Gujarat - 385565',
-  marqueeText: '💥 ધમાકા ઓફર: સ્કૂલ સ્ટેશનરી, નોટબુક હોલસેલ ભાવે, આધાર-પાન કાર્ડ, ઝેરોક્ષ અને લેમિનેશન પર વિશેષ છૂટ ઉપલબ્ધ! ★ પ્રિષા સ્ટેશનરી થરાદ ★ 81404 30395',
+  marqueeText: '📢 પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ થરાદ: સ્કૂલ સ્ટેશનરી, નોટબુક, આધાર-પાન કાર્ડ, ઝેરોક્ષ અને લેમિનેશન સેવાઓ ઉપલબ્ધ! ★ 81404 30395',
   leftLogoUrl: '',
   rightLogoUrl: '',
   bannerImageUrl: '',
   bannerTitle: 'ઓનલાઇન સરકારી સેવાઓ અને સ્ટેશનરી સામાન હવે તમારા હાથમાં!',
   bannerSubtitle: 'નોટબુક, પેન, ઓફિસ ફાઇલ્સ, આધાર-પાન કાર્ડ, ઝેરોક્ષ પ્રિન્ટિંગ સરળતાથી ઓર્ડર કરો અને રસીદ મેળવો.',
-  dhamakaOfferTitle: '💥 મહા ધમાકા ઓફર: સ્કૂલ સ્ટેશનરી અને નોટબુક્સ પર 20% સુધી ડિસ્કાઉન્ટ!',
-  dhamakaOfferText: 'તમામ નોટબુક્સ, બોલપેન સેટ્સ અને ઓનલાઇન ફોર્મ અરજીઓ પર સ્પેશિયલ ડિસ્કાઉન્ટ ઉપલબ્ધ છે. આજે જ ઓર્ડર કરો!',
-  dhamakaOfferEnabled: true,
+  dhamakaOfferTitle: '',
+  dhamakaOfferText: '',
+  dhamakaOfferEnabled: false,
   customQrUrl: '',
   invoiceFooterNote: 'ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર! માલ પરત લેવામાં આવશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે.',
   adminPassword: 'Bharat@1994',
@@ -61,7 +61,17 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   panNumber: 'BTQPC3756D',
   bankName: 'State Bank of India',
   accountNumber: '',
-  ifscCode: ''
+  ifscCode: '',
+  xeroxBwSingleRate: 2,
+  xeroxBwDoubleRate: 3,
+  xeroxColorSingleRate: 10,
+  xeroxColorDoubleRate: 15,
+  xeroxLaminationRate: 20,
+  pvcCardRate: 100,
+  callLetterRate: 0,
+  callLetterOfferText: 'નવરાત્રી સ્પેશિયલ: કોલ લેટર ફ્રી!',
+  googleReviewUrl: 'https://maps.google.com/?q=Prisha+Stationery+Tharad',
+  hideOutOfStock: false
 };
 
 export const INITIAL_PRODUCTS: ProductItem[] = [

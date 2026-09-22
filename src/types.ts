@@ -36,6 +36,9 @@ export interface BillItem {
   price: number;
   unit?: string;
   productId?: string;
+  fileDataUrl?: string;
+  fileName?: string;
+  fileSize?: number;
 }
 
 export interface OrderRecord {
@@ -53,6 +56,12 @@ export interface OrderRecord {
   paymentMode: 'UPI' | 'Cash' | 'Online' | 'બાકી (Credit)';
   paymentStatus: 'Paid' | 'Pending' | 'બાકી';
   paymentScreenshot?: string;
+  attachedFiles?: Array<{
+    fileName: string;
+    fileDataUrl: string;
+    fileSize?: number;
+    itemName?: string;
+  }>;
   orderType?: 'online' | 'counter';
   orderStatus?: 'placed' | 'confirmed' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled';
   statusUpdatedAt?: string;
@@ -155,6 +164,7 @@ export interface StoreSettings {
   invoicePrefix?: string; // e.g. "PRISHA", "INV", "GST"
   nextInvoiceSeq?: number; // Starting or next sequence number e.g. 1
   invoiceGstRate?: number; // Default GST rate (0, 5, 12, 18, 28)
+  taxRate?: number; // Alias for default GST rate
   invoiceDefaultHsn?: string; // Default HSN/SAC code e.g. "4901" or "9983"
 
   // WEBSITE FRONTEND DISPLAY & POWER CUSTOMIZATION (દુકાન સેટિંગ્સ)
@@ -172,6 +182,17 @@ export interface StoreSettings {
   newsBoxPosters?: Array<{ id: string; imageUrl: string; title: string; subtitle?: string; linkUrl?: string }>; // News Box Widget
   showBannerSlider?: boolean; // Toggle hero banner
   showCategoryFirst?: boolean;
+  // Xerox & Online Printing Pricing (ઓનલાઇન ઝેરોક્ષ ભાવ)
+  xeroxBwSingleRate?: number; // દા.ત. ₹2/પેજ (B/W Single)
+  xeroxBwDoubleRate?: number; // દા.ત. ₹3/પેજ (B/W Double)
+  xeroxColorSingleRate?: number; // દા.ત. ₹10/પેજ (Colour Single)
+  xeroxColorDoubleRate?: number; // દા.ત. ₹15/પેજ (Colour Double)
+  xeroxLaminationRate?: number; // દા.ત. ₹20/પેજ (Lamination)
+  pvcCardRate?: number; // દા.ત. ₹100 / કાર્ડ (Aadhaar, PAN, Ayushman, Driving Licence PVC Card)
+  callLetterRate?: number; // દા.ત. ₹0 (Call Letter / Hall Ticket Print)
+  callLetterOfferText?: string; // દા.ત. "નવરાત્રી સ્પેશિયલ: કોલ લેટર પ્રિન્ટ ફ્રી!"
+  googleReviewUrl?: string; // ગૂગલ મેપ્સ રિવ્યૂ લિંક
+  hideOutOfStock?: boolean; // સ્ટોક 0 હોય તે પ્રોડક્ટ્સ ગ્રાહકથી છુપાવવી
 }
 
 export interface RojmelEntry {
@@ -269,6 +290,7 @@ export interface PrintJobFile {
   fileSize: number;
   fileType: string;
   fileDataUrl?: string; // base64 or blob URL
+  dataUrl?: string; // alias for fileDataUrl
   fileBlob?: Blob; // optional in-memory blob for instant viewing
   uploadStatus?: 'pending' | 'uploading' | 'completed' | 'error';
   uploadedToCloud?: boolean;

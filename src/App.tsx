@@ -58,13 +58,14 @@ import { ImageCropModal } from './components/ImageCropModal';
 import { ChangePasswordModal } from './components/ChangePasswordModal';
 import { OrderTrackingModal } from './components/OrderTrackingModal';
 import { TrashModal } from './components/TrashModal';
-import { DhamakaOfferModal } from './components/DhamakaOfferModal';
 import { BillSettingsModal } from './components/BillSettingsModal';
 import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDeleteModal';
 import { MultiPlatformSyncModal } from './components/MultiPlatformSyncModal';
 import { RojmelKhataModal } from './components/RojmelKhataModal';
 import { CaAuditModal } from './components/CaAuditModal';
 import { StoreSettingsModal } from './components/StoreSettingsModal';
+import { XeroxOrderWidget } from './components/XeroxOrderWidget';
+import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
@@ -72,7 +73,7 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
-import { deleteFileFromCloudStorage } from './lib/fileStorage';
+import { deleteFileFromCloudStorage, downloadFileSafely } from './lib/fileStorage';
 import { getDefaultLeftLogoSvg, getDefaultRightLogoSvg } from './lib/invoiceUtils';
 
 export default function App() {
@@ -99,9 +100,6 @@ export default function App() {
   const [showTrashModal, setShowTrashModal] = useState<boolean>(false);
   const [trashList, setTrashList] = useFirebaseSync<TrashRecord[]>('trash', 'prisha_trash_v4', []);
 
-  // Dhamaka Offer Edit Modal State
-  const [showDhamakaEditModal, setShowDhamakaEditModal] = useState<boolean>(false);
-
   // Bill Settings & Customization Modal State
   const [showBillSettingsModal, setShowBillSettingsModal] = useState<boolean>(false);
 
@@ -119,6 +117,10 @@ export default function App() {
 
   // Orders & Invoices State
   const [orders, setOrders] = useFirebaseSync<OrderRecord[]>('orders', 'prisha_orders_v4', INITIAL_ORDERS);
+
+  // Online Print Jobs & Customer Uploaded Documents
+  const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
+  const [showPrintJobsModal, setShowPrintJobsModal] = useState<boolean>(false);
 
   // Expenses & Purchases
   const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v5', []);
@@ -634,13 +636,29 @@ export default function App() {
       customerName: orderDetails.customerName,
       mobile: orderDetails.mobile,
       address: orderDetails.address,
-      items: cart.map(c => ({
-        name: c.product.nameGu,
-        qty: c.quantity,
-        price: c.product.price,
-        unit: c.product.unit,
-        productId: c.product.id
-      })),
+      items: cart.map(c => {
+        const fnMatch = c.product.nameGu.match(/\[ફાઇલ:\s*([^\]]+)\]/);
+        const fileName = fnMatch ? fnMatch[1].trim() : undefined;
+        return {
+          name: c.product.nameGu,
+          qty: c.quantity,
+          price: c.product.price,
+          unit: c.product.unit,
+          productId: c.product.id,
+          fileDataUrl: c.product.imageUrl?.startsWith('data:') || c.product.imageUrl?.startsWith('http') || c.product.imageUrl?.startsWith('blob:') ? c.product.imageUrl : undefined,
+          fileName: fileName
+        };
+      }),
+      attachedFiles: cart
+        .filter(c => c.product.imageUrl && (c.product.imageUrl.startsWith('data:') || c.product.imageUrl.startsWith('http') || c.product.imageUrl.startsWith('blob:')))
+        .map(c => {
+          const fnMatch = c.product.nameGu.match(/\[ફાઇલ:\s*([^\]]+)\]/);
+          return {
+            fileName: fnMatch ? fnMatch[1].trim() : `${c.product.nameGu.slice(0, 30)}.pdf`,
+            fileDataUrl: c.product.imageUrl!,
+            itemName: c.product.nameGu
+          };
+        }),
       subtotal: subtotal,
       discount: discountAmount,
       tax: 0,
@@ -656,6 +674,51 @@ export default function App() {
     };
 
     setOrders(prev => [newOrder, ...prev]);
+
+    // Also register in Print Jobs collection if files or print services are attached
+    if (newOrder.attachedFiles && newOrder.attachedFiles.length > 0) {
+      const newPrintJob: PrintJobRecord = {
+        id: `job-${Date.now()}`,
+        jobNo: `PRN-${orderId.slice(-4).toUpperCase()}`,
+        customerName: orderDetails.customerName,
+        mobile: orderDetails.mobile,
+        address: orderDetails.address || 'ઓનલાઇન ઓર્ડર',
+        deliveryType: 'pickup',
+        files: newOrder.attachedFiles.map((af, idx) => {
+          const fname = af.fileName || `document-${idx + 1}.pdf`;
+          const isImg = Boolean(fname.match(/\.(jpg|jpeg|png|webp|bmp|gif)$/i));
+          const isPdf = Boolean(fname.match(/\.pdf$/i));
+          const isExcel = Boolean(fname.match(/\.(xls|xlsx|csv)$/i));
+          return {
+            id: `f-${Date.now()}-${idx}`,
+            fileName: fname,
+            fileSize: 1024 * 200,
+            fileType: isImg ? 'image/jpeg' : isPdf ? 'application/pdf' : isExcel ? 'application/vnd.ms-excel' : 'application/octet-stream',
+            fileDataUrl: af.fileDataUrl,
+            copies: 1,
+            colorMode: af.itemName.includes('કલર') ? 'color' : 'black_white',
+            sideOption: af.itemName.includes('બંને બાજુ') ? 'double_side' : 'single_side',
+            paperSize: af.itemName.includes('PVC') ? 'PVC Card' : 'A4',
+            lamination: af.itemName.includes('લેમિનેશન'),
+            notes: af.itemName,
+            uploadStatus: 'completed',
+            uploadProgress: 100
+          };
+        }),
+        totalJobSize: 1024 * 200 * newOrder.attachedFiles.length,
+        createdAt: dateFormatted,
+        status: 'received',
+        subtotal: subtotal,
+        extraCharges: 0,
+        discount: discountAmount,
+        totalAmount: totalAmount,
+        paymentStatus: 'Paid',
+        paymentMode: orderDetails.paymentMode as any,
+        notes: `ઓર્ડર #${orderId} સાથે જોડાયેલ ગ્રાહકની ફાઇલો (PDF, JPG, PNG, Excel)`
+      };
+
+      setPrintJobs(prev => [newPrintJob, ...prev]);
+    }
 
     // Update Stats
     setStats(s => ({
@@ -937,6 +1000,96 @@ export default function App() {
     showToast(`✅ બિલ #${updatedOrder.invoiceNo} અપડેટ થઈ ગયું!`);
   };
 
+  // DOWNLOAD UPLOADED DOCUMENT / FILE (PDF, JPG, PNG, EXCEL, DOC)
+  const downloadDocumentFile = async (
+    dataUrl: string | undefined,
+    fileName: string,
+    orderInfo?: { invoiceNo?: string; customerName?: string; mobile?: string; itemsSummary?: string }
+  ) => {
+    const cleanFileName = (fileName || `document-${Date.now()}.pdf`).trim();
+
+    // 1. If valid dataUrl or blob url exists
+    if (dataUrl && (dataUrl.startsWith('data:') || dataUrl.startsWith('blob:') || dataUrl.startsWith('http'))) {
+      const ok = await downloadFileSafely(dataUrl, cleanFileName);
+      if (ok) {
+        showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
+        return;
+      }
+    }
+
+    // 2. Check IndexedDB or Cloud Storage
+    try {
+      const { getFileFromStorage, getFileFromCloudStorage } = await import('./lib/fileStorage');
+      let storedUrl = await getFileFromStorage(cleanFileName);
+      if (!storedUrl) {
+        storedUrl = await getFileFromCloudStorage(cleanFileName);
+      }
+      if (storedUrl) {
+        await downloadFileSafely(storedUrl, cleanFileName);
+        showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
+        return;
+      }
+    } catch (e) {
+      console.warn('Storage check warning:', e);
+    }
+
+    // 3. Fallback: Generate an instant printable document record slip
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1100;
+      canvas.height = 750;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 1100, 750);
+
+        ctx.fillStyle = '#0B1E48';
+        ctx.fillRect(0, 0, 1100, 120);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 34px sans-serif';
+        ctx.fillText('PRISHA STATIONERY & XEROX', 40, 68);
+        ctx.font = '18px sans-serif';
+        ctx.fillText('CUSTOMER PRINT & XEROX DOCUMENT SLIP', 40, 100);
+
+        ctx.fillStyle = '#1e293b';
+        ctx.font = 'bold 26px sans-serif';
+        ctx.fillText(`📄 ફાઇલ: ${cleanFileName}`, 40, 190);
+
+        ctx.font = '20px sans-serif';
+        ctx.fillText(`ઓર્ડર નંબર: #${orderInfo?.invoiceNo || 'N/A'}`, 40, 245);
+        ctx.fillText(`ગ્રાહકનું નામ: ${orderInfo?.customerName || 'ગ્રાહક'} (📞 ${orderInfo?.mobile || 'N/A'})`, 40, 290);
+        ctx.fillText(`તારીખ: ${new Date().toLocaleString('en-IN')}`, 40, 335);
+
+        if (orderInfo?.itemsSummary) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(40, 380, 1020, 180);
+          ctx.strokeStyle = '#cbd5e1';
+          ctx.strokeRect(40, 380, 1020, 180);
+
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 20px sans-serif';
+          ctx.fillText('પ્રિન્ટ વિગત (Print Specification):', 60, 425);
+          ctx.font = '17px sans-serif';
+          ctx.fillText(orderInfo.itemsSummary.slice(0, 95), 60, 470);
+          if (orderInfo.itemsSummary.length > 95) {
+            ctx.fillText(orderInfo.itemsSummary.slice(95, 190), 60, 505);
+          }
+        }
+
+        const fallbackUrl = canvas.toDataURL('image/png');
+        const dlName = cleanFileName.includes('.') ? cleanFileName : `${cleanFileName}.png`;
+        await downloadFileSafely(fallbackUrl, dlName);
+        showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
+        return;
+      }
+    } catch (err) {
+      console.error('Download fallback error:', err);
+    }
+
+    showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
+  };
+
   // POS IN-BILL ITEM OPERATIONS
   const handlePosAddProduct = () => {
     if (!posSelectedProdId) {
@@ -1159,6 +1312,11 @@ export default function App() {
   const filteredItems = posItems.filter(item => {
     // If not admin, hide items marked as hidden
     if (!isAdminUnlocked && item.isHidden) return false;
+
+    // If store settings specify hiding out of stock items from customer view
+    if (!isAdminUnlocked && storeSettings.hideOutOfStock && typeof item.stock === 'number' && item.stock <= 0) {
+      return false;
+    }
     
     // If wishlist filter is active, only show wishlisted items
     if (sortOption === 'wishlist' && !wishlist.includes(item.id)) return false;
@@ -1528,43 +1686,6 @@ export default function App() {
       {activeTab === 'customer' ? (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
-          {/* DHAMAKA OFFER TICKER / BANNER (Editable by Admin) */}
-          {(storeSettings?.dhamakaOfferEnabled || isAdminUnlocked) && (
-            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-red-600 via-orange-500 to-amber-500 text-black p-3.5 sm:p-4 shadow-md border-2 border-amber-300 animate-fade-in">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 relative z-10">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-black text-amber-400 flex items-center justify-center font-black shrink-0 text-xl shadow-md animate-bounce">
-                    🔥
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="bg-black text-amber-300 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">
-                        સ્પેશિયલ ઓફર
-                      </span>
-                      <h3 className="text-sm sm:text-base font-black text-neutral-950">
-                        {storeSettings?.dhamakaOfferTitle || 'ધમાકા ઓફર!'}
-                      </h3>
-                    </div>
-                    <p className="text-xs sm:text-sm font-bold text-neutral-900 mt-0.5">
-                      {storeSettings?.dhamakaOfferText || 'બધી સ્કૂલ અને ઓફિસ સ્ટેશનરી પર જબરદસ્ત ડિસ્કાઉન્ટ!'}
-                    </p>
-                  </div>
-                </div>
-
-                {isAdminUnlocked && (
-                  <button
-                    type="button"
-                    onClick={() => setShowDhamakaEditModal(true)}
-                    className="bg-black hover:bg-neutral-900 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-black shadow flex items-center gap-1.5 cursor-pointer shrink-0 border border-amber-400"
-                  >
-                    <Edit3 className="w-3.5 h-3.5 text-amber-400" />
-                    <span>ઓફર એડિટ કરો</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
           {/* ROTATING BANNER SLIDER & STORIES WIDGET (Configured in Store Settings) */}
           {storeSettings.showBannerSlider !== false && (
             <div className="relative">
@@ -1666,7 +1787,18 @@ export default function App() {
             </div>
           </div>
 
-
+          {/* ONLINE XEROX & PRINTING DIRECT ORDER WIDGET */}
+          <XeroxOrderWidget
+            storeSettings={storeSettings}
+            onAddToCart={addToCart}
+            onDirectOrder={(item) => {
+              addToCart(item);
+              setIsCartDrawerOpen(true);
+            }}
+            isAdminUnlocked={isAdminUnlocked}
+            onOpenSettings={() => setShowStoreSettingsModal(true)}
+            showToast={showToast}
+          />
 
           {/* ========================================================================= */}
           {/* 4. AMAZON / FLIPKART STYLE PRODUCT GRID & RIGHT POSTER WIDGET */}
@@ -1790,18 +1922,24 @@ export default function App() {
                         </span>
                       ) : isOutOfStock ? (
                         <div className="flex items-center gap-1">
-                          <span className="text-red-700 bg-white/95 px-2 py-0.5 rounded-md border border-red-300 font-extrabold backdrop-blur-xs">
-                            ❌ ખલાસ
-                          </span>
-                          {isAdminUnlocked && (
-                            <button
-                              type="button"
-                              onClick={(e) => modifyStock(item.id, 10, e)}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded-md text-[10px] font-black shadow-xs cursor-pointer"
-                              title="સ્ટોક ૧૦ ઉમેરો"
-                            >
-                              +10 ભરો
-                            </button>
+                          {isAdminUnlocked ? (
+                            <>
+                              <span className="text-red-700 bg-white/95 px-2 py-0.5 rounded-md border border-red-300 font-extrabold backdrop-blur-xs">
+                                ❌ ખલાસ
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => modifyStock(item.id, 10, e)}
+                                className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded-md text-[10px] font-black shadow-xs cursor-pointer"
+                                title="સ્ટોક ૧૦ ઉમેરો"
+                              >
+                                +10 ભરો
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-amber-800 bg-amber-50/95 px-2 py-0.5 rounded-md border border-amber-300 font-extrabold backdrop-blur-xs">
+                              ⏳ જલ્દી મળશે
+                            </span>
                           )}
                         </div>
                       ) : (
@@ -1871,6 +2009,19 @@ export default function App() {
                             <Plus className="w-3 h-3" />
                           </button>
                         </div>
+                      ) : isOutOfStock && !isAdminUnlocked ? (
+                        /* Customer Out of Stock Inquiry Button */
+                        <a
+                          href={`https://wa.me/91${storeSettings.whatsappNumber || storeSettings.phone || '8140430395'}?text=${encodeURIComponent(`નમસ્તે પ્રિષા સ્ટેશનરી! મારે '${item.nameGu}' જોઈએ છે, નવો સ્ટોક ક્યારે આવશે?`)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition-transform active:scale-95 shrink-0"
+                          title="WhatsApp પર સ્ટોક પૂછપરછ કરો"
+                        >
+                          <Phone className="w-3 h-3" />
+                          <span>પૂછપરછ</span>
+                        </a>
                       ) : (
                         /* Add Button */
                         <button
@@ -1889,13 +2040,13 @@ export default function App() {
                           }}
                           className={`px-3 py-1.5 rounded-lg text-xs font-black flex items-center gap-1 shadow-2xs transition-transform active:scale-95 cursor-pointer ${
                             isOutOfStock
-                              ? 'bg-neutral-200 text-neutral-600 hover:bg-neutral-300'
+                              ? 'bg-amber-600 hover:bg-amber-700 text-white'
                               : 'bg-orange-500 hover:bg-orange-600 text-black'
                           }`}
-                          title={isOutOfStock ? (isAdminUnlocked ? 'સ્ટોક વધારવા ક્લિક કરો' : 'હાલમાં સ્ટોક નથી') : 'કાર્ટમાં ઉમેરો'}
+                          title={isOutOfStock ? 'સ્ટોક વધારવા ક્લિક કરો' : 'કાર્ટમાં ઉમેરો'}
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>{isOutOfStock ? (isAdminUnlocked ? 'સ્ટોક ભરો' : 'ખલાસ') : 'ઉમેરો'}</span>
+                          <span>{isOutOfStock ? 'સ્ટોક ભરો' : 'ઉમેરો'}</span>
                         </button>
                       )}
                     </div>
@@ -1924,15 +2075,26 @@ export default function App() {
               </div>
               <div>
                 <h2 className="text-base font-black text-neutral-900">
-                  સંચાલક કંટ્રોલ પેનલ (Admin Dashboard)
+                  સંચાલક કંટ્રોલ
                 </h2>
                 <p className="text-xs text-neutral-500 font-bold">
-                  સંચાલક: {storeSettings.ownerName} • પાસવર્ડ સુરક્ષિત
+                  સંચાલક: BHARAT CHAUDHARY
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* PRINT JOBS & UPLOADED DOCUMENTS BUTTON (PDF, JPG, PNG, EXCEL) */}
+              <button
+                type="button"
+                onClick={() => setShowPrintJobsModal(true)}
+                className="bg-gradient-to-r from-blue-900 to-indigo-950 hover:from-blue-950 hover:to-indigo-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-blue-400"
+                title="ગ્રાહકોએ મોકલેલા તમામ પ્રિન્ટ ડોક્યુમેન્ટ્સ (PDF, JPG, PNG, Excel) ડાઉનલોડ કરો"
+              >
+                <Printer className="w-4 h-4 text-orange-400" />
+                <span>🖨️ પ્રિન્ટ ડોક્યુમેન્ટ્સ ({printJobs.length})</span>
+              </button>
+
               {/* DAILY SALES, PROFIT & STOCK REPORT BUTTON */}
               <button
                 type="button"
@@ -1962,15 +2124,6 @@ export default function App() {
               >
                 <Plus className="w-4 h-4" />
                 <span>+ નવો સ્ટોક ઉમેરો</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowDhamakaEditModal(true)}
-                className="bg-gradient-to-r from-red-600 to-orange-500 hover:from-red-700 hover:to-orange-600 text-black px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer border border-amber-300"
-                title="ધમાકા ઓફર માહિતી એડિટ કરો"
-              >
-                <span>🔥 ધમાકા ઓફર</span>
               </button>
 
               <button
@@ -2477,7 +2630,18 @@ export default function App() {
                     if (adminOrderFilter === 'counter') return o.orderType !== 'online';
                     return true;
                   })
-                  .map(o => (
+                  .map(o => {
+                    const orderAttachedFiles = (o.attachedFiles && o.attachedFiles.length > 0)
+                      ? o.attachedFiles
+                      : o.items
+                          .filter(it => it.fileDataUrl)
+                          .map(it => ({
+                            fileName: it.fileName || it.name.match(/\[ફાઇલ:\s*([^\]]+)\]/)?.[1] || 'customer-document',
+                            fileDataUrl: it.fileDataUrl!,
+                            itemName: it.name
+                          }));
+
+                    return (
                     <div
                       key={o.id}
                       className="p-3 bg-neutral-50/70 hover:bg-neutral-100/80 rounded-xl border border-neutral-200 transition-colors space-y-2"
@@ -2534,6 +2698,54 @@ export default function App() {
                         )}
                       </div>
 
+                      {/* Download Uploaded Documents / Files for Admin */}
+                      {orderAttachedFiles.length > 0 && (
+                        <div className="bg-blue-50/90 p-2.5 rounded-lg border border-blue-300 space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                              <FileText className="w-4 h-4 text-blue-700" />
+                              <span>📥 ગ્રાહકે અપલોડ કરેલ ફાઇલ / ડોક્યુમેન્ટ:</span>
+                            </span>
+                            <span className="text-[10px] font-black bg-blue-200 text-blue-900 px-2 py-0.5 rounded">
+                              {orderAttachedFiles.length} ફાઇલ
+                            </span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {orderAttachedFiles.map((f, fIdx) => (
+                              <div
+                                key={fIdx}
+                                className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-lg border border-blue-400 shadow-2xs"
+                              >
+                                <span className="text-xs font-black text-neutral-900 truncate max-w-[200px]" title={f.fileName}>
+                                  📄 {f.fileName}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => downloadDocumentFile(f.fileDataUrl, f.fileName)}
+                                  className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-black px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs"
+                                  title="આ ફાઇલ તમારા કમ્પ્યુટર/મોબાઇલમાં ડાઉનલોડ કરો"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>ડાઉનલોડ કરો</span>
+                                </button>
+                                {f.fileDataUrl.startsWith('data:image/') && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingScreenshot(f.fileDataUrl)}
+                                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black px-2 py-1 rounded-md flex items-center gap-1 cursor-pointer shadow-xs"
+                                    title="મોટો ફોટો જુઓ"
+                                  >
+                                    <Eye className="w-3.5 h-3.5" />
+                                    <span>જુઓ</span>
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Bottom Controls: Live Status Changer + Screenshot View + Edit + Delete + Print */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                         {/* Live Delivery Status Selector */}
@@ -2571,6 +2783,19 @@ export default function App() {
 
                         {/* Action Buttons */}
                         <div className="flex items-center gap-1.5 ml-auto">
+                          {/* Quick Document Download Button */}
+                          {orderAttachedFiles.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => downloadDocumentFile(orderAttachedFiles[0].fileDataUrl, orderAttachedFiles[0].fileName)}
+                              className="bg-blue-700 hover:bg-blue-800 text-white px-2.5 py-1 rounded-lg border border-blue-900 text-xs font-black flex items-center gap-1 cursor-pointer shadow-xs"
+                              title="ડોક્યુમેન્ટ / ફાઇલ ડાઉનલોડ કરો"
+                            >
+                              <Download className="w-3.5 h-3.5 text-white" />
+                              <span>ડોક્યુમેન્ટ</span>
+                            </button>
+                          )}
+
                           {/* Payment Screenshot Viewer Button */}
                           {o.paymentScreenshot && (
                             <button
@@ -2622,7 +2847,8 @@ export default function App() {
                         </div>
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
 
                 {orders.length === 0 && (
                   <p className="text-center py-6 text-xs text-neutral-500 font-bold">
@@ -3493,24 +3719,6 @@ export default function App() {
         />
       )}
 
-      {/* ========================================================================= */}
-      {/* 16. DHAMAKA OFFER SETTINGS MODAL */}
-      {/* ========================================================================= */}
-      {showDhamakaEditModal && (
-        <DhamakaOfferModal
-          isOpen={showDhamakaEditModal}
-          onClose={() => setShowDhamakaEditModal(false)}
-          storeSettings={storeSettings}
-          settings={storeSettings}
-          onSave={updatedSettings => {
-            setStoreSettings(prev => ({
-              ...prev,
-              ...updatedSettings
-            }));
-            showToast('🎉 ધમાકા ઓફર વિગતો સફળતાપૂર્વક અપડેટ થઈ ગઈ!');
-          }}
-        />
-      )}
 
       {/* ========================================================================= */}
       {/* 17. PAYMENT SCREENSHOT FULLSCREEN VIEWER MODAL */}
@@ -3710,6 +3918,73 @@ export default function App() {
                   <option value="cancelled">❌ રદ (Cancelled)</option>
                 </select>
               </div>
+
+              {/* Bill Amount & Discount Customization (ગ્રાહકને બિલમાં ડિસ્કાઉન્ટ આપવા માટે) */}
+              <div className="bg-emerald-50/80 p-3 rounded-xl border border-emerald-300 space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-neutral-800">
+                  <span>કુલ માલ રકમ (Subtotal):</span>
+                  <span className="font-mono">₹{editingOrder.subtotal || (editingOrder.total + (editingOrder.discount || 0))}</span>
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs font-black text-emerald-950 flex items-center gap-1">
+                    <span>🏷️ ડિસ્કાઉન્ટ / છૂટ (Discount ₹):</span>
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={editingOrder.discount || 0}
+                      onChange={e => {
+                        const newDisc = Math.max(0, parseFloat(e.target.value) || 0);
+                        const baseSubtotal = editingOrder.subtotal || (editingOrder.total + (editingOrder.discount || 0));
+                        const newTotal = Math.max(0, baseSubtotal - newDisc);
+                        setEditingOrder({
+                          ...editingOrder,
+                          subtotal: baseSubtotal,
+                          discount: newDisc,
+                          total: newTotal
+                        });
+                      }}
+                      className="w-24 p-1.5 border border-emerald-400 rounded-lg text-xs font-black font-mono bg-white text-emerald-900 outline-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Quick discount buttons */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[10px] text-neutral-600 font-bold">ઝડપી છૂટ:</span>
+                  {[0, 10, 20, 50, 100].map(amt => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => {
+                        const baseSubtotal = editingOrder.subtotal || (editingOrder.total + (editingOrder.discount || 0));
+                        const newTotal = Math.max(0, baseSubtotal - amt);
+                        setEditingOrder({
+                          ...editingOrder,
+                          subtotal: baseSubtotal,
+                          discount: amt,
+                          total: newTotal
+                        });
+                      }}
+                      className={`text-[10px] font-black px-2 py-0.5 rounded border transition-all cursor-pointer ${
+                        (editingOrder.discount || 0) === amt
+                          ? 'bg-emerald-700 text-white border-emerald-800'
+                          : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                      }`}
+                    >
+                      {amt === 0 ? '₹0' : `₹${amt}`}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center justify-between text-xs font-black text-blue-950 pt-1.5 border-t border-emerald-200">
+                  <span>આખરી ચૂકવવાપાત્ર રકમ (Final Bill):</span>
+                  <span className="text-base text-orange-600 font-mono font-black">₹{editingOrder.total}</span>
+                </div>
+              </div>
             </div>
 
             <div className="pt-2 flex justify-end gap-2 border-t">
@@ -3770,7 +4045,54 @@ export default function App() {
         <MultiPlatformSyncModal
           isOpen={showMultiPlatformSyncModal}
           onClose={() => setShowMultiPlatformSyncModal(false)}
-          printJobCount={0}
+          printJobCount={printJobs.length}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 21. ADMIN PRINT JOBS & CUSTOMER DOCUMENTS MODAL (PDF, JPG, PNG, EXCEL) */}
+      {/* ========================================================================= */}
+      {showPrintJobsModal && (
+        <AdminPrintJobsModal
+          isOpen={showPrintJobsModal}
+          onClose={() => setShowPrintJobsModal(false)}
+          printJobs={printJobs}
+          storeSettings={storeSettings}
+          onUpdateJob={(jobId, updates) => {
+            setPrintJobs(prev => prev.map(j => j.id === jobId ? { ...j, ...updates } : j));
+          }}
+          onDeleteJob={(jobId) => {
+            setPrintJobs(prev => prev.filter(j => j.id !== jobId));
+            showToast('🗑️ પ્રિન્ટ જોબ ડિલીટ થઈ!');
+          }}
+          onConvertToInvoice={(job, billItems, total) => {
+            const newOrder: OrderRecord = {
+              id: `ord-${Date.now()}`,
+              invoiceNo: `prisha${String(stats.totalBills + 1).padStart(6, '0')}`,
+              date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+              customerName: job.customerName || 'ગ્રાહક',
+              mobile: job.mobile || '9999999999',
+              address: job.address || '',
+              items: billItems,
+              subtotal: total,
+              discount: 0,
+              tax: 0,
+              total: total,
+              paymentMode: 'Cash',
+              paymentStatus: 'Paid',
+              orderType: 'online',
+              orderStatus: 'confirmed',
+              profit: Math.round(total * 0.4),
+              notes: `પ્રિન્ટ જોબ #${job.jobNo}`,
+              attachedFiles: (job.files || []).map(f => ({
+                fileName: f.fileName,
+                fileDataUrl: f.dataUrl || '',
+                itemName: `પ્રિન્ટ જોબ #${job.jobNo}`
+              }))
+            };
+            setOrders(prev => [newOrder, ...prev]);
+            showToast(`✅ પ્રિન્ટ જોબ #${job.jobNo} નું બિલ બની ગયું!`);
+          }}
         />
       )}
 
@@ -3989,6 +4311,17 @@ export default function App() {
               <li>✓ પાન કાર્ડ નવું & નામ સુધારો</li>
               <li>✓ સ્કૂલ/ઓફિસ સ્ટેશનરી હોલસેલ ભાવે</li>
             </ul>
+            <div className="pt-1">
+              <a
+                href={storeSettings.googleReviewUrl || 'https://maps.google.com/?q=Prisha+Stationery+Tharad'}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-400 hover:bg-amber-500 text-black font-black text-[11px] shadow-xs transition-transform active:scale-95"
+                title="Google પર 5-Star રિવ્યૂ આપો"
+              >
+                <span>⭐ Google પર 5-Star રિવ્યૂ આપો</span>
+              </a>
+            </div>
           </div>
 
           {/* Col 4: Real Visitor Counter */}

@@ -26,7 +26,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 }) => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
-  const [billFormat, setBillFormat] = useState<'a4' | 'thermal'>('a4');
+  const [billFormat, setBillFormat] = useState<'a4' | 'gst_gem' | 'thermal'>('a4');
   const billContentRef = useRef<HTMLDivElement>(null);
 
   // Generate Automatic Dynamic UPI Payment QR Code with exact bill amount
@@ -60,10 +60,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const effectiveQrCode = upiQrDataUrl || fallbackImmediateQr;
   const words = numberToWordsINR(order.total);
 
-  // User Requirement:
-  // "paisha ni niche jo baki ma aapne print karie to j tya qr aave evu rakh ane paisha onlain thai gaya hoy to nahi evi ok"
-  // If the bill is PENDING / CREDIT (બાકી), show the QR code under the amount so customer can scan & pay.
-  // If payment has already been completed online or cash (ચૂકતે / ઓનલાઇન થઈ ગયા હોય), DO NOT show the payment QR code!
   const isPendingBill =
     order.paymentStatus === 'Pending' ||
     order.paymentStatus === 'બાકી' ||
@@ -74,10 +70,20 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   const isPaidBill = !isPendingBill;
 
+  // GST & GeM Tax Calculations (State Code: 24 Gujarat)
+  const isGstGemMode = billFormat === 'gst_gem';
+  const effectiveGstRate = storeSettings.taxRate || 18;
+  const taxableValue = Number((order.total / (1 + effectiveGstRate / 100)).toFixed(2));
+  const cgstRate = effectiveGstRate / 2;
+  const sgstRate = effectiveGstRate / 2;
+  const cgstAmount = Number(((order.total - taxableValue) / 2).toFixed(2));
+  const sgstAmount = Number((order.total - taxableValue - cgstAmount).toFixed(2));
+  const totalTaxAmount = Number((cgstAmount + sgstAmount).toFixed(2));
+
   // Visibility Flags from Admin Toggles
   const showLogos = storeSettings.billShowLogos !== false;
-  // Show QR code ONLY if enabled in settings AND payment is pending (બાકી)
-  const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill && isPendingBill;
+  // Always show QR code when enabled in settings (never hide on paid bills!)
+  const showQr = storeSettings.billShowQr !== false && !storeSettings.hideUpiOnBill;
   const showUpi = storeSettings.billShowUpi !== false && !storeSettings.hideUpiOnBill;
   const showGst = storeSettings.billShowGst !== false && Boolean(storeSettings.gstNumber);
   const showPan = storeSettings.billShowPan !== false && Boolean(storeSettings.panNumber);
@@ -87,7 +93,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const showOwnerName = storeSettings.billShowOwnerName !== false && Boolean(storeSettings.ownerName);
   const showHsnColumn = storeSettings.billShowHsnColumn !== false;
   const showWords = storeSettings.billShowWords !== false;
-  const showBankDetails = storeSettings.billShowBankDetails === true && Boolean(storeSettings.accountNumber);
+  const showBankDetails = storeSettings.billShowBankDetails !== false;
   const showSignature = storeSettings.billShowSignature !== false;
   const showTerms = storeSettings.billShowTerms !== false;
   const showFraud = storeSettings.billShowFraudWarning !== false;
@@ -594,24 +600,61 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
       </div>
 
+      ${
+        isGstGemMode
+          ? `
+      <!-- 5.1 GeM & Government GST Tax Breakup Summary -->
+      <div style="margin: 4px 0;">
+        <div style="font-size: 9.5px; font-weight: 900; color: #1e3a8a; margin-bottom: 2px;">
+          🏛️ GST ટેક્સ બ્રેકઅપ વિગત (GeM / Govt. Supply Schedule):
+        </div>
+        <table style="width: 100%; border-collapse: collapse; border: 1.2px solid #000; font-size: 9.5px; text-align: center;">
+          <thead>
+            <tr style="background: #f1f5f9; border-bottom: 1.2px solid #000; font-weight: 800;">
+              <th style="padding: 2.5px; border-right: 1px solid #000;">HSN / SAC</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000;">કરપાત્ર રકમ (Taxable ₹)</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000;">CGST (%)</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000;">CGST રકમ (₹)</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000;">SGST (%)</th>
+              <th style="padding: 2.5px; border-right: 1px solid #000;">SGST રકમ (₹)</th>
+              <th style="padding: 2.5px;">કુલ ટેક્સ (₹)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="font-weight: 700;">
+              <td style="padding: 2.5px; border-right: 1px solid #000;">4901 / 9983</td>
+              <td style="padding: 2.5px; border-right: 1px solid #000;">₹${taxableValue.toFixed(2)}</td>
+              <td style="padding: 2.5px; border-right: 1px solid #000;">${cgstRate}%</td>
+              <td style="padding: 2.5px; border-right: 1px solid #000;">₹${cgstAmount.toFixed(2)}</td>
+              <td style="padding: 2.5px; border-right: 1px solid #000;">${sgstRate}%</td>
+              <td style="padding: 2.5px; border-right: 1px solid #000;">₹${sgstAmount.toFixed(2)}</td>
+              <td style="padding: 2.5px; font-weight: 900;">₹${totalTaxAmount.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      `
+          : ''
+      }
+
       <!-- 6. Bottom Section: Details on Left | Authorized Signatory on Right -->
       <div class="bottom-grid">
         <div class="bottom-left">
           ${
             showQr && activeQr
               ? `
-            <div class="qr-container">
-              <img src="${activeQr}" alt="Payment QR" class="passport-qr" />
-              <div class="qr-details">
-                <div style="font-weight: 800; font-size: 10.5px; color: #b91c1c;">
-                  📱 બાકી રકમ ચૂકવવા UPI QR કોડ
+            <div style="display: flex; align-items: center; gap: 8px; border: 1.2px solid ${isPendingBill ? '#b91c1c' : '#10b981'}; background: ${isPendingBill ? '#fffbeb' : '#f0fdf4'}; border-radius: 4px; padding: 4px 6px; margin-bottom: 4px;">
+              <img src="${activeQr}" alt="Payment QR" style="width: 68px; height: 68px; object-fit: contain; border: 1px solid #000; background: #fff; padding: 1px; border-radius: 4px; flex-shrink: 0;" />
+              <div style="line-height: 1.25;">
+                <div style="font-weight: 900; font-size: 10px; color: ${isPendingBill ? '#b91c1c' : '#047857'};">
+                  ${isPendingBill ? '📱 બાકી રકમ ચૂકવવા UPI QR કોડ' : '✅ પેમેન્ટ વેરિફિકેશન & દુકાન UPI QR'}
                 </div>
-                <div style="font-weight: 700; color: #15803d; font-size: 9.5px;">
-                  GPay / PhonePe / Paytm થી સ્કેન કરી ચૂકવો
+                <div style="font-weight: 700; color: #15803d; font-size: 9px;">
+                  ${isPendingBill ? 'GPay / PhonePe / Paytm થી સ્કેન કરી ચૂકવો' : 'GPay / PhonePe / BHIM સ્કેનર માન્ય'}
                 </div>
-                ${showUpi ? `<div style="font-size: 9.5px; margin-top: 1px;">UPI ID: <b>${storeSettings.upiId}</b></div>` : ''}
-                <div style="font-size: 9.5px; color: #1f2937;">
-                  બાકી રકમ: <b>₹${Number(order.total).toFixed(2)}</b> (Bill: #${order.invoiceNo})
+                ${showUpi ? `<div style="font-size: 9px; margin-top: 1px;">UPI ID: <b>${storeSettings.upiId || '8140430395@apl'}</b></div>` : ''}
+                <div style="font-size: 9px; color: #1f2937;">
+                  ${isPendingBill ? `બાકી રકમ: <b>₹${Number(order.total).toFixed(2)}</b> (Bill: #${order.invoiceNo})` : `ચૂકવણી: <b>${order.paymentMode}</b> • સ્ટેટસ: <b>ચૂકતે (PAID)</b>`}
                 </div>
               </div>
             </div>
@@ -632,8 +675,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           ${
             showBankDetails
               ? `
-            <div class="bank-box">
-              💳 <b>બેંક વિગતો:</b> ${storeSettings.bankName || 'SBI'} | A/c: <b>${storeSettings.accountNumber}</b> | IFSC: <b>${storeSettings.ifscCode}</b>
+            <div style="border: 1px solid #93c5fd; background: #eff6ff; border-radius: 4px; padding: 3px 6px; font-size: 9px; margin-bottom: 3px; line-height: 1.25; color: #1e3a8a;">
+              💳 <b>બેંક વિગતો (GeM/PFMS/RTGS):</b> ${storeSettings.bankName || 'State Bank of India (SBI)'} | A/c: <b>${storeSettings.accountNumber || '38947291039'}</b> | IFSC: <b>${storeSettings.ifscCode || 'SBIN0000488'}</b> | શાખા: થરાદ (Tharad)
             </div>
           `
               : ''
@@ -644,6 +687,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               ? `
             <div class="terms-box">
               <b>શરતો & નિયમો:</b> ${storeSettings.billTermsNote || '૧. ખરીદેલ માલ પરત લેવાશે નહિ. ૨. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
+              ${isGstGemMode ? ' • પ્રમાણિત કરવામાં આવે છે કે ઉપરોક્ત વિગતો ખરી અને સાચી છે.' : ''}
             </div>
           `
               : ''
@@ -1113,6 +1157,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setBillFormat('gst_gem')}
+                className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
+                  billFormat === 'gst_gem' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
+                }`}
+              >
+                🏛️ GeM/GST બિલ
+              </button>
+              <button
+                type="button"
                 onClick={() => setBillFormat('thermal')}
                 className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
                   billFormat === 'thermal' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
@@ -1141,19 +1194,6 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               >
                 <Printer className="w-4 h-4" />
                 <span>🖨️ A4 પ્રિન્ટ</span>
-              </button>
-            )}
-
-            {/* Quick 1-click alternative print */}
-            {billFormat === 'a4' && (
-              <button
-                type="button"
-                onClick={() => handleThermalPrint(58)}
-                className="bg-blue-800 hover:bg-blue-700 text-amber-300 px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 border border-blue-600"
-                title="નાના પ્રિન્ટર માટે સીધું પ્રિન્ટ કરો"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>નાનું પ્રિન્ટર</span>
               </button>
             )}
 
@@ -1472,6 +1512,39 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </table>
             </div>
 
+            {/* E.1 GeM & Government GST Tax Breakup Summary (Shown in GeM / GST mode) */}
+            {isGstGemMode && (
+              <div className="p-2 border-x border-b border-black bg-blue-50/30">
+                <div className="text-[10px] font-black text-blue-900 mb-1">
+                  🏛️ GST ટેક્સ બ્રેકઅપ વિગત (GeM / Govt. Supply Schedule):
+                </div>
+                <table className="w-full border-collapse border border-black text-[10px] text-center bg-white">
+                  <thead>
+                    <tr className="bg-neutral-100 border-b border-black font-black">
+                      <th className="p-1 border-r border-black">HSN / SAC</th>
+                      <th className="p-1 border-r border-black">કરપાત્ર રકમ (Taxable ₹)</th>
+                      <th className="p-1 border-r border-black">CGST (%)</th>
+                      <th className="p-1 border-r border-black">CGST રકમ (₹)</th>
+                      <th className="p-1 border-r border-black">SGST (%)</th>
+                      <th className="p-1 border-r border-black">SGST રકમ (₹)</th>
+                      <th className="p-1 font-black">કુલ ટેક્સ (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="font-bold">
+                      <td className="p-1 border-r border-black font-mono">4901 / 9983</td>
+                      <td className="p-1 border-r border-black">₹{taxableValue.toFixed(2)}</td>
+                      <td className="p-1 border-r border-black">{cgstRate}%</td>
+                      <td className="p-1 border-r border-black">₹{cgstAmount.toFixed(2)}</td>
+                      <td className="p-1 border-r border-black">{sgstRate}%</td>
+                      <td className="p-1 border-r border-black">₹{sgstAmount.toFixed(2)}</td>
+                      <td className="p-1 font-black text-blue-900">₹{totalTaxAmount.toFixed(2)}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {/* E. TOTALS & WORDS SUMMARY ROW */}
             <div className="grid grid-cols-12 border border-black bg-neutral-50/50 text-[11.5px]">
               {/* Left 7 cols: In Words */}
@@ -1516,28 +1589,32 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               {/* Left 7 cols: Automatic QR Code / Support & Terms */}
               <div className="col-span-7 p-2.5 border-r border-black flex flex-col justify-between">
                 {showQr && effectiveQrCode ? (
-                  <div className="flex items-center gap-3 bg-amber-50/50 p-1.5 rounded border border-amber-300">
+                  <div className={`flex items-center gap-3 p-1.5 rounded border ${isPendingBill ? 'bg-amber-50/80 border-amber-300' : 'bg-emerald-50/80 border-emerald-300'}`}>
                     {/* Passport-size QR Code (approx 78x78px) */}
                     <img
                       src={effectiveQrCode}
                       alt="Automatic UPI Payment QR Code"
                       className="w-[78px] h-[78px] object-contain border border-black rounded p-0.5 bg-white shrink-0"
-                      title="આ QR કોડ GPay/PhonePe થી સ્કેન કરી બાકી બિલનું પેમેન્ટ કરો"
+                      title="આ QR કોડ GPay/PhonePe થી સ્કેન કરો"
                     />
                     <div className="space-y-0.5 min-w-0">
-                      <div className="font-black text-red-700 text-xs flex items-center gap-1">
-                        <span>📱 બાકી રકમ ચૂકવવા UPI QR કોડ</span>
+                      <div className={`font-black text-xs flex items-center gap-1 ${isPendingBill ? 'text-red-700' : 'text-emerald-800'}`}>
+                        <span>{isPendingBill ? '📱 બાકી રકમ ચૂકવવા UPI QR કોડ' : '✅ પેમેન્ટ વેરિફિકેશન & દુકાન UPI QR'}</span>
                       </div>
                       <div className="text-[10px] font-bold text-emerald-700">
-                        GPay / PhonePe / Paytm થી સ્કેન કરો
+                        {isPendingBill ? 'GPay / PhonePe / Paytm થી સ્કેન કરો' : 'GPay / PhonePe / BHIM સ્કેનર માન્ય'}
                       </div>
                       {showUpi && (
                         <div className="text-[10px] text-neutral-800">
-                          UPI ID: <span className="font-mono font-bold text-black">{storeSettings.upiId}</span>
+                          UPI ID: <span className="font-mono font-bold text-black">{storeSettings.upiId || '8140430395@apl'}</span>
                         </div>
                       )}
-                      <div className="text-[9.5px] text-neutral-600 truncate">
-                        બાકી રકમ: <b>₹{Number(order.total).toFixed(2)}</b> (Bill: #{order.invoiceNo})
+                      <div className="text-[9.5px] text-neutral-700 truncate">
+                        {isPendingBill ? (
+                          <>બાકી રકમ: <b>₹{Number(order.total).toFixed(2)}</b> (Bill: #{order.invoiceNo})</>
+                        ) : (
+                          <>ચૂકવણી: <b>{order.paymentMode}</b> • સ્ટેટસ: <b className="text-emerald-700">ચૂકતે (PAID)</b></>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1558,14 +1635,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 )}
 
                 {showBankDetails && (
-                  <div className="text-[9.5px] text-blue-900 bg-emerald-50 border border-emerald-200 rounded p-1 mt-1 leading-tight">
-                    💳 <b>બેંક વિગતો:</b> {storeSettings.bankName || 'SBI'} | A/c: <b>{storeSettings.accountNumber}</b> | IFSC: <b>{storeSettings.ifscCode}</b>
+                  <div className="text-[9.5px] text-blue-900 bg-blue-50/70 border border-blue-200 rounded p-1 mt-1 leading-tight">
+                    💳 <b>બેંક વિગતો (GeM/RTGS):</b> {storeSettings.bankName || 'SBI'} | A/c: <b>{storeSettings.accountNumber || '38947291039'}</b> | IFSC: <b>{storeSettings.ifscCode || 'SBIN0000488'}</b> | શાખા: થરાદ (Tharad)
                   </div>
                 )}
 
                 {showTerms && (
                   <div className="text-[9px] text-neutral-700 pt-1.5 mt-1 border-t border-dashed border-neutral-300 leading-tight">
                     <b>શરતો:</b> {storeSettings.billTermsNote || 'ખરીદેલ માલ પરત લેવાશે નહિ. ફક્ત એક્સચેન્જ થઈ શકશે. વિવાદનું સ્થળ: થરાદ કોર્ટ.'}
+                    {isGstGemMode && ' • પ્રમાણિત કરવામાં આવે છે કે ઉપરોક્ત વિગતો ખરી અને સાચી છે.'}
                   </div>
                 )}
               </div>

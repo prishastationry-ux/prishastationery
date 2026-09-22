@@ -16,7 +16,8 @@ import {
   Check,
   Film,
   Newspaper,
-  Crop
+  Crop,
+  Printer
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { compressAndResizeImage } from '../lib/invoiceUtils';
@@ -77,10 +78,16 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
         date: 'આજે',
         active: true
       }
-    ]
+    ],
+    xeroxBwSingleRate: settings.xeroxBwSingleRate ?? 2,
+    xeroxBwDoubleRate: settings.xeroxBwDoubleRate ?? 3,
+    xeroxColorSingleRate: settings.xeroxColorSingleRate ?? 10,
+    xeroxColorDoubleRate: settings.xeroxColorDoubleRate ?? 15,
+    xeroxLaminationRate: settings.xeroxLaminationRate ?? 20,
+    googleReviewUrl: settings.googleReviewUrl || 'https://maps.google.com/?q=Prisha+Stationery+Tharad'
   });
 
-  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'banners' | 'stories' | 'posters' | 'news'>('store_info');
+  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'xerox' | 'banners' | 'stories' | 'posters' | 'news'>('store_info');
   const [newSlideTitle, setNewSlideTitle] = useState<string>('');
   const [newSlideSubtitle, setNewSlideSubtitle] = useState<string>('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState<string>('');
@@ -281,6 +288,19 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
           >
             <Sliders className="w-3.5 h-3.5 text-emerald-400" />
             <span>દુકાન પાવર સેટિંગ્સ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('xerox')}
+            className={`px-3.5 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'xerox'
+                ? 'bg-[#0B1E48] text-white shadow-xs'
+                : 'bg-white text-neutral-700 hover:bg-neutral-200 border border-neutral-300'
+            }`}
+          >
+            <Printer className="w-3.5 h-3.5 text-amber-400" />
+            <span>🖨️ ઝેરોક્ષ / પ્રિન્ટિંગ ભાવ</span>
           </button>
 
           <button
@@ -720,6 +740,215 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                       </button>
                     ))}
                   </div>
+                </div>
+
+                {/* Out of Stock Visibility Toggle */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-2 col-span-full">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-neutral-900 font-black text-xs">
+                        🚫 સ્ટોક ૦ (ખલાસ) હોય તેવી પ્રોડક્ટ્સ ગ્રાહકથી છુપાવવી:
+                      </label>
+                      <p className="text-[11px] text-neutral-500 font-bold">
+                        જો ચાલુ કરશો તો જે વસ્તુનો સ્ટોક ૦ હશે તે ગ્રાહકને દેખાશે નહીં. બંધ હશે તો &quot;જલ્દી મળશે / પૂછપરછ&quot; દેખાશે.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={formData.hideOutOfStock ?? false}
+                        onChange={e => setFormData({ ...formData, hideOutOfStock: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: XEROX & PRINTING PRICING */}
+          {activeTab === 'xerox' && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200">
+                <h3 className="font-black text-amber-950 text-sm mb-1 flex items-center gap-1.5">
+                  <Printer className="w-4 h-4 text-orange-600" />
+                  <span>🖨️ ઓનલાઇન ઝેરોક્ષ અને પ્રિન્ટિંગ પ્રતિ પેજ ભાવ સેટિંગ્સ</span>
+                </h3>
+                <p className="text-neutral-600 font-bold text-[11px]">
+                  તમે અહીં જે પ્રતિ પેજ ભાવ સેટ કરશો, તે ગ્રાહક ફાઇલ અપલોડ કરીને પેજ નાખશે ત્યારે લાઈવ ઓટોમેટિક ગણાઈ જશે.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-bold">
+                {/* 1. B/W Single Side */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-1.5">
+                  <label className="block text-neutral-900 font-black text-xs">
+                    ⬛ બ્લેક & વ્હાઇટ - ૧ બાજુ (Single Sided Rate):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={formData.xeroxBwSingleRate ?? 2}
+                      onChange={e => setFormData({ ...formData, xeroxBwSingleRate: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-sm font-black px-3 py-2 rounded-xl border border-neutral-300 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-hidden bg-neutral-50 font-mono"
+                    />
+                    <span className="text-xs text-neutral-500 font-bold whitespace-nowrap">/ પેજ</span>
+                  </div>
+                </div>
+
+                {/* 2. B/W Double Side */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-1.5">
+                  <label className="block text-neutral-900 font-black text-xs">
+                    ⬛ બ્લેક & વ્હાઇટ - ૨ બાજુ (Double Sided Rate):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.5"
+                      value={formData.xeroxBwDoubleRate ?? 3}
+                      onChange={e => setFormData({ ...formData, xeroxBwDoubleRate: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-sm font-black px-3 py-2 rounded-xl border border-neutral-300 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-hidden bg-neutral-50 font-mono"
+                    />
+                    <span className="text-xs text-neutral-500 font-bold whitespace-nowrap">/ પેજ</span>
+                  </div>
+                </div>
+
+                {/* 3. Colour Single Side */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-1.5">
+                  <label className="block text-neutral-900 font-black text-xs">
+                    🌈 કલર પ્રિન્ટ - ૧ બાજુ (Colour Single Rate):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.xeroxColorSingleRate ?? 10}
+                      onChange={e => setFormData({ ...formData, xeroxColorSingleRate: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-sm font-black px-3 py-2 rounded-xl border border-neutral-300 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-hidden bg-neutral-50 font-mono"
+                    />
+                    <span className="text-xs text-neutral-500 font-bold whitespace-nowrap">/ પેજ</span>
+                  </div>
+                </div>
+
+                {/* 4. Colour Double Side */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-1.5">
+                  <label className="block text-neutral-900 font-black text-xs">
+                    🌈 કલર પ્રિન્ટ - ૨ બાજુ (Colour Double Rate):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.xeroxColorDoubleRate ?? 15}
+                      onChange={e => setFormData({ ...formData, xeroxColorDoubleRate: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-sm font-black px-3 py-2 rounded-xl border border-neutral-300 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-hidden bg-neutral-50 font-mono"
+                    />
+                    <span className="text-xs text-neutral-500 font-bold whitespace-nowrap">/ પેજ</span>
+                  </div>
+                </div>
+
+                {/* 5. Lamination Rate */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-1.5">
+                  <label className="block text-neutral-900 font-black text-xs">
+                    📑 લેમિનેશન પ્રતિ પેજ (Lamination Rate):
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.xeroxLaminationRate ?? 20}
+                      onChange={e => setFormData({ ...formData, xeroxLaminationRate: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-sm font-black px-3 py-2 rounded-xl border border-neutral-300 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-hidden bg-neutral-50 font-mono"
+                    />
+                    <span className="text-xs text-neutral-500 font-bold whitespace-nowrap">/ પેજ</span>
+                  </div>
+                </div>
+
+                {/* 6. PVC Smart Card Rate (ગ્રાહક માટે ₹100) */}
+                <div className="bg-white p-3.5 rounded-xl border-2 border-purple-300 bg-purple-50/30 space-y-1.5">
+                  <label className="block text-purple-950 font-black text-xs flex items-center justify-between">
+                    <span>💳 PVC સ્માર્ટ કાર્ડ પ્રિન્ટિંગ (આધાર, પાન, આયુષ્માન):</span>
+                    <span className="text-[10px] bg-purple-200 text-purple-800 px-1.5 py-0.5 rounded font-black">નવું</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="5"
+                      value={formData.pvcCardRate ?? 100}
+                      onChange={e => setFormData({ ...formData, pvcCardRate: parseFloat(e.target.value) || 0 })}
+                      className="w-full text-sm font-black px-3 py-2 rounded-xl border border-purple-300 focus:border-purple-600 outline-hidden bg-white font-mono"
+                    />
+                    <span className="text-xs text-purple-900 font-bold whitespace-nowrap">/ કાર્ડ</span>
+                  </div>
+                  <p className="text-[10px] text-purple-700 font-medium">
+                    ગ્રાહક માટે સામાન્ય ભાવ ₹100 રાખેલ છે. જરૂર મુજબ તમે બદલી શકો છો.
+                  </p>
+                </div>
+
+                {/* 7. Call Letter / Hall Ticket Rate (નવરાત્રી ફ્રી ઑફર) */}
+                <div className="bg-white p-3.5 rounded-xl border-2 border-emerald-300 bg-emerald-50/30 space-y-2">
+                  <label className="block text-emerald-950 font-black text-xs flex items-center justify-between">
+                    <span>🎫 કોલ લેટર / હોલ ટિકિટ પ્રિન્ટિંગ ભાવ:</span>
+                    <span className="text-[10px] bg-emerald-200 text-emerald-800 px-1.5 py-0.5 rounded font-black">ઓફર</span>
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-black text-neutral-600">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.callLetterRate ?? 0}
+                      onChange={e => setFormData({ ...formData, callLetterRate: parseFloat(e.target.value) || 0 })}
+                      className="w-24 text-sm font-black px-3 py-2 rounded-xl border border-emerald-300 focus:border-emerald-600 outline-hidden bg-white font-mono"
+                    />
+                    <span className="text-xs text-emerald-900 font-bold whitespace-nowrap">
+                      {Number(formData.callLetterRate || 0) === 0 ? '✨ મફત / ફ્રી' : 'પ્રતિ પેજ'}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] text-emerald-900 font-bold mb-1">
+                      ઓફર મેસેજ / લખાણ (દા.ત. નવરાત્રી સ્પેશિયલ):
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.callLetterOfferText || 'નવરાત્રી સ્પેશિયલ: કોલ લેટર પ્રિન્ટ ફ્રી!'}
+                      onChange={e => setFormData({ ...formData, callLetterOfferText: e.target.value })}
+                      className="w-full text-xs font-bold px-3 py-1.5 rounded-lg border border-emerald-300 bg-white"
+                      placeholder="દા.ત. નવરાત્રી સ્પેશિયલ: કોલ લેટર પ્રિન્ટ ફ્રી!"
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Google Review URL */}
+                <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-1.5">
+                  <label className="block text-neutral-900 font-black text-xs">
+                    ⭐ ગૂગલ રિવ્યૂ લિંક (Google Maps Review Link):
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.googleReviewUrl || ''}
+                    onChange={e => setFormData({ ...formData, googleReviewUrl: e.target.value })}
+                    placeholder="https://maps.google.com/?q=Prisha+Stationery+Tharad"
+                    className="w-full text-xs font-bold px-3 py-2 rounded-xl border border-neutral-300 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 outline-hidden bg-neutral-50"
+                  />
+                  <p className="text-[10px] text-neutral-500 font-medium">
+                    ગ્રાહકો આ લિંક પર ક્લિક કરીને તમારી દુકાનને ૫-સ્ટાર રેટિંગ આપી શકશે.
+                  </p>
                 </div>
               </div>
             </div>
