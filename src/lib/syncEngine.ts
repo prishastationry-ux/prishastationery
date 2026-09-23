@@ -1,7 +1,7 @@
 import { PrintJobRecord, OrderRecord, ProductItem, StoreSettings } from '../types';
 import { SyncMutation, SyncPushPayload, SyncPushResponse, SyncPullResponse, ConflictRecord } from '../types/sync';
 import { db } from './firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { sanitizeForFirestore } from '../hooks/useFirebaseSync';
 
 const CLIENT_ID_KEY = 'prisha_device_client_id';
@@ -196,53 +196,70 @@ export async function pushOfflineSync(): Promise<SyncPushResponse> {
     console.warn('REST sync push failed, falling back to direct Firestore sync:', err);
   }
 
-  // Fallback: Direct Firestore batch processing
+  // Fallback: Direct Firestore atomic batch processing
   let processed = 0;
   let conflictsResolved = 0;
   const recordedConflicts: any[] = [];
 
   try {
+    // Group mutations by entity to minimize read/write operations
+    const entityMutationsMap = new Map<string, SyncMutation[]>();
     for (const m of mutations) {
-      if (m.entity === 'printJobs') {
-        const pjRef = doc(db, 'store_data', 'printJobs');
-        const snap = await getDoc(pjRef);
-        const currentList: PrintJobRecord[] = snap.exists() ? snap.data()?.data || [] : [];
-
-        const existingIdx = currentList.findIndex(j => j.id === m.id);
-        if (existingIdx >= 0) {
-          const { resolvedJob, wasConflict, reason } = resolvePrintJobConflict(currentList[existingIdx], m.data);
-          currentList[existingIdx] = resolvedJob;
-          if (wasConflict) {
-            conflictsResolved++;
-            recordedConflicts.push({
-              entityId: m.id,
-              entity: 'printJobs',
-              reason,
-              resolution: 'merged',
-              finalData: resolvedJob
-            });
-          }
-        } else {
-          currentList.unshift(m.data);
-        }
-
-        await setDoc(pjRef, { data: sanitizeForFirestore(currentList) });
-        processed++;
-      } else if (m.entity === 'products') {
-        const prodRef = doc(db, 'store_data', 'products');
-        const snap = await getDoc(prodRef);
-        const prodList: any[] = snap.exists() ? snap.data()?.data || [] : [];
-        const existingIdx = prodList.findIndex((p: any) => p.id === m.id);
-        if (existingIdx >= 0) {
-          prodList[existingIdx] = { ...prodList[existingIdx], ...m.data };
-        } else {
-          prodList.unshift(m.data);
-        }
-        await setDoc(prodRef, { data: sanitizeForFirestore(prodList) });
-        processed++;
-      }
+      const list = entityMutationsMap.get(m.entity) || [];
+      list.push(m);
+      entityMutationsMap.set(m.entity, list);
     }
 
+    const batch = writeBatch(db);
+
+    for (const [entity, entityMutations] of entityMutationsMap.entries()) {
+      const docRef = doc(db, 'store_data', entity);
+      const snap = await getDoc(docRef);
+      let currentList: any[] = snap.exists() ? snap.data()?.data || [] : [];
+
+      for (const m of entityMutations) {
+        if (entity === 'printJobs') {
+          const existingIdx = currentList.findIndex((j: any) => j.id === m.id);
+          if (existingIdx >= 0) {
+            const { resolvedJob, wasConflict, reason } = resolvePrintJobConflict(currentList[existingIdx], m.data);
+            currentList[existingIdx] = resolvedJob;
+            if (wasConflict) {
+              conflictsResolved++;
+              recordedConflicts.push({
+                entityId: m.id,
+                entity: 'printJobs',
+                reason,
+                resolution: 'merged',
+                finalData: resolvedJob
+              });
+            }
+          } else {
+            currentList.unshift(m.data);
+          }
+          processed++;
+        } else if (entity === 'orders') {
+          const existingIdx = currentList.findIndex((o: any) => (o.id && o.id === m.id) || (o.invoiceNo && o.invoiceNo === m.id));
+          if (existingIdx >= 0) {
+            currentList[existingIdx] = { ...currentList[existingIdx], ...m.data };
+          } else {
+            currentList.unshift(m.data);
+          }
+          processed++;
+        } else {
+          const existingIdx = currentList.findIndex((item: any) => item.id === m.id);
+          if (existingIdx >= 0) {
+            currentList[existingIdx] = { ...currentList[existingIdx], ...m.data };
+          } else {
+            currentList.unshift(m.data);
+          }
+          processed++;
+        }
+      }
+
+      batch.set(docRef, { data: sanitizeForFirestore(currentList) });
+    }
+
+    await batch.commit();
     clearPendingMutations();
 
     return {
@@ -253,7 +270,7 @@ export async function pushOfflineSync(): Promise<SyncPushResponse> {
       conflicts: recordedConflicts
     };
   } catch (error: any) {
-    console.error('Direct Firestore push failed:', error);
+    console.error('Direct Firestore batch push failed:', error);
     return {
       success: false,
       processedCount: 0,

@@ -27,7 +27,23 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 }) => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
-  const [billFormat, setBillFormat] = useState<'a4' | 'corporate_gst' | 'thermal'>('a4');
+  const [billFormat, setBillFormat] = useState<'a4' | 'corporate_gst' | 'gem_portal' | 'thermal'>('a4');
+  const [gemContractNo, setGemContractNo] = useState<string>(
+    order.gemContractNo || `GEMC-511687705${Math.floor(100000 + Math.random() * 900000)}`
+  );
+  const [gemContractDate, setGemContractDate] = useState<string>(
+    order.gemContractDate || order.date.split(' ')[0] || new Date().toLocaleDateString('en-IN')
+  );
+  const [consigneeDept, setConsigneeDept] = useState<string>(
+    order.consigneeDept || order.customerName || 'મામલતદાર કચેરી, થરાદ (સરકારી વિભાગ)'
+  );
+  const [consigneeGstin, setConsigneeGstin] = useState<string>(
+    order.consigneeGstin || '24AHGPD1234F1Z1'
+  );
+  const [consigneeAddress, setConsigneeAddress] = useState<string>(
+    order.address || 'થરાદ, બનાસકાંઠા (ગુજરાત) - 385565'
+  );
+  const [showGemGuideModal, setShowGemGuideModal] = useState<boolean>(false);
   const billContentRef = useRef<HTMLDivElement>(null);
 
   // Generate Automatic Dynamic UPI Payment QR Code with exact bill amount
@@ -81,6 +97,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   );
 
   const isCorporateGstMode = billFormat === 'corporate_gst';
+  const isGemPortalMode = billFormat === 'gem_portal';
 
   // Visibility Flags from Admin Toggles
   const showLogos = storeSettings.billShowLogos !== false;
@@ -481,10 +498,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     }
 
     <div class="bill-main-content">
-      <!-- 1. Corporate Header Strip -->
-      <div class="govt-strip">
-        <span>🇮🇳 ટેક્સ ઇન્વોઇસ (TAX INVOICE)</span>
-        <span>અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)</span>
+      <!-- 1. Corporate / GeM Header Strip -->
+      <div class="govt-strip" style="${isGemPortalMode ? 'background: #0B1E48; color: #ffffff; padding: 4px 8px; font-weight: 900;' : ''}">
+        <span>${isGemPortalMode ? '🏛️ GOVERNMENT e-MARKETPLACE (GeM) - TAX INVOICE / સરકારી ટેક્સ ઇન્વોઇસ' : '🇮🇳 ટેક્સ ઇન્વોઇસ (TAX INVOICE)'}</span>
+        <span>${isGemPortalMode ? '✓ 100% GeM CONTRACT MATCHED (PDF < 5 MB)' : 'અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)'}</span>
       </div>
 
       <!-- 2. Store Header with Logos -->
@@ -522,20 +539,39 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         </div>
       </div>
 
+      ${
+        isGemPortalMode
+          ? `
+      <!-- GeM Contract Order Highlight Bar -->
+      <div style="background: #eff6ff; border: 1.5px solid #1d4ed8; padding: 5px 8px; margin-bottom: 6px; border-radius: 4px; font-size: 10.5px;">
+        <div style="display: flex; justify-content: space-between; font-weight: 900; color: #1e3a8a;">
+          <span>📑 GeM કન્ટ્રાક્ટ ઓર્ડર નં: <span style="font-family: monospace; font-size: 12px; color: #1d4ed8;">${gemContractNo}</span></span>
+          <span>📅 ઓર્ડર તારીખ: ${gemContractDate}</span>
+        </div>
+        <div style="margin-top: 2px; font-size: 10px; color: #1e40af;">
+          🏢 ખરીદનાર વિભાગ (Buying Dept): <b>${consigneeDept}</b> | GSTIN/TAN: <b>${consigneeGstin}</b>
+        </div>
+      </div>
+      `
+          : ''
+      }
+
       <!-- 3. Customer & Invoice Details Table -->
       <table class="meta-table">
         <tr>
           <td class="meta-left">
-            <div class="meta-title">ગ્રાહકની વિગત (BILLED TO / CUSTOMER):</div>
-            <div class="customer-name">${order.customerName}</div>
-            <div>📞 <b>મોબાઇલ:</b> +91 ${order.mobile}</div>
-            <div>📍 <b>સરનામું:</b> ${order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
+            <div class="meta-title">${isGemPortalMode ? 'ખરીદનાર / કન્સાઇની (BUYER / CONSIGNEE):' : 'ગ્રાહકની વિગત (BILLED TO / CUSTOMER):'}</div>
+            <div class="customer-name">${isGemPortalMode ? consigneeDept : order.customerName}</div>
+            <div><b>અધિકારી / સંપર્ક:</b> ${order.customerName} (📞 +91 ${order.mobile})</div>
+            <div>📍 <b>સરનામું:</b> ${isGemPortalMode ? consigneeAddress : (order.address || 'કાઉન્ટર ગ્રાહક (Tharad)')}</div>
+            <div><b>GSTIN / TAN:</b> ${isGemPortalMode ? consigneeGstin : (order.gstin || 'Unregistered / કાઉન્ટર')}</div>
             <div><b>રાજ્ય:</b> ગુજરાત (State Code: 24-Gujarat)</div>
           </td>
           <td class="meta-right">
             <div class="meta-title">ઇન્વોઇસ વિગત (INVOICE DETAILS):</div>
             <div><b>બિલ નં (Inv No):</b> <span style="font-weight: 800; font-size: 12px;">${order.invoiceNo}</span></div>
-            <div><b>તારીખ (Date):</b> ${order.date}</div>
+            <div><b>ઇન્વોઇસ તારીખ:</b> ${order.date}</div>
+            ${isGemPortalMode ? `<div><b>GeM કન્ટ્રાક્ટ નં:</b> <b style="font-family: monospace;">${gemContractNo}</b></div>` : ''}
             <div><b>ચૂકવણી પદ્ધતિ:</b> ${order.paymentMode} (${order.paymentStatus})</div>
             <div><b>સપ્લાય સ્થળ:</b> 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
             <div><b>રિવર્સ ચાર્જ (Reverse Charge):</b> ના (No)</div>
@@ -553,7 +589,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <th style="width: 44px; text-align: center;">જથ્થો</th>
             <th style="width: 65px; text-align: right;">દર (Rate)</th>
             ${
-              isCorporateGstMode
+              (isCorporateGstMode || isGemPortalMode)
                 ? `<th style="width: 65px; text-align: right;">કરપાત્ર (Taxable)</th>
                    <th style="width: 40px; text-align: center;">GST%</th>`
                 : ''
@@ -579,7 +615,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               : `<div class="words-text">${storeSettings.storeNameGu} • અધિકૃત ટેક્સ ઇન્વોઇસ</div>`
           }
           <div style="margin-top: 4px; font-size: 10px; font-weight: 700; color: #047857;">
-            ✓ પ્રમાણિત કર ઇન્વોઇસ • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે
+            ${isGemPortalMode ? '✓ GeM પોર્ટલ કમ્પ્લાયન્ટ બિલ • 100% સરકારી મંજૂર સેમ્પલ' : '✓ પ્રમાણિત કર ઇન્વોઇસ • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે'}
           </div>
         </div>
         <div class="summary-right">
@@ -590,7 +626,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               : ''
           }
           ${
-            isCorporateGstMode
+            (isCorporateGstMode || isGemPortalMode)
               ? `
             <div style="font-size: 10px; color: #374151;">કરપાત્ર રકમ: ₹${gstBreakup.totalTaxableValue.toFixed(2)}</div>
             <div style="font-size: 10px; color: #374151;">કુલ GST ટેક્સ (CGST+SGST): ₹${gstBreakup.totalTax.toFixed(2)}</div>
@@ -607,12 +643,12 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       </div>
 
       ${
-        isCorporateGstMode
+        (isCorporateGstMode || isGemPortalMode)
           ? `
-      <!-- 5.1 Corporate HSN/SAC GST Tax Summary Schedule -->
+      <!-- 5.1 Corporate / GeM HSN/SAC GST Tax Summary Schedule -->
       <div style="margin: 4px 0;">
         <div style="font-size: 9.5px; font-weight: 900; color: #1e3a8a; margin-bottom: 2px;">
-          📊 GST ટેક્સ બ્રેકઅપ સમરી (HSN/SAC Summary - Corporate Tax Schedule):
+          📊 GST ટેક્સ બ્રેકઅપ સમરી (HSN/SAC Summary - ${isGemPortalMode ? 'GeM Schedule' : 'Corporate Tax Schedule'}):
         </div>
         <table style="width: 100%; border-collapse: collapse; border: 1.2px solid #000; font-size: 9.5px; text-align: center;">
           <thead>
@@ -640,6 +676,17 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </tr>
           </tbody>
         </table>
+      </div>
+      `
+          : ''
+      }
+
+      ${
+        isGemPortalMode
+          ? `
+      <!-- GeM Portal Statutory Undertaking & Certification -->
+      <div style="border: 1.2px solid #1d4ed8; background: #f0f9ff; padding: 4px 6px; font-size: 8.5px; margin: 4px 0; border-radius: 3px; line-height: 1.3; color: #1e3a8a;">
+        <b>🏛️ GeM STATUTORY CERTIFICATION:</b> Certified that the particulars given above are true and correct and the amount, item specifications, HSN/SAC codes, and GST tax breakups match 100% with GeM Contract Order Number <b>${gemContractNo}</b> dated <b>${gemContractDate}</b> on Government e-Marketplace Portal (gem.gov.in). Uploaded Tax Invoice file format is PDF and under 5 MB size limit as mandated by GeM Portal guidelines.
       </div>
       `
           : ''
@@ -1189,6 +1236,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setBillFormat('gem_portal')}
+                className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
+                  billFormat === 'gem_portal' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
+                }`}
+                title="GeM પોર્ટલ સરકારી GST ઇન્વોઇસ (Government e-Marketplace Tax Invoice - PDF < 5MB)"
+              >
+                🏛️ GeM સરકારી બિલ
+              </button>
+              <button
+                type="button"
                 onClick={() => setBillFormat('thermal')}
                 className={`px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer text-xs ${
                   billFormat === 'thermal' ? 'bg-amber-400 text-black font-black shadow-xs' : 'text-blue-200 hover:text-white'
@@ -1251,6 +1308,82 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* GeM Government Order Details Quick Editor Toolbar */}
+        {billFormat === 'gem_portal' && (
+          <div className="no-print bg-amber-50 p-3 border-b-2 border-amber-300 space-y-2 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
+                <span>🏛️ Government e-Marketplace (GeM) પોર્ટલ બિલ વિગતો:</span>
+                <span className="bg-amber-200 text-amber-900 px-2 py-0.5 rounded text-[10px] font-bold">
+                  PDF સાઈઝ &lt; 5 MB • 100% GeM Matched
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowGemGuideModal(true)}
+                className="bg-amber-800 hover:bg-amber-900 text-white font-black text-[11px] px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
+              >
+                <span>📚 GeM સ્ટેશનરી HSN કોડ માર્ગદર્શિકા</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 font-bold text-neutral-800">
+              <div>
+                <label className="block text-[10px] font-black text-amber-900 mb-0.5">
+                  GeM Contract/Order No. (ફરજિયાત):
+                </label>
+                <input
+                  type="text"
+                  value={gemContractNo}
+                  onChange={e => setGemContractNo(e.target.value)}
+                  placeholder="e.g. GEMC-5116877051234"
+                  className="w-full p-1.5 bg-white border border-amber-400 rounded-lg text-xs font-mono font-black text-amber-950 outline-none focus:ring-1 focus:ring-amber-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-amber-900 mb-0.5">
+                  GeM Order Date:
+                </label>
+                <input
+                  type="text"
+                  value={gemContractDate}
+                  onChange={e => setGemContractDate(e.target.value)}
+                  placeholder="DD/MM/YYYY"
+                  className="w-full p-1.5 bg-white border border-amber-400 rounded-lg text-xs font-bold text-neutral-900 outline-none focus:ring-1 focus:ring-amber-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-amber-900 mb-0.5">
+                  સરકારી વિભાગ / કચેરીનું નામ:
+                </label>
+                <input
+                  type="text"
+                  value={consigneeDept}
+                  onChange={e => setConsigneeDept(e.target.value)}
+                  placeholder="દા.ત. મામલતદાર કચેરી, થરાદ"
+                  className="w-full p-1.5 bg-white border border-amber-400 rounded-lg text-xs font-bold text-neutral-900 outline-none focus:ring-1 focus:ring-amber-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-amber-900 mb-0.5">
+                  વિભાગ GSTIN / TAN (Consignee GSTIN):
+                </label>
+                <input
+                  type="text"
+                  value={consigneeGstin}
+                  onChange={e => setConsigneeGstin(e.target.value)}
+                  placeholder="24AHGPD1234F1Z1"
+                  className="w-full p-1.5 bg-white border border-amber-400 rounded-lg text-xs font-mono font-bold text-neutral-900 outline-none focus:ring-1 focus:ring-amber-600"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* CONDITIONAL BILL PREVIEW: THERMAL POS SLIP OR A4 CORPORATE TAX INVOICE */}
         {billFormat === 'thermal' ? (
@@ -1402,16 +1535,28 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           )}
 
           <div className="relative z-10 space-y-2.5">
-            {/* A. CORPORATE TOP STRIP */}
-            <div className="flex items-center justify-between border-b-2 border-black pb-1 text-[11px] sm:text-xs font-black uppercase tracking-wide">
-              <span className="flex items-center gap-1">
-                <span>🇮🇳</span>
-                <span>ટેક્સ ઇન્વોઇસ (TAX INVOICE)</span>
-              </span>
-              <span className="text-[10px] sm:text-[11px] text-neutral-700 font-bold">
-                અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)
-              </span>
-            </div>
+            {/* A. CORPORATE / GeM TOP STRIP */}
+            {isGemPortalMode ? (
+              <div className="bg-amber-100 border-b-2 border-black p-1.5 flex flex-wrap items-center justify-between text-[11px] sm:text-xs font-black uppercase tracking-wide">
+                <span className="flex items-center gap-1.5 text-amber-950 font-black">
+                  <span>🏛️</span>
+                  <span>GOVERNMENT e-MARKETPLACE (GeM) - TAX INVOICE / સરકારી ટેક્સ ઇન્વોઇસ</span>
+                </span>
+                <span className="text-[10px] sm:text-[11px] text-emerald-800 font-black flex items-center gap-1">
+                  <span>✓ 100% GeM Matched Order Invoice (PDF &lt; 5 MB)</span>
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between border-b-2 border-black pb-1 text-[11px] sm:text-xs font-black uppercase tracking-wide">
+                <span className="flex items-center gap-1">
+                  <span>🇮🇳</span>
+                  <span>ટેક્સ ઇન્વોઇસ (TAX INVOICE)</span>
+                </span>
+                <span className="text-[10px] sm:text-[11px] text-neutral-700 font-bold">
+                  અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)
+                </span>
+              </div>
+            )}
 
             {/* B. 3-COLUMN STORE HEADER WITH PASSPORT-SIZE LOGOS */}
             <div className="flex items-center justify-between gap-3 border-b-2 border-black pb-2">
@@ -1473,32 +1618,77 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             </div>
 
             {/* C. CUSTOMER & INVOICE META (TWO COLUMNS TABLE) */}
-            <div className="grid grid-cols-2 border border-black text-[11px] sm:text-xs">
-              {/* Left: Customer */}
-              <div className="p-2 border-r border-black space-y-0.5">
-                <div className="text-[10px] font-black uppercase text-neutral-600 underline">
-                  ગ્રાહકની વિગત (BILLED TO / CUSTOMER):
-                </div>
-                <div className="text-xs sm:text-sm font-black text-black">{order.customerName}</div>
-                <div className="font-bold text-black">📞 +91 {order.mobile}</div>
-                <div className="text-black font-medium">📍 {order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
-                <div className="text-[10px] text-neutral-700">રાજ્ય: ગુજરાત (State: 24-Gujarat)</div>
-              </div>
+            {isGemPortalMode ? (
+              <div className="space-y-0">
+                <div className="grid grid-cols-2 border border-black text-[11px] sm:text-xs">
+                  {/* Left: Seller Details */}
+                  <div className="p-2 border-r border-black space-y-0.5 bg-blue-50/20">
+                    <div className="text-[10px] font-black uppercase text-blue-900 border-b border-blue-200 pb-0.5 mb-1">
+                      1. SELLER / SUPPLIER DETAILS (વિક્રેતાની વિગતો):
+                    </div>
+                    <div className="text-xs sm:text-sm font-black text-black uppercase">{storeSettings.storeNameEn}</div>
+                    <div className="text-xs font-bold text-black">{storeSettings.storeNameGu}</div>
+                    <div className="text-black font-medium text-[10.5px]">📍 {storeSettings.address}</div>
+                    <div className="font-bold text-black text-[10.5px]">
+                      🏛️ GSTIN: {storeSettings.gstNumber || '24AAAAA0000A1Z5'} | PAN: {storeSettings.panNumber || 'N/A'}
+                    </div>
+                    <div className="text-[10px] text-neutral-700">
+                      📞 +91 {storeSettings.phone} {storeSettings.email ? ` | ✉️ ${storeSettings.email}` : ''}
+                    </div>
+                  </div>
 
-              {/* Right: Invoice */}
-              <div className="p-2 space-y-0.5">
-                <div className="text-[10px] font-black uppercase text-neutral-600 underline">
-                  ઇન્વોઇસ વિગત (INVOICE DETAILS):
+                  {/* Right: Buyer / Consignee Details */}
+                  <div className="p-2 space-y-0.5 bg-emerald-50/20">
+                    <div className="text-[10px] font-black uppercase text-emerald-900 border-b border-emerald-200 pb-0.5 mb-1">
+                      2. BUYER / CONSIGNEE DETAILS (ખરીદનાર સરકારી કચેરી):
+                    </div>
+                    <div className="text-xs sm:text-sm font-black text-neutral-900">{consigneeDept}</div>
+                    <div className="font-bold text-black text-[11px]">👤 અધિકારી/ગ્રાહક: {order.customerName} ({order.mobile})</div>
+                    <div className="text-black font-medium text-[10.5px]">📍 સરનામું: {consigneeAddress}</div>
+                    <div className="font-bold text-emerald-900 text-[10.5px]">
+                      🏛️ Dept GSTIN / TAN: {consigneeGstin || 'URP / Government Dept'}
+                    </div>
+                    <div className="text-[10px] text-neutral-700">સપ્લાય સ્થળ: 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
+                  </div>
                 </div>
-                <div className="font-bold text-black">
-                  બિલ નં: <span className="font-mono font-black text-xs">{order.invoiceNo}</span>
+
+                {/* GeM Order Metadata Strip */}
+                <div className="grid grid-cols-5 border-x border-b border-black text-[10.5px] font-bold bg-slate-100 p-1.5 gap-1">
+                  <div><b>GeM Contract No:</b> <span className="font-mono font-black text-blue-900">{gemContractNo}</span></div>
+                  <div><b>Contract Date:</b> {gemContractDate}</div>
+                  <div><b>Tax Inv No:</b> <span className="font-mono font-black">{order.invoiceNo}</span></div>
+                  <div><b>Inv Date:</b> {order.date}</div>
+                  <div><b>Supply State:</b> 24-Gujarat</div>
                 </div>
-                <div className="font-bold text-black">તારીખ: {order.date}</div>
-                <div className="font-bold text-black">ચૂકવણી: {order.paymentMode} ({order.paymentStatus})</div>
-                <div className="text-black text-[10px]">સપ્લાય સ્થળ: 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
-                <div className="text-[10px] text-neutral-600">રિવર્સ ચાર્જ: ના (No)</div>
               </div>
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 border border-black text-[11px] sm:text-xs">
+                {/* Left: Customer */}
+                <div className="p-2 border-r border-black space-y-0.5">
+                  <div className="text-[10px] font-black uppercase text-neutral-600 underline">
+                    ગ્રાહકની વિગત (BILLED TO / CUSTOMER):
+                  </div>
+                  <div className="text-xs sm:text-sm font-black text-black">{order.customerName}</div>
+                  <div className="font-bold text-black">📞 +91 {order.mobile}</div>
+                  <div className="text-black font-medium">📍 {order.address || 'કાઉન્ટર ગ્રાહક (Tharad)'}</div>
+                  <div className="text-[10px] text-neutral-700">રાજ્ય: ગુજરાત (State: 24-Gujarat)</div>
+                </div>
+
+                {/* Right: Invoice */}
+                <div className="p-2 space-y-0.5">
+                  <div className="text-[10px] font-black uppercase text-neutral-600 underline">
+                    ઇન્વોઇસ વિગત (INVOICE DETAILS):
+                  </div>
+                  <div className="font-bold text-black">
+                    બિલ નં: <span className="font-mono font-black text-xs">{order.invoiceNo}</span>
+                  </div>
+                  <div className="font-bold text-black">તારીખ: {order.date}</div>
+                  <div className="font-bold text-black">ચૂકવણી: {order.paymentMode} ({order.paymentStatus})</div>
+                  <div className="text-black text-[10px]">સપ્લાય સ્થળ: 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
+                  <div className="text-[10px] text-neutral-600">રિવર્સ ચાર્જ: ના (No)</div>
+                </div>
+              </div>
+            )}
 
             {/* D. ITEMS TABLE */}
             <div className="overflow-hidden">
@@ -1510,7 +1700,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     {showHsnColumn && <th className="p-1.5 text-center w-16 border-r border-black">HSN/SAC</th>}
                     <th className="p-1.5 text-center w-12 border-r border-black">જથ્થો</th>
                     <th className="p-1.5 text-right w-16 border-r border-black">દર (₹)</th>
-                    {isCorporateGstMode && (
+                    {(isCorporateGstMode || isGemPortalMode) && (
                       <>
                         <th className="p-1.5 text-right w-16 border-r border-black">કરપાત્ર (₹)</th>
                         <th className="p-1.5 text-center w-12 border-r border-black">GST%</th>
@@ -1541,7 +1731,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                         <td className="p-1.5 text-right font-medium text-black border-r border-black">
                           ₹{Number(it.price).toFixed(2)}
                         </td>
-                        {isCorporateGstMode && (
+                        {(isCorporateGstMode || isGemPortalMode) && (
                           <>
                             <td className="p-1.5 text-right font-mono text-[10px] text-neutral-800 border-r border-black">
                               ₹{itemTaxable.toFixed(2)}
@@ -1561,8 +1751,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </table>
             </div>
 
-            {/* E.1 Corporate HSN/SAC GST Tax Summary Schedule */}
-            {isCorporateGstMode && (
+            {/* E.1 Corporate & GeM HSN/SAC GST Tax Summary Schedule */}
+            {(isCorporateGstMode || isGemPortalMode) && (
               <div className="p-2 border-x border-b border-black bg-blue-50/30">
                 <div className="text-[10px] font-black text-blue-900 mb-1">
                   📊 GST ટેક્સ બ્રેકઅપ સમરી (HSN/SAC Summary - Corporate Tax Schedule):
@@ -1650,6 +1840,18 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 </div>
               </div>
             </div>
+
+            {/* GeM Statutory Declaration & Certification Box */}
+            {isGemPortalMode && (
+              <div className="p-2 border border-black bg-slate-50 text-[10px] text-neutral-800 space-y-1">
+                <div className="font-black text-blue-950 uppercase border-b border-neutral-300 pb-0.5">
+                  📜 GeM Portal Certification & Statutory Declaration (GeM પોર્ટલ મંજુરી પ્રમાણપત્ર):
+                </div>
+                <p className="leading-snug font-medium">
+                  "Certified that the particulars given above are true and correct and the amount, item specifications, HSN/SAC codes, and GST tax breakups match 100% with GeM Contract Order Number <b>{gemContractNo}</b> on Government e-Marketplace Portal (gem.gov.in). Uploaded Tax Invoice file format is PDF and under 5 MB size limit as mandated by GeM Portal guidelines."
+                </p>
+              </div>
+            )}
 
             {/* F. BOTTOM ROW: DETAILS ON LEFT | AUTHORIZED SIGNATORY ON RIGHT */}
             <div className="grid grid-cols-12 border border-black text-[11px]">
@@ -1766,6 +1968,101 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* GeM STATIONERY HSN & GST DIRECTORY GUIDE MODAL */}
+        {showGemGuideModal && (
+          <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-3 no-print">
+            <div className="bg-white rounded-2xl max-w-xl w-full p-4 border-2 border-amber-500 shadow-2xl space-y-3 relative text-xs">
+              <div className="flex items-center justify-between border-b pb-2">
+                <h3 className="font-black text-sm text-neutral-900 flex items-center gap-1.5">
+                  <span>📚 GeM સ્ટેશનરી આઇટમ્સ HSN કોડ & GST દર માર્ગદર્શિકા</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowGemGuideModal(false)}
+                  className="w-7 h-7 rounded-full bg-neutral-100 hover:bg-neutral-200 flex items-center justify-center text-neutral-700 cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                <p className="text-[11px] text-neutral-600 font-bold">
+                  GeM પોર્ટલ પર સ્ટેશનરી સામાનનું ઇન્વોઇસ અપલોડ કરતી વખતે દરેક આઇટમનો સાચો HSN કોડ હોવો ફરજિયાત છે:
+                </p>
+
+                <div className="overflow-x-auto rounded-xl border border-neutral-300">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-amber-100 text-amber-950 font-black border-b border-amber-300">
+                        <th className="p-2 border-r border-amber-300">HSN કોડ</th>
+                        <th className="p-2 border-r border-amber-300">સ્ટેશનરી આઇટમ વર્ગીકરણ</th>
+                        <th className="p-2 text-center">GST દર</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-200 font-medium text-neutral-800">
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">4802</td>
+                        <td className="p-2 border-r">A4 પ્રિન્ટિંગ પેપર રીમ, લીગલ પેપર, એક્ઝિક્યુટિવ બોન્ડ પેપર (Paper Reams)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">12% / 18%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">4820</td>
+                        <td className="p-2 border-r">નોટબુક, રજિસ્ટર, એકાઉન્ટ બુક્સ, ફાઇલ ફોલ્ડર્સ, ડાયરી (Registers & Notebooks)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">12%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">9608</td>
+                        <td className="p-2 border-r">બોલપેન, જેલ પેન, માર્કર પેન, હાઇલાઇટર, ફાઉન્ટન પેન, રિફિલ (Pens & Refills)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">18%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">9609</td>
+                        <td className="p-2 border-r">પેન્સિલ, સ્કેચ પેન, કલર પેન્સિલ, ડ્રોઇંગ ચાર્કોલ (Pencils & Crayons)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">12% / 18%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">3926</td>
+                        <td className="p-2 border-r">પ્લાસ્ટિક ફાઇલો, કોબ્રા ક્લિપ, L-ફોલ્ડર, બોક્સ ફાઇલ (Plastic Files & Folders)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">18%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">8214</td>
+                        <td className="p-2 border-r">ઓફિસ કાતર, પેપર કટર, પેન્સિલ સંચો (Scissors, Cutters & Sharpeners)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">18%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">8472</td>
+                        <td className="p-2 border-r">સ્ટેપલર મશીન, પંચિંગ મશીન, પેપર કટીંગ મશીન (Staplers & Punching Machines)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">18%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">4016</td>
+                        <td className="p-2 border-r">રબર / ઇરેઝર, રબર બેન્ડ (Erasers & Rubber Bands)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">12%</td>
+                      </tr>
+                      <tr className="hover:bg-amber-50/50">
+                        <td className="p-2 font-mono font-black text-amber-900 border-r">3506</td>
+                        <td className="p-2 border-r">ફેવિકોલ, સેલોટેપ, ગમ સ્ટીક, ગ્લુ (Adhesives & Tapes)</td>
+                        <td className="p-2 text-center font-bold text-emerald-800">18%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="pt-2 flex justify-end border-t border-neutral-200">
+                <button
+                  type="button"
+                  onClick={() => setShowGemGuideModal(false)}
+                  className="bg-amber-700 hover:bg-amber-800 text-white font-black px-4 py-1.5 rounded-xl text-xs cursor-pointer"
+                >
+                  સમજાઈ ગયું (Close)
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

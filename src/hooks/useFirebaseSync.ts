@@ -1,6 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+
+// Global Quota & Resource Exhaustion Backoff Tracker
+let quotaExhaustedUntil = 0;
+
+export function isQuotaExhausted(): boolean {
+  return Date.now() < quotaExhaustedUntil;
+}
+
+export function handleQuotaError(err: any): void {
+  const msg = err?.message || String(err);
+  if (
+    msg.includes('resource-exhausted') ||
+    msg.includes('Quota limit') ||
+    msg.includes('Quota exceeded') ||
+    msg.includes('429')
+  ) {
+    // Back off cloud writes/reads for 5 minutes to prevent hammering quota limits
+    quotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
+    console.warn('⚠️ Firestore resource quota limit reached. Operations are running in 100% offline LocalStorage/IndexedDB mode and will sync automatically when quota resets.');
+  }
+}
 
 /**
  * Recursively removes all `undefined` values and properties from objects and arrays,
@@ -106,21 +127,64 @@ export function saveDeletedIds(localKey: string, set: Set<string>): void {
   } catch (e) {}
 }
 
-// Pending writes registry and debounce timers
+// Pending writes registry, debounce timers, and payload deduplication cache
 const pendingWrites: Record<string, any> = {};
 const writeDebounceTimers: Record<string, any> = {};
+const lastWrittenPayloads: Record<string, string> = {};
 
-function executeFirestoreWrite(docName: string, data: any) {
-  try {
-    const firestorePayload = compressForStorage(data);
-    setDoc(doc(db, "store_data", docName), { data: sanitizeForFirestore(firestorePayload) }).catch(err => {
-      const msg = err?.message || String(err);
-      if (!msg.includes('resource-exhausted') && !msg.includes('Quota limit')) {
-        console.warn(`Firebase sync warning for ${docName}:`, err);
+async function executeBatchedFirestoreWrites() {
+  if (isQuotaExhausted()) return;
+
+  const docsToCommit = Object.entries(pendingWrites);
+  if (docsToCommit.length === 0) return;
+
+  // Clear debounce timers for items being processed
+  for (const [docName] of docsToCommit) {
+    if (writeDebounceTimers[docName]) {
+      clearTimeout(writeDebounceTimers[docName]);
+      delete writeDebounceTimers[docName];
+    }
+  }
+
+  // Filter out redundant payloads that match lastWrittenPayloads
+  const validWrites: { docName: string; payload: any; payloadStr: string }[] = [];
+  for (const [docName, rawData] of docsToCommit) {
+    delete pendingWrites[docName];
+    try {
+      const sanitized = sanitizeForFirestore(compressForStorage(rawData));
+      const payloadStr = JSON.stringify(sanitized);
+      if (lastWrittenPayloads[docName] === payloadStr) {
+        continue; // Skip write: Payload has not changed
       }
-    });
-  } catch (err) {
-    console.warn("Firebase sync error:", err);
+      validWrites.push({ docName, payload: sanitized, payloadStr });
+    } catch (e) {}
+  }
+
+  if (validWrites.length === 0) return;
+
+  try {
+    if (validWrites.length === 1) {
+      // Single Document Write
+      const { docName, payload, payloadStr } = validWrites[0];
+      await setDoc(doc(db, "store_data", docName), { data: payload });
+      lastWrittenPayloads[docName] = payloadStr;
+    } else {
+      // Atomic Multi-Document Batch Write
+      const batch = writeBatch(db);
+      for (const { docName, payload } of validWrites) {
+        batch.set(doc(db, "store_data", docName), { data: payload });
+      }
+      await batch.commit();
+      for (const { docName, payloadStr } of validWrites) {
+        lastWrittenPayloads[docName] = payloadStr;
+      }
+    }
+  } catch (err: any) {
+    handleQuotaError(err);
+    const msg = err?.message || String(err);
+    if (!msg.includes('resource-exhausted') && !msg.includes('Quota limit')) {
+      console.warn('Firebase batch sync notice:', err);
+    }
   }
 }
 
@@ -129,27 +193,20 @@ function registerPendingWrite(docName: string, data: any) {
   if (writeDebounceTimers[docName]) {
     clearTimeout(writeDebounceTimers[docName]);
   }
-  // 350ms snappy debounce
+  
+  // High-volume collections ('orders' & 'printJobs') get 1500ms debounce to aggregate rapid edits; standard collections get 1000ms
+  const delay = (docName === 'orders' || docName === 'printJobs') ? 1500 : 1000;
+  
   writeDebounceTimers[docName] = setTimeout(() => {
     delete writeDebounceTimers[docName];
-    const toWrite = pendingWrites[docName];
-    delete pendingWrites[docName];
-    if (toWrite !== undefined) {
-      executeFirestoreWrite(docName, toWrite);
-    }
-  }, 350);
+    executeBatchedFirestoreWrites();
+  }, delay);
 }
 
 // Flush all pending writes immediately when browser is closed, refreshed, or backgrounded
 if (typeof window !== 'undefined') {
   const flushAll = () => {
-    for (const [docName, data] of Object.entries(pendingWrites)) {
-      if (writeDebounceTimers[docName]) {
-        clearTimeout(writeDebounceTimers[docName]);
-        delete writeDebounceTimers[docName];
-      }
-      executeFirestoreWrite(docName, data);
-    }
+    executeBatchedFirestoreWrites();
   };
   window.addEventListener('beforeunload', flushAll);
   window.addEventListener('pagehide', flushAll);
@@ -225,27 +282,86 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   useEffect(() => {
     const docRef = doc(db, "store_data", docName);
     
-    // Initial check: If Firebase is empty, upload what we have in localStorage
-    getDoc(docRef).then(snapshot => {
-      const saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          const cleaned = filterMockData(parsed);
-          
-          if (Array.isArray(cleaned) && cleaned.length > 0) {
-            if (!snapshot.exists()) {
-              setDoc(docRef, { data: sanitizeForFirestore(compressForStorage(cleaned)) }).catch(() => {});
-            } else {
-              const cloudData = snapshot.data()?.data;
-              if (!Array.isArray(cloudData) || cloudData.length === 0) {
-                setDoc(docRef, { data: sanitizeForFirestore(compressForStorage(cleaned)) }).catch(() => {});
-              }
+    // Initial fetch & check: Immediately sync from cloud if available, or upload local data if cloud is empty
+    const syncDocFromCloud = async () => {
+      if (isQuotaExhausted()) return;
+      try {
+        const snapshot = await getDoc(docRef);
+        if (snapshot.exists()) {
+          const rawData = snapshot.data()?.data;
+          if (rawData !== undefined && rawData !== null) {
+            const rawCleaned = filterMockData(rawData);
+            if (rawCleaned !== undefined && rawCleaned !== null) {
+              const currentInit = initialDataRef.current;
+              const cleaned = (typeof currentInit === 'object' && currentInit !== null && !Array.isArray(currentInit))
+                ? { ...currentInit, ...rawCleaned }
+                : rawCleaned;
+
+              setData((prevData) => {
+                const deletedIds = getDeletedIds(localKey);
+                if (Array.isArray(cleaned) && Array.isArray(prevData)) {
+                  const validCloudItems = cleaned.filter((item: any) => {
+                    if (!item) return false;
+                    const id = item.id || item.invoiceNo;
+                    return !deletedIds.has(id);
+                  });
+
+                  const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
+                  const localUnsyncedItems = prevData.filter((localItem: any) => {
+                    if (!localItem) return false;
+                    const id = localItem.id || localItem.invoiceNo;
+                    return !deletedIds.has(id) && !cloudIds.has(id);
+                  });
+
+                  const localMap = new Map<string, any>();
+                  prevData.forEach((item: any) => {
+                    if (item) {
+                      const id = item.id || item.invoiceNo;
+                      if (id) localMap.set(id, item);
+                    }
+                  });
+
+                  const merged = [
+                    ...validCloudItems.map((c: any) => {
+                      const id = c.id || c.invoiceNo;
+                      return localMap.has(id) ? localMap.get(id) : c;
+                    }),
+                    ...localUnsyncedItems
+                  ];
+
+                  safeLocalStorageSet(localKey, merged);
+                  return merged as unknown as T;
+                }
+
+                safeLocalStorageSet(localKey, cleaned);
+                return cleaned as T;
+              });
             }
           }
-        } catch(e) {}
+        } else {
+          // Cloud empty: upload local data
+          const saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
+          if (saved) {
+            const parsed = JSON.parse(saved);
+            const cleaned = filterMockData(parsed);
+            if (Array.isArray(cleaned) && cleaned.length > 0) {
+              setDoc(docRef, { data: sanitizeForFirestore(compressForStorage(cleaned)) }).catch(handleQuotaError);
+            }
+          }
+        }
+      } catch (e) {
+        handleQuotaError(e);
       }
-    }).catch(() => {});
+    };
+
+    syncDocFromCloud();
+
+    // Heartbeat sync interval: refresh every 90 seconds (1.5 min) to preserve quota while ensuring fallback sync
+    const heartbeatInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !isQuotaExhausted()) {
+        syncDocFromCloud();
+      }
+    }, 90000);
 
     // Listen for real-time updates from Firebase
     const unsubscribe = onSnapshot(docRef, {
@@ -266,6 +382,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
             if (Array.isArray(cleaned) && Array.isArray(prevData)) {
               // 1. Strict filter: Any cloud item that was deleted locally MUST NEVER be resurrected!
+              // Use unique item.id primarily to avoid clashing freshly created order numbers
               const validCloudItems = cleaned.filter((item: any) => {
                 if (!item) return false;
                 const id = item.id || item.invoiceNo;
@@ -307,6 +424,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         }
       },
       error: (err) => {
+        handleQuotaError(err);
         const msg = err?.message || String(err);
         if (
           !msg.includes('transport errored') && 
@@ -320,7 +438,10 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       }
     });
     
-    return () => unsubscribe();
+    return () => {
+      clearInterval(heartbeatInterval);
+      unsubscribe();
+    };
   }, [docName, localKey]);
 
   // Robust state setter with automatic deletion tracking & immediate local persistence

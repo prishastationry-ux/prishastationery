@@ -82,6 +82,10 @@ export interface OrderRecord {
   statusUpdatedAt?: string;
   notes?: string;
   profit?: number;
+  gemContractNo?: string;
+  gemContractDate?: string;
+  consigneeDept?: string;
+  consigneeGstin?: string;
 }
 
 export interface StoryWidget {

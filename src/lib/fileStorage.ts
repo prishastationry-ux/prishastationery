@@ -1,7 +1,7 @@
 // Utility to store and retrieve large files (PDFs, images, docs) using IndexedDB & Chunked Firestore
 // Supports files up to 1 GB with native Firestore Bytes, zero bit-loss, real-time speed & progress tracking.
 
-import { doc, getDoc, setDoc, deleteDoc, Bytes } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, Bytes, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 
 const DB_NAME = 'PrishaStationeryFilesDB';
@@ -358,9 +358,10 @@ export async function getFileFromCloudStorage(
     console.warn('IndexedDB read warning:', e);
   }
 
-  // 2. Fetch from Firestore
+  // 2. Fetch from Firestore (supports both fileId and human fileName lookups)
   try {
-    const metaSnap = await getDoc(doc(db, 'print_files', fileId));
+    let resolvedFileId = fileId.trim();
+    let metaSnap = await getDoc(doc(db, 'print_files', resolvedFileId));
     let totalChunks = 0;
     let totalBytes = 0;
     let mime = 'application/pdf';
@@ -380,22 +381,41 @@ export async function getFileFromCloudStorage(
 
       totalChunks = (data.totalChunks as number) || 0;
       totalBytes = (data.fileSize as number) || 0;
-      mime = data.fileType || 'application/pdf';
+      mime = data.fileType || (data.fileName?.match(/\.(jpg|jpeg|png|webp|bmp|gif)$/i) ? 'image/jpeg' : 'application/pdf');
       fileName = data.fileName || 'file';
     } else {
-      // Resilient Fallback: check chunk 0 directly if metadata document is not found
+      // Resilient Fallback 1: Query print_files by fileName
       try {
-        const chunk0Doc = await getDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_0`));
-        if (chunk0Doc.exists()) {
-          const c0Data = chunk0Doc.data();
-          totalChunks = (c0Data.totalChunks as number) || 1;
-          totalBytes = (c0Data.chunkSize || 0) * totalChunks;
-          mime = fileId.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image/jpeg' : 'application/pdf';
-        } else {
+        const q = query(collection(db, 'print_files'), where('fileName', '==', resolvedFileId));
+        const qSnap = await getDocs(q);
+        if (!qSnap.empty) {
+          const foundDoc = qSnap.docs[0];
+          resolvedFileId = foundDoc.id;
+          const data = foundDoc.data();
+          totalChunks = (data.totalChunks as number) || 0;
+          totalBytes = (data.fileSize as number) || 0;
+          mime = data.fileType || (data.fileName?.match(/\.(jpg|jpeg|png|webp|bmp|gif)$/i) ? 'image/jpeg' : 'application/pdf');
+          fileName = data.fileName || resolvedFileId;
+        }
+      } catch (err) {
+        console.warn('Query by fileName notice:', err);
+      }
+
+      // Resilient Fallback 2: Check chunk 0 directly
+      if (!totalChunks) {
+        try {
+          const chunk0Doc = await getDoc(doc(db, 'print_file_chunks', `${resolvedFileId}_chunk_0`));
+          if (chunk0Doc.exists()) {
+            const c0Data = chunk0Doc.data();
+            totalChunks = (c0Data.totalChunks as number) || 1;
+            totalBytes = (c0Data.chunkSize || 0) * totalChunks;
+            mime = resolvedFileId.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image/jpeg' : 'application/pdf';
+          } else {
+            return null;
+          }
+        } catch {
           return null;
         }
-      } catch {
-        return null;
       }
     }
 
@@ -411,7 +431,7 @@ export async function getFileFromCloudStorage(
       const batchPromises = [];
       for (let j = i; j < Math.min(i + BATCH_SIZE, totalChunks); j++) {
         const task = (async (chunkIdx: number) => {
-          const chunkDoc = await getDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${chunkIdx}`));
+          const chunkDoc = await getDoc(doc(db, 'print_file_chunks', `${resolvedFileId}_chunk_${chunkIdx}`));
           if (!chunkDoc.exists()) {
             throw new Error(`Missing chunk ${chunkIdx}`);
           }
@@ -464,8 +484,11 @@ export async function getFileFromCloudStorage(
     const finalBlob = new Blob(byteArrays, { type: mime });
     if (finalBlob.size === 0) return null;
 
-    // Cache assembled blob in IndexedDB
-    saveBlobToStorage(fileId, finalBlob, fileName, mime).catch(() => {});
+    // Cache assembled blob in IndexedDB under both resolved ID and original key
+    saveBlobToStorage(resolvedFileId, finalBlob, fileName, mime).catch(() => {});
+    if (resolvedFileId !== fileId) {
+      saveBlobToStorage(fileId, finalBlob, fileName, mime).catch(() => {});
+    }
 
     const totalElapsedSec = (Date.now() - startTime) / 1000;
     const finalSpeed = totalElapsedSec > 0 ? (finalBlob.size / totalElapsedSec) : 0;
@@ -615,9 +638,26 @@ export function createBlobUrl(input: string): string | null {
 }
 
 // Download file safely as original binary Blob (works for PDFs, images, docs without 0KB corruption)
-export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: string): Promise<boolean> {
-  if (!dataUrlOrBlobUrl) {
-    console.warn('Cannot download: URL or data is empty');
+export async function downloadFileSafely(
+  dataUrlOrBlobUrl: string | undefined | null,
+  fileName: string,
+  fileId?: string,
+  onProgress?: (progress: StorageProgress) => void
+): Promise<boolean> {
+  const cleanFileName = (fileName || `Document_${Date.now()}.pdf`).trim();
+  let candidateUrl = dataUrlOrBlobUrl;
+
+  // 1. If URL is missing, truncated, or a dead foreign blob URL, recover from cloud chunks or IndexedDB!
+  if (!candidateUrl || isCorruptedOrNeedsFetch(candidateUrl)) {
+    const lookupKey = fileId || cleanFileName;
+    candidateUrl = await getFileFromCloudStorage(lookupKey, onProgress);
+    if (!candidateUrl && fileId && cleanFileName !== fileId) {
+      candidateUrl = await getFileFromCloudStorage(cleanFileName, onProgress);
+    }
+  }
+
+  if (!candidateUrl) {
+    console.warn('Cannot download: File not found in local cache or cloud storage');
     return false;
   }
 
@@ -625,10 +665,10 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
     let directBlobUrl: string | null = null;
     let shouldRevoke = false;
 
-    if (dataUrlOrBlobUrl.startsWith('blob:')) {
-      directBlobUrl = dataUrlOrBlobUrl;
+    if (candidateUrl.startsWith('blob:')) {
+      directBlobUrl = candidateUrl;
     } else {
-      const blob = await dataUrlToBlobAsync(dataUrlOrBlobUrl);
+      const blob = await dataUrlToBlobAsync(candidateUrl);
       if (!blob || blob.size === 0) {
         console.warn('Cannot download: Blob is empty or corrupted');
         return false;
@@ -637,7 +677,6 @@ export async function downloadFileSafely(dataUrlOrBlobUrl: string, fileName: str
       shouldRevoke = true;
     }
 
-    const cleanFileName = (fileName || `Document_${Date.now()}.pdf`).trim();
     const a = document.createElement('a');
     a.href = directBlobUrl;
     a.download = cleanFileName;

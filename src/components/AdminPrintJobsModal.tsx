@@ -55,6 +55,7 @@ interface AdminPrintJobsModalProps {
   onUpdateJob: (jobId: string, updates: Partial<PrintJobRecord>) => void;
   onDeleteJob: (jobId: string) => void;
   onConvertToInvoice: (job: PrintJobRecord, billItems: BillItem[], total: number) => void;
+  cloudFiles?: any[];
 }
 
 export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
@@ -64,25 +65,27 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   storeSettings,
   onUpdateJob,
   onDeleteJob,
-  onConvertToInvoice
+  onConvertToInvoice,
+  cloudFiles: propCloudFiles
 }) => {
-  const [cloudFiles, setCloudFiles] = useState<any[]>([]);
+  const [internalCloudFiles, setInternalCloudFiles] = useState<any[]>([]);
 
-  // Real-time listener for files uploaded directly to cloud storage (collection 'print_files')
+  // Continuous real-time listener for files uploaded directly to cloud storage (collection 'print_files')
   useEffect(() => {
-    if (!isOpen) return;
     const unsub = onSnapshot(collection(db, 'print_files'), (snap) => {
       const files: any[] = [];
       snap.forEach(doc => {
         files.push(doc.data());
       });
       files.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
-      setCloudFiles(files);
+      setInternalCloudFiles(files);
     }, (err) => {
       console.warn('print_files sync notice:', err);
     });
     return () => unsub();
-  }, [isOpen]);
+  }, []);
+
+  const cloudFiles = (propCloudFiles && propCloudFiles.length > 0) ? propCloudFiles : internalCloudFiles;
 
   const effectiveJobs = useMemo(() => {
     const baseJobs = Array.isArray(printJobs) ? [...printJobs] : [];
@@ -188,7 +191,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     if (job.id.startsWith('cloud-')) {
       const rawFileId = job.id.replace('cloud-', '');
       deleteFileFromCloudStorage(rawFileId).catch(() => {});
-      setCloudFiles(prev => prev.filter(cf => cf.id !== rawFileId));
+      setInternalCloudFiles(prev => prev.filter(cf => cf.id !== rawFileId));
     }
     onDeleteJob(job.id);
     showToast('🗑️ પ્રિન્ટ જોબ ડિલીટ કરાઈ!');
@@ -233,6 +236,19 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       if (!fileUrl) {
         // Fallback: check local IndexedDB
         fileUrl = await getFileFromStorage(file.id);
+      }
+
+      if (!fileUrl || isCorruptedOrNeedsFetch(fileUrl)) {
+        // Fallback: lookup by fileName in cloud chunks
+        fileUrl = await getFileFromCloudStorage(file.fileName, (prog) => {
+          setDownloadProgress({
+            fileId: file.id,
+            percent: prog.percent,
+            speed: prog.speed,
+            loadedBytes: prog.loadedBytes,
+            totalBytes: prog.totalBytes
+          });
+        });
       }
 
       if (!fileUrl || isCorruptedOrNeedsFetch(fileUrl)) {
@@ -282,6 +298,19 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       if (!fileUrl) {
         // Fallback: check local IndexedDB
         fileUrl = await getFileFromStorage(file.id);
+      }
+
+      if (!fileUrl || isCorruptedOrNeedsFetch(fileUrl)) {
+        // Fallback: lookup by fileName in cloud storage
+        fileUrl = await getFileFromCloudStorage(file.fileName, (prog) => {
+          setDownloadProgress({
+            fileId: file.id,
+            percent: prog.percent,
+            speed: prog.speed,
+            loadedBytes: prog.loadedBytes,
+            totalBytes: prog.totalBytes
+          });
+        });
       }
 
       if (!fileUrl || isCorruptedOrNeedsFetch(fileUrl)) {
@@ -1228,12 +1257,48 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                 </div>
               ) : viewingFile.file.fileType?.includes('image') ||
                 ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'ico', 'gif', 'svg'].some(ext => viewingFile.file.fileName.toLowerCase().endsWith(ext)) ? (
-                <div className="w-full h-full flex items-center justify-center bg-neutral-900 rounded-2xl p-2 overflow-auto">
+                <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 rounded-2xl p-3 overflow-auto relative">
                   <img
                     src={viewingFile.blobUrl}
                     alt={viewingFile.file.fileName}
-                    className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+                    className="max-h-full max-w-full object-contain rounded-lg shadow-2xl transition-all"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLElement).style.display = 'none';
+                      const fallback = document.getElementById(`img-fb-${viewingFile.file.id}`);
+                      if (fallback) fallback.style.display = 'flex';
+                    }}
                   />
+                  <div
+                    id={`img-fb-${viewingFile.file.id}`}
+                    style={{ display: 'none' }}
+                    className="flex-col items-center justify-center text-center p-6 bg-slate-800 rounded-2xl max-w-md border border-slate-700 text-white shadow-xl"
+                  >
+                    <ImageIcon className="w-16 h-16 text-amber-400 mb-3" />
+                    <h4 className="font-black text-base mb-1">{viewingFile.file.fileName}</h4>
+                    <p className="text-xs text-slate-300 mb-4">
+                      ફોટો સીધો સ્ક્રીન પર દેખાઈ રહ્યો નથી. તમે તેને ડાઉનલોડ કરીને અથવા નવી ટેબમાં ઓરિજિનલ ક્વોલિટીમાં જોઈ શકો છો.
+                    </p>
+                    <div className="flex gap-2 justify-center">
+                      <button
+                        type="button"
+                        onClick={() => window.open(viewingFile.blobUrl, '_blank')}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        <span>નવી વિન્ડોમાં જુઓ</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await downloadFileSafely(viewingFile.blobUrl, viewingFile.file.fileName, viewingFile.file.id);
+                        }}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <FileDown className="w-4 h-4" />
+                        <span>ડાઉનલોડ કરો</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center p-8 bg-white rounded-2xl border border-neutral-300 max-w-md shadow-sm">

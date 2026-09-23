@@ -70,6 +70,8 @@ import { StoreSettingsModal } from './components/StoreSettingsModal';
 import { XeroxOrderWidget } from './components/XeroxOrderWidget';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
 import { CustomerUploadQrModal } from './components/CustomerUploadQrModal';
+import GemBillGeneratorModal from './components/GemBillGeneratorModal';
+import MultiQuotationModal from './components/MultiQuotationModal';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
@@ -77,11 +79,28 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync } from './hooks/useFirebaseSync';
-import { deleteFileFromCloudStorage, downloadFileSafely, saveFileToCloudStorage } from './lib/fileStorage';
+import { deleteFileFromCloudStorage, downloadFileSafely, saveFileToCloudStorage, getFileFromCloudStorage, isCorruptedOrNeedsFetch, formatFileSize } from './lib/fileStorage';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from './lib/firebase';
 import { getDefaultLeftLogoSvg, getDefaultRightLogoSvg } from './lib/invoiceUtils';
 import { detectHsnAndGst, HSN_SAC_DIRECTORY } from './lib/gstHsnMaster';
 
 export default function App() {
+  // Global cloud print files uploaded by mobile/remote customers
+  const [cloudPrintFiles, setCloudPrintFiles] = useState<any[]>([]);
+
+  // Order file viewer state
+  const [viewingOrderFile, setViewingOrderFile] = useState<{
+    id?: string;
+    fileName: string;
+    fileDataUrl?: string;
+    fileSize?: number;
+    customerName?: string;
+    invoiceNo?: string;
+  } | null>(null);
+  const [orderFileLoading, setOrderFileLoading] = useState(false);
+  const [orderFileProgress, setOrderFileProgress] = useState(0);
+  const [orderFileBlobUrl, setOrderFileBlobUrl] = useState<string | null>(null);
   // Navigation View: Default to 'customer' for all visitors
   const [activeTab, setActiveTab] = useState<'customer' | 'admin' | 'gst_bill' | 'purchase' | 'expenses' | 'settings'>('customer');
   
@@ -137,6 +156,8 @@ export default function App() {
   const [showCaAuditModal, setShowCaAuditModal] = useState<boolean>(false);
   const [showDailyCashClosingModal, setShowDailyCashClosingModal] = useState<boolean>(false);
   const [showStoreSettingsModal, setShowStoreSettingsModal] = useState<boolean>(false);
+  const [showGemBillModal, setShowGemBillModal] = useState<boolean>(false);
+  const [showMultiQuotationModal, setShowMultiQuotationModal] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
   const [rojmelEntries, setRojmelEntries] = useFirebaseSync<RojmelEntry[]>('rojmel', 'prisha_rojmel_v1', []);
   const [khataAccounts, setKhataAccounts] = useFirebaseSync<KhataAccount[]>('khata_accounts', 'prisha_khata_accounts_v2', []);
@@ -322,6 +343,48 @@ export default function App() {
       lowStock: lowCount
     }));
   }, [posItems]);
+
+  // Continuous listener for customer print files uploaded via mobile link QR
+  useEffect(() => {
+    let isFirst = true;
+    let prevCount = 0;
+    const unsub = onSnapshot(collection(db, 'print_files'), (snap) => {
+      const list: any[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data) list.push({ ...data, id: d.id });
+      });
+      list.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+
+      if (!isFirst && list.length > prevCount) {
+        const newest = list[0];
+        try {
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+          audio.play().catch(() => {});
+        } catch (e) {}
+        setToastMessage(`📲 ગ્રાહકે મોબાઇલથી નવી ફાઇલ મોકલી: "${newest?.fileName || 'ફાઇલ'}"! 🖨️`);
+      }
+      isFirst = false;
+      prevCount = list.length;
+      setCloudPrintFiles(list);
+    }, (err) => {
+      console.warn('App print_files sync notice:', err);
+    });
+
+    return () => unsub();
+  }, []);
+
+  const { totalPrintCount, unlinkedCloudFilesCount } = React.useMemo(() => {
+    const existingJobFileIds = new Set<string>();
+    (printJobs || []).forEach(j => {
+      (j.files || []).forEach(f => existingJobFileIds.add(f.id));
+    });
+    const unlinked = (cloudPrintFiles || []).filter(cf => cf && cf.id && !existingJobFileIds.has(cf.id));
+    return {
+      totalPrintCount: (printJobs || []).length + unlinked.length,
+      unlinkedCloudFilesCount: unlinked.length
+    };
+  }, [printJobs, cloudPrintFiles]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -1159,36 +1222,19 @@ export default function App() {
   const downloadDocumentFile = async (
     dataUrl: string | undefined,
     fileName: string,
+    fileId?: string,
     orderInfo?: { invoiceNo?: string; customerName?: string; mobile?: string; itemsSummary?: string }
   ) => {
     const cleanFileName = (fileName || `document-${Date.now()}.pdf`).trim();
+    showToast(`⏳ "${cleanFileName}" ડાઉનલોડ થઈ રહ્યું છે...`);
 
-    // 1. If valid dataUrl or blob url exists
-    if (dataUrl && (dataUrl.startsWith('data:') || dataUrl.startsWith('blob:') || dataUrl.startsWith('http'))) {
-      const ok = await downloadFileSafely(dataUrl, cleanFileName);
-      if (ok) {
-        showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
-        return;
-      }
+    const ok = await downloadFileSafely(dataUrl, cleanFileName, fileId);
+    if (ok) {
+      showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
+      return;
     }
 
-    // 2. Check IndexedDB or Cloud Storage
-    try {
-      const { getFileFromStorage, getFileFromCloudStorage } = await import('./lib/fileStorage');
-      let storedUrl = await getFileFromStorage(cleanFileName);
-      if (!storedUrl) {
-        storedUrl = await getFileFromCloudStorage(cleanFileName);
-      }
-      if (storedUrl) {
-        await downloadFileSafely(storedUrl, cleanFileName);
-        showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
-        return;
-      }
-    } catch (e) {
-      console.warn('Storage check warning:', e);
-    }
-
-    // 3. Fallback: Generate an instant printable document record slip
+    // Fallback: Generate printable document record slip
     try {
       const canvas = document.createElement('canvas');
       canvas.width = 1100;
@@ -1242,7 +1288,49 @@ export default function App() {
       console.error('Download fallback error:', err);
     }
 
-    showToast(`📥 "${cleanFileName}" ડાઉનલોડ થઈ ગયું!`);
+    showToast(`⚠️ આ ફાઇલ (${cleanFileName}) નો ડેટા મળ્યો નથી.`);
+  };
+
+  // OPEN ATTACHED FILE IN SCREEN VIEWER
+  const handleOpenOrderFile = async (
+    file: { id?: string; fileName: string; fileDataUrl?: string; fileSize?: number; fileType?: string },
+    order?: OrderRecord
+  ) => {
+    setViewingOrderFile({
+      id: file.id,
+      fileName: file.fileName,
+      fileDataUrl: file.fileDataUrl,
+      fileSize: file.fileSize,
+      customerName: order?.customerName || 'ગ્રાહક',
+      invoiceNo: order?.invoiceNo
+    });
+    setOrderFileBlobUrl(null);
+    setOrderFileLoading(true);
+    setOrderFileProgress(15);
+
+    try {
+      let fileUrl = file.fileDataUrl;
+      const needsFresh = isCorruptedOrNeedsFetch(fileUrl);
+      if (needsFresh) {
+        const lookupKey = file.id || file.fileName;
+        fileUrl = await getFileFromCloudStorage(lookupKey, (prog) => {
+          setOrderFileProgress(prog.percent);
+        });
+        if (!fileUrl && file.id && file.fileName && file.fileName !== file.id) {
+          fileUrl = await getFileFromCloudStorage(file.fileName, (prog) => {
+            setOrderFileProgress(prog.percent);
+          });
+        }
+      }
+
+      if (fileUrl) {
+        setOrderFileBlobUrl(fileUrl);
+      }
+    } catch (e) {
+      console.warn('Error opening order file:', e);
+    } finally {
+      setOrderFileLoading(false);
+    }
   };
 
   // POS IN-BILL ITEM OPERATIONS
@@ -2266,11 +2354,16 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setShowPrintJobsModal(true)}
-                className="bg-gradient-to-r from-blue-900 to-indigo-950 hover:from-blue-950 hover:to-indigo-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-blue-400"
+                className="relative bg-gradient-to-r from-blue-900 to-indigo-950 hover:from-blue-950 hover:to-indigo-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-blue-400"
                 title="ગ્રાહકોએ મોકલેલા તમામ પ્રિન્ટ ડોક્યુમેન્ટ્સ (PDF, JPG, PNG, Excel) ડાઉનલોડ કરો"
               >
                 <Printer className="w-4 h-4 text-orange-400" />
-                <span>🖨️ પ્રિન્ટ ડોક્યુમેન્ટ્સ ({printJobs.length})</span>
+                <span>🖨️ પ્રિન્ટ ફાઇલો ({totalPrintCount})</span>
+                {unlinkedCloudFilesCount > 0 && (
+                  <span className="bg-emerald-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-bounce shadow-xs">
+                    {unlinkedCloudFilesCount} નવી!
+                  </span>
+                )}
               </button>
 
               {/* DAILY SALES, PROFIT & STOCK REPORT BUTTON */}
@@ -2304,6 +2397,28 @@ export default function App() {
               >
                 <BarChart3 className="w-4 h-4 text-amber-300" />
                 <span>📊 CA ઑડિટ & GST</span>
+              </button>
+
+              {/* DEDICATED GeM PORTAL GOVT BILL GENERATOR BUTTON */}
+              <button
+                type="button"
+                onClick={() => setShowGemBillModal(true)}
+                className="bg-gradient-to-r from-blue-900 via-blue-950 to-indigo-950 hover:from-blue-950 hover:to-black text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-orange-400 ring-2 ring-orange-500/30"
+                title="GeM પોર્ટલ સરકારી બિલ જનરેટર (PDF < 5MB Compliant)"
+              >
+                <Building className="w-4 h-4 text-orange-400" />
+                <span>🏛️ GeM બિલ જનરેટર</span>
+              </button>
+
+              {/* 5-FIRM TENDER MULTI-QUOTATION BUILDER BUTTON */}
+              <button
+                type="button"
+                onClick={() => setShowMultiQuotationModal(true)}
+                className="bg-gradient-to-r from-amber-600 via-amber-700 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-amber-300 ring-2 ring-amber-400/30"
+                title="૧ ક્લિકમાં ૫ અલગ કંપનીના ક્વોટેશન & ભાવ તુલનાત્મક પત્રક (Comparative Statement)"
+              >
+                <FileText className="w-4 h-4 text-amber-200" />
+                <span>📋 ૫ કંપની ક્વોટેશન</span>
               </button>
 
               <button
@@ -2914,24 +3029,22 @@ export default function App() {
                                 </span>
                                 <button
                                   type="button"
-                                  onClick={() => downloadDocumentFile(f.fileDataUrl, f.fileName)}
+                                  onClick={() => downloadDocumentFile(f.fileDataUrl, f.fileName, f.id, { invoiceNo: o.invoiceNo, customerName: o.customerName, mobile: o.mobile })}
                                   className="bg-blue-700 hover:bg-blue-800 text-white text-xs font-black px-2.5 py-1 rounded-md flex items-center gap-1 cursor-pointer transition-transform active:scale-95 shadow-xs"
                                   title="આ ફાઇલ તમારા કમ્પ્યુટર/મોબાઇલમાં ડાઉનલોડ કરો"
                                 >
                                   <Download className="w-3.5 h-3.5" />
                                   <span>ડાઉનલોડ કરો</span>
                                 </button>
-                                {f.fileDataUrl.startsWith('data:image/') && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setViewingScreenshot(f.fileDataUrl)}
-                                    className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black px-2 py-1 rounded-md flex items-center gap-1 cursor-pointer shadow-xs"
-                                    title="મોટો ફોટો જુઓ"
-                                  >
-                                    <Eye className="w-3.5 h-3.5" />
-                                    <span>જુઓ</span>
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenOrderFile(f, o)}
+                                  className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black px-2 py-1 rounded-md flex items-center gap-1 cursor-pointer shadow-xs active:scale-95"
+                                  title="આ ફાઇલ સ્ક્રીન પર જુઓ"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                  <span>જુઓ</span>
+                                </button>
                               </div>
                             ))}
                           </div>
@@ -4385,6 +4498,7 @@ export default function App() {
           onClose={() => setShowPrintJobsModal(false)}
           printJobs={printJobs}
           storeSettings={storeSettings}
+          cloudFiles={cloudPrintFiles}
           onUpdateJob={(jobId, updates) => {
             setPrintJobs(prev => prev.map(j => j.id === jobId ? { ...j, ...updates } : j));
           }}
@@ -4412,8 +4526,11 @@ export default function App() {
               profit: Math.round(total * 0.4),
               notes: `પ્રિન્ટ જોબ #${job.jobNo}`,
               attachedFiles: (job.files || []).map(f => ({
+                id: f.id,
                 fileName: f.fileName,
-                fileDataUrl: f.dataUrl || '',
+                fileDataUrl: f.fileDataUrl || f.dataUrl || '',
+                fileSize: f.fileSize,
+                fileType: f.fileType,
                 itemName: `પ્રિન્ટ જોબ #${job.jobNo}`
               }))
             };
@@ -4704,12 +4821,121 @@ export default function App() {
         />
       )}
 
+      {/* ORDER ATTACHED FILE IN-SCREEN PREVIEW MODAL */}
+      {viewingOrderFile && (
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-2 sm:p-4 animate-fade-in no-print">
+          <div className="bg-white rounded-2xl max-w-4xl w-full h-[85vh] flex flex-col border border-neutral-300 shadow-2xl overflow-hidden relative">
+            <div className="bg-neutral-900 text-white p-3 sm:p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-400" />
+                <div>
+                  <h3 className="font-black text-sm sm:text-base text-white truncate max-w-[250px] sm:max-w-md">
+                    {viewingOrderFile.fileName}
+                  </h3>
+                  <p className="text-[11px] text-neutral-400">
+                    ઓર્ડર #{viewingOrderFile.invoiceNo || 'N/A'} • ગ્રાહક: {viewingOrderFile.customerName}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => downloadDocumentFile(viewingOrderFile.fileDataUrl, viewingOrderFile.fileName, viewingOrderFile.id)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Download className="w-4 h-4" />
+                  <span className="hidden sm:inline">ડાઉનલોડ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setViewingOrderFile(null);
+                    setOrderFileBlobUrl(null);
+                  }}
+                  className="w-8 h-8 rounded-full bg-neutral-800 hover:bg-neutral-700 flex items-center justify-center text-neutral-300 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-slate-900 p-2 sm:p-4 overflow-auto flex items-center justify-center relative">
+              {orderFileLoading ? (
+                <div className="text-center p-8 bg-slate-800 rounded-2xl border border-slate-700 text-white max-w-sm shadow-xl">
+                  <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                  <h4 className="font-bold text-sm mb-1">ફાઇલ ડાઉનલોડ થઈ રહી છે...</h4>
+                  <p className="text-xs text-slate-300 mb-3">{orderFileProgress}% પ્રગતિ</p>
+                  <div className="w-full bg-slate-700 h-2.5 rounded-full overflow-hidden">
+                    <div className="bg-emerald-500 h-full transition-all duration-200" style={{ width: `${orderFileProgress}%` }} />
+                  </div>
+                </div>
+              ) : orderFileBlobUrl ? (
+                viewingOrderFile.fileName.match(/\.(jpg|jpeg|png|webp|bmp|gif|ico|svg)$/i) ? (
+                  <div className="w-full h-full flex flex-col items-center justify-center relative">
+                    <img
+                      src={orderFileBlobUrl}
+                      alt={viewingOrderFile.fileName}
+                      className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+                    />
+                  </div>
+                ) : (
+                  <iframe
+                    src={`${orderFileBlobUrl}#toolbar=1`}
+                    className="w-full h-full rounded-xl bg-white"
+                    title={viewingOrderFile.fileName}
+                  />
+                )
+              ) : (
+                <div className="text-center p-8 bg-slate-800 rounded-2xl border border-slate-700 text-white max-w-md shadow-xl">
+                  <AlertCircle className="w-12 h-12 text-amber-400 mx-auto mb-3" />
+                  <h4 className="font-bold text-sm mb-1">{viewingOrderFile.fileName}</h4>
+                  <p className="text-xs text-slate-300 mb-4">
+                    આ ફાઇલ બ્રાઉઝરમાં સીધી ડિસ્પ્લે થઈ શકી નથી. તમે નીચેના બટનથી તેને ઓરિજિનલ ક્વોલિટીમાં ડાઉનલોડ કરી શકો છો.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => downloadDocumentFile(viewingOrderFile.fileDataUrl, viewingOrderFile.fileName, viewingOrderFile.id)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2 rounded-xl flex items-center gap-2 mx-auto cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>ડાઉનલોડ કરો</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MOBILE FILE UPLOAD QR & DIRECT LINK MODAL */}
       <CustomerUploadQrModal
         isOpen={showCustomerUploadQrModal}
         onClose={() => setShowCustomerUploadQrModal(false)}
         showToast={showToast}
       />
+
+      {/* DEDICATED GeM PORTAL BILL GENERATOR MODAL */}
+      {showGemBillModal && (
+        <GemBillGeneratorModal
+          storeSettings={storeSettings}
+          orders={orders}
+          onSaveOrder={(newOrder) => {
+            setOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+          }}
+          onClose={() => setShowGemBillModal(false)}
+          showToast={showToast}
+        />
+      )}
+
+      {/* 5-FIRM MULTI-VENDOR TENDER QUOTATION MODAL */}
+      {showMultiQuotationModal && (
+        <MultiQuotationModal
+          storeSettings={storeSettings}
+          onClose={() => setShowMultiQuotationModal(false)}
+          showToast={showToast}
+        />
+      )}
     </div>
   );
 }
