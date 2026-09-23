@@ -79,7 +79,7 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
-import { useFirebaseSync } from './hooks/useFirebaseSync';
+import { useFirebaseSync, isQuotaExhausted, handleQuotaError } from './hooks/useFirebaseSync';
 import { deleteFileFromCloudStorage, downloadFileSafely, saveFileToCloudStorage, getFileFromCloudStorage, isCorruptedOrNeedsFetch, formatFileSize } from './lib/fileStorage';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from './lib/firebase';
@@ -347,32 +347,40 @@ export default function App() {
 
   // Continuous listener for customer print files uploaded via mobile link QR
   useEffect(() => {
+    if (isQuotaExhausted()) return;
     let isFirst = true;
     let prevCount = 0;
-    const unsub = onSnapshot(collection(db, 'print_files'), (snap) => {
-      const list: any[] = [];
-      snap.forEach((d) => {
-        const data = d.data();
-        if (data) list.push({ ...data, id: d.id });
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = onSnapshot(collection(db, 'print_files'), (snap) => {
+        const list: any[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          if (data) list.push({ ...data, id: d.id });
+        });
+        list.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+
+        if (!isFirst && list.length > prevCount) {
+          const newest = list[0];
+          try {
+            const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            audio.play().catch(() => {});
+          } catch (e) {}
+          setToastMessage(`📲 ગ્રાહકે મોબાઇલથી નવી ફાઇલ મોકલી: "${newest?.fileName || 'ફાઇલ'}"! 🖨️`);
+        }
+        isFirst = false;
+        prevCount = list.length;
+        setCloudPrintFiles(list);
+      }, (err) => {
+        handleQuotaError(err);
       });
-      list.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+    } catch (e) {
+      handleQuotaError(e);
+    }
 
-      if (!isFirst && list.length > prevCount) {
-        const newest = list[0];
-        try {
-          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-          audio.play().catch(() => {});
-        } catch (e) {}
-        setToastMessage(`📲 ગ્રાહકે મોબાઇલથી નવી ફાઇલ મોકલી: "${newest?.fileName || 'ફાઇલ'}"! 🖨️`);
-      }
-      isFirst = false;
-      prevCount = list.length;
-      setCloudPrintFiles(list);
-    }, (err) => {
-      console.warn('App print_files sync notice:', err);
-    });
-
-    return () => unsub();
+    return () => {
+      if (unsub) unsub();
+    };
   }, []);
 
   const { totalPrintCount, unlinkedCloudFilesCount } = React.useMemo(() => {

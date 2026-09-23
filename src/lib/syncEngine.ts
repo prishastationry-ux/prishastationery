@@ -2,7 +2,7 @@ import { PrintJobRecord, OrderRecord, ProductItem, StoreSettings } from '../type
 import { SyncMutation, SyncPushPayload, SyncPushResponse, SyncPullResponse, ConflictRecord } from '../types/sync';
 import { db } from './firebase';
 import { doc, getDoc, setDoc, writeBatch } from 'firebase/firestore';
-import { sanitizeForFirestore } from '../hooks/useFirebaseSync';
+import { sanitizeForFirestore, isQuotaExhausted, handleQuotaError } from '../hooks/useFirebaseSync';
 
 const CLIENT_ID_KEY = 'prisha_device_client_id';
 const PENDING_MUTATIONS_KEY = 'prisha_pending_sync_mutations';
@@ -159,6 +159,16 @@ export function resolvePrintJobConflict(
  * Push pending offline mutations to the centralized REST API or Firestore
  */
 export async function pushOfflineSync(): Promise<SyncPushResponse> {
+  if (isQuotaExhausted()) {
+    return {
+      success: false,
+      processedCount: 0,
+      conflictsResolved: 0,
+      serverTimestamp: Date.now(),
+      conflicts: []
+    };
+  }
+
   const raw = typeof window !== 'undefined' ? localStorage.getItem(PENDING_MUTATIONS_KEY) : null;
   const mutations: SyncMutation[] = raw ? JSON.parse(raw) : [];
 
@@ -270,6 +280,7 @@ export async function pushOfflineSync(): Promise<SyncPushResponse> {
       conflicts: recordedConflicts
     };
   } catch (error: any) {
+    handleQuotaError(error);
     console.error('Direct Firestore batch push failed:', error);
     return {
       success: false,

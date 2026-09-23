@@ -17,6 +17,7 @@ interface FirmProfile {
   gstin: string;
   quoteNo: string;
   marginPercent: number; // e.g., 0% for L1, +4% for Firm 2, +8% for Firm 3
+  selected?: boolean; // Whether this firm is selected for quotation generation
 }
 
 interface QuoteItem {
@@ -51,7 +52,8 @@ export default function MultiQuotationModal({
       phone: storeSettings.phone || '8140430395',
       gstin: storeSettings.gstNumber || '24AAFFP1234F1Z1',
       quoteNo: `${refNo}/L1`,
-      marginPercent: 0 // L1 lowest
+      marginPercent: 0, // L1 lowest
+      selected: true
     },
     {
       id: 2,
@@ -61,7 +63,8 @@ export default function MultiQuotationModal({
       phone: '9825012345',
       gstin: '24BBTCO9876F2Z2',
       quoteNo: `${refNo}/F2`,
-      marginPercent: 4 // +4%
+      marginPercent: 4, // +4%
+      selected: true
     },
     {
       id: 3,
@@ -71,7 +74,8 @@ export default function MultiQuotationModal({
       phone: '9426054321',
       gstin: '24GPOFF5544F3Z3',
       quoteNo: `${refNo}/F3`,
-      marginPercent: 8 // +8%
+      marginPercent: 8, // +8%
+      selected: true
     },
     {
       id: 4,
@@ -81,7 +85,8 @@ export default function MultiQuotationModal({
       phone: '9712398765',
       gstin: '24AMBPR1122F4Z4',
       quoteNo: `${refNo}/F4`,
-      marginPercent: 12 // +12%
+      marginPercent: 12, // +12%
+      selected: true
     },
     {
       id: 5,
@@ -91,7 +96,8 @@ export default function MultiQuotationModal({
       phone: '9898011223',
       gstin: '24ROYCS3344F5Z5',
       quoteNo: `${refNo}/F5`,
-      marginPercent: 16 // +16%
+      marginPercent: 16, // +16%
+      selected: true
     }
   ]);
 
@@ -200,6 +206,23 @@ export default function MultiQuotationModal({
   const handleUpdateFirmDetail = (firmId: number, field: keyof FirmProfile, val: any) => {
     setFirms(
       firms.map(f => (f.id === firmId ? { ...f, [field]: val } : f))
+    );
+  };
+
+  // Preset selector for active firms count (1 to 5)
+  const handleSelectFirmCountPreset = (count: number) => {
+    setFirms(prev =>
+      prev.map(f => ({
+        ...f,
+        selected: f.id <= count
+      }))
+    );
+  };
+
+  // Toggle individual firm selection
+  const handleToggleFirmSelection = (firmId: number) => {
+    setFirms(prev =>
+      prev.map(f => (f.id === firmId ? { ...f, selected: f.selected === false } : f))
     );
   };
 
@@ -317,9 +340,15 @@ export default function MultiQuotationModal({
     }
   };
 
-  // Direct Browser Print for ALL 5 firm quotations combined in one print job
+  // Direct Browser Print for ALL selected firm quotations combined in one print job
   const handlePrintAllQuotations = () => {
-    const allPagesHtml = firms
+    const activeFirms = firms.filter(f => f.selected !== false);
+    if (activeFirms.length === 0) {
+      if (showToast) showToast('મહત્તમ ઓછામાં ઓછી ૧ કંપની પસંદ કરો!');
+      return;
+    }
+
+    const allPagesHtml = activeFirms
       .map((firm, fIdx) => {
         const total = calculateFirmTotal(firm.id);
         const itemsRows = items
@@ -337,7 +366,7 @@ export default function MultiQuotationModal({
           .join('');
 
         return `
-          <div class="quote-box" style="${fIdx < firms.length - 1 ? 'page-break-after: always; break-after: page;' : ''}">
+          <div class="quote-box" style="${fIdx < activeFirms.length - 1 ? 'page-break-after: always; break-after: page;' : ''}">
             <div class="header-box">
               <div class="firm-title">${firm.name}</div>
               <div class="firm-sub">${firm.tagline}</div>
@@ -436,6 +465,24 @@ export default function MultiQuotationModal({
 
   // Direct Comparative Statement Print
   const handlePrintComparativeStatement = () => {
+    const activeFirms = firms.filter(f => f.selected !== false);
+    if (activeFirms.length === 0) {
+      if (showToast) showToast('મહત્તમ ઓછામાં ઓછી ૧ કંપની પસંદ કરો!');
+      return;
+    }
+
+    // Determine L1 lowest among active selected firms
+    let lowestFirm = activeFirms[0];
+    let lowestTotal = calculateFirmTotal(activeFirms[0].id);
+
+    activeFirms.forEach(f => {
+      const tot = calculateFirmTotal(f.id);
+      if (tot < lowestTotal) {
+        lowestTotal = tot;
+        lowestFirm = f;
+      }
+    });
+
     const itemsRows = items
       .map(
         (it, idx) => `
@@ -443,10 +490,10 @@ export default function MultiQuotationModal({
         <td style="padding: 5px; text-align: center; border-right: 1px solid #000;">${idx + 1}</td>
         <td style="padding: 5px; border-right: 1px solid #000;"><b>${it.name}</b></td>
         <td style="padding: 5px; text-align: center; border-right: 1px solid #000;">${it.qty} ${it.unit}</td>
-        ${firms
+        ${activeFirms
           .map(
             f => `
-          <td style="padding: 5px; text-align: right; border-right: 1px solid #000; ${f.id === 1 ? 'background: #f0fdf4; font-weight: 900;' : ''}">
+          <td style="padding: 5px; text-align: right; border-right: 1px solid #000; ${f.id === lowestFirm.id ? 'background: #f0fdf4; font-weight: 900;' : ''}">
             ₹${((it.firmPrices[f.id] || it.basePrice) * it.qty).toFixed(2)}
           </td>
         `
@@ -486,13 +533,13 @@ export default function MultiQuotationModal({
                 <th style="width: 30px;">#</th>
                 <th>વસ્તુની વિગત</th>
                 <th style="width: 60px;">જથ્થો</th>
-                ${firms
+                ${activeFirms
                   .map(
                     f => `
-                  <th style="${f.id === 1 ? 'background: #dcfce7;' : ''}">
+                  <th style="${f.id === lowestFirm.id ? 'background: #dcfce7;' : ''}">
                     ${f.name}<br/>
                     <span style="font-size: 9px; color: #374151;">
-                      ${f.id === 1 ? '🏆 (L1 - નિમ્નતમ)' : `Firm ${f.id}`}
+                      ${f.id === lowestFirm.id ? '🏆 (L1 - નિમ્નતમ)' : `Firm ${f.id}`}
                       ${includeGst && f.gstin ? `<br/>GST: ${f.gstin}` : ''}
                     </span>
                   </th>
@@ -505,12 +552,12 @@ export default function MultiQuotationModal({
               ${itemsRows}
               <tr style="font-weight: 900; font-size: 12px; background: #f9fafb;">
                 <td colspan="3" style="text-align: right; padding: 6px;">કુલ સરવાળો (Total Amount ₹):</td>
-                ${firms
+                ${activeFirms
                   .map(
                     f => `
-                  <td style="text-align: right; padding: 6px; ${f.id === 1 ? 'background: #bbf7d0; font-size: 13px; font-weight: 900;' : ''}">
+                  <td style="text-align: right; padding: 6px; ${f.id === lowestFirm.id ? 'background: #bbf7d0; font-size: 13px; font-weight: 900;' : ''}">
                     ₹${calculateFirmTotal(f.id).toFixed(2)}
-                    ${f.id === 1 ? '<br/><span class="l1-badge">L1 LOWEST</span>' : ''}
+                    ${f.id === lowestFirm.id ? '<br/><span class="l1-badge">L1 LOWEST</span>' : ''}
                   </td>
                 `
                   )
@@ -521,7 +568,7 @@ export default function MultiQuotationModal({
 
           <div style="margin-top: 15px; border-top: 1px solid #000; padding-top: 8px;">
             <b>તારણ / ભલામણ (Purchase Committee Recommendation):</b><br/>
-            ઉપરોક્ત સરખામણી પત્રક જોતા સૌથી ઓછા ભાવ <b>${firms[0].name} (₹${calculateFirmTotal(1).toFixed(2)})</b> ના હોવાથી L1 તરીકે મંજૂર કરવા યોગ્ય જણાય છે.
+            ઉપરોક્ત સરખામણી પત્રક જોતા સૌથી ઓછા ભાવ <b>${lowestFirm.name} (₹${lowestTotal.toFixed(2)})</b> ના હોવાથી L1 તરીકે મંજૂર કરવા યોગ્ય જણાય છે.
           </div>
 
           <div style="margin-top: 40px; display: flex; justify-content: space-between; text-align: center; font-weight: bold;">
@@ -754,19 +801,37 @@ export default function MultiQuotationModal({
                     <th className="p-2 w-8 text-center">#</th>
                     <th className="p-2 min-w-[180px]">વસ્તુની વિગત</th>
                     <th className="p-2 text-center w-16">જથ્થો</th>
-                    {firms.map(f => (
-                      <th
-                        key={f.id}
-                        className={`p-2 text-right min-w-[100px] ${
-                          f.id === 1 ? 'bg-emerald-100 text-emerald-900 border-x border-emerald-300' : ''
-                        }`}
-                      >
-                        {f.id === 1 ? '🏆 Firm 1 (L1)' : `Firm ${f.id}`}
-                        <div className="text-[9px] font-normal text-neutral-500">
-                          {f.marginPercent > 0 ? `+${f.marginPercent}%` : 'Base'}
-                        </div>
-                      </th>
-                    ))}
+                    {firms.map(f => {
+                      const isSelected = f.selected !== false;
+                      return (
+                        <th
+                          key={f.id}
+                          className={`p-2 text-right min-w-[100px] ${
+                            !isSelected
+                              ? 'bg-neutral-200 text-neutral-400 opacity-60'
+                              : f.id === 1
+                              ? 'bg-emerald-100 text-emerald-900 border-x border-emerald-300'
+                              : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-end gap-1">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleFirmSelection(f.id)}
+                              className="w-3.5 h-3.5 text-indigo-600 rounded cursor-pointer accent-indigo-700"
+                              title="આ કંપની ક્વોટેશનમાં રાખવી કે નહીં"
+                            />
+                            <span className={!isSelected ? 'line-through' : ''}>
+                              {f.id === 1 ? '🏆 Firm 1 (L1)' : `Firm ${f.id}`}
+                            </span>
+                          </div>
+                          <div className="text-[9px] font-normal text-neutral-500">
+                            {f.marginPercent > 0 ? `+${f.marginPercent}%` : 'Base'}
+                          </div>
+                        </th>
+                      );
+                    })}
                     <th className="p-2 text-center w-10"></th>
                   </tr>
                 </thead>
@@ -776,23 +841,35 @@ export default function MultiQuotationModal({
                       <td className="p-2 text-center">{idx + 1}</td>
                       <td className="p-2 font-black text-neutral-900">{it.name}</td>
                       <td className="p-2 text-center">{it.qty} {it.unit}</td>
-                      {firms.map(f => (
-                        <td
-                          key={f.id}
-                          className={`p-1.5 text-right ${
-                            f.id === 1 ? 'bg-emerald-50/80 border-x border-emerald-200' : ''
-                          }`}
-                        >
-                          <input
-                            type="number"
-                            value={it.firmPrices[f.id] ?? it.basePrice}
-                            onChange={e => handleUpdateItemPriceForFirm(it.id, f.id, Number(e.target.value) || 0)}
-                            className={`w-20 text-right p-1 text-xs font-black border rounded outline-none ${
-                              f.id === 1 ? 'border-emerald-500 text-emerald-900' : 'border-neutral-300'
+                      {firms.map(f => {
+                        const isSelected = f.selected !== false;
+                        return (
+                          <td
+                            key={f.id}
+                            className={`p-1.5 text-right ${
+                              !isSelected
+                                ? 'bg-neutral-100 opacity-40'
+                                : f.id === 1
+                                ? 'bg-emerald-50/80 border-x border-emerald-200'
+                                : ''
                             }`}
-                          />
-                        </td>
-                      ))}
+                          >
+                            <input
+                              type="number"
+                              value={it.firmPrices[f.id] ?? it.basePrice}
+                              onChange={e => handleUpdateItemPriceForFirm(it.id, f.id, Number(e.target.value) || 0)}
+                              disabled={!isSelected}
+                              className={`w-20 text-right p-1 text-xs font-black border rounded outline-none ${
+                                !isSelected
+                                  ? 'border-neutral-200 text-neutral-400 bg-neutral-100'
+                                  : f.id === 1
+                                  ? 'border-emerald-500 text-emerald-900 bg-white'
+                                  : 'border-neutral-300 bg-white'
+                              }`}
+                            />
+                          </td>
+                        );
+                      })}
                       <td className="p-2 text-center">
                         <button
                           onClick={() => handleRemoveItem(it.id)}
@@ -807,16 +884,23 @@ export default function MultiQuotationModal({
                     <td colSpan={3} className="p-2.5 text-right font-black">
                       કુલ સરવાળો (Total Amount ₹):
                     </td>
-                    {firms.map(f => (
-                      <td
-                        key={f.id}
-                        className={`p-2.5 text-right ${
-                          f.id === 1 ? 'bg-emerald-200 text-emerald-950 font-black border-x border-emerald-400' : ''
-                        }`}
-                      >
-                        ₹{calculateFirmTotal(f.id).toFixed(2)}
-                      </td>
-                    ))}
+                    {firms.map(f => {
+                      const isSelected = f.selected !== false;
+                      return (
+                        <td
+                          key={f.id}
+                          className={`p-2.5 text-right ${
+                            !isSelected
+                              ? 'bg-neutral-200 text-neutral-400 line-through opacity-50'
+                              : f.id === 1
+                              ? 'bg-emerald-200 text-emerald-950 font-black border-x border-emerald-400'
+                              : ''
+                          }`}
+                        >
+                          ₹{calculateFirmTotal(f.id).toFixed(2)}
+                        </td>
+                      );
+                    })}
                     <td></td>
                   </tr>
                 </tbody>
@@ -826,8 +910,8 @@ export default function MultiQuotationModal({
 
           {/* 3. EDITABLE 5 FIRMS PROFILES & INDIVIDUAL PRINT BUTTONS */}
           <div className="bg-neutral-50 p-4 rounded-xl border border-neutral-300 space-y-3">
-            <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider border-b pb-2 flex items-center justify-between">
-              <span>૩. ૫ પેઢીઓ/કંપનીઓના નામ અને સરનામા સુધારો (5 Vendor Profiles)</span>
+            <h3 className="text-xs font-black text-indigo-950 uppercase tracking-wider border-b pb-2 flex items-center justify-between flex-wrap gap-2">
+              <span>૩. કેટલી કંપનીઓના ક્વોટેશન આપવા છે તે પસંદ કરો & વિગત સુધારો</span>
               <button
                 type="button"
                 onClick={handlePrintComparativeStatement}
@@ -838,110 +922,167 @@ export default function MultiQuotationModal({
               </button>
             </h3>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {firms.map(f => (
-                <div
-                  key={f.id}
-                  className={`bg-white p-3 rounded-xl border space-y-2 relative ${
-                    f.id === 1 ? 'border-2 border-emerald-500 shadow-sm' : 'border-neutral-300'
-                  }`}
-                >
-                  <div className="flex items-center justify-between border-b pb-1.5">
-                    <span className={`font-black text-xs ${f.id === 1 ? 'text-emerald-700' : 'text-neutral-800'}`}>
-                      {f.id === 1 ? '🏆 Firm 1 (L1 - આપણી દુકાન)' : `કંપની ${f.id}`}
-                    </span>
-                    <span className="text-[10px] bg-neutral-100 font-bold px-2 py-0.5 rounded border">
-                      કુલ: ₹{calculateFirmTotal(f.id)}
-                    </span>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-neutral-500">કંપની/દુકાનનું નામ:</label>
-                    <input
-                      type="text"
-                      value={f.name}
-                      onChange={e => handleUpdateFirmDetail(f.id, 'name', e.target.value)}
-                      className="w-full text-xs font-black p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-neutral-500">ટેગલાઇન / સબ-ટાઇટલ:</label>
-                    <input
-                      type="text"
-                      value={f.tagline}
-                      onChange={e => handleUpdateFirmDetail(f.id, 'tagline', e.target.value)}
-                      className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-neutral-500">સરનામું:</label>
-                    <input
-                      type="text"
-                      value={f.address}
-                      onChange={e => handleUpdateFirmDetail(f.id, 'address', e.target.value)}
-                      className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <div>
-                      <label className="block text-[10px] text-neutral-500">ફોન નંબર:</label>
-                      <input
-                        type="text"
-                        value={f.phone}
-                        onChange={e => handleUpdateFirmDetail(f.id, 'phone', e.target.value)}
-                        className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
-                        placeholder="Phone"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[10px] text-neutral-500">
-                        {includeGst ? 'GSTIN/TAN:' : 'GSTIN (Non-GST):'}
-                      </label>
-                      <input
-                        type="text"
-                        value={f.gstin}
-                        onChange={e => handleUpdateFirmDetail(f.id, 'gstin', e.target.value)}
-                        className="w-full text-[11px] font-mono font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
-                        placeholder="GSTIN No"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-neutral-500">ક્વોટેશન / બિલ નંબર:</label>
-                    <input
-                      type="text"
-                      value={f.quoteNo}
-                      onChange={e => handleUpdateFirmDetail(f.id, 'quoteNo', e.target.value)}
-                      className="w-full text-[11px] font-mono font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
-                      placeholder="Quote No"
-                    />
-                  </div>
-
-                  <div className="pt-1 flex items-center justify-between gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handlePrintSingleQuotation(f)}
-                      className="flex-1 bg-neutral-900 hover:bg-black text-white font-black py-1.5 rounded text-[11px] flex items-center justify-center gap-1 cursor-pointer"
-                    >
-                      <Printer className="w-3.5 h-3.5 text-amber-400" />
-                      <span>પ્રિન્ટ / PDF ({f.id === 1 ? 'L1' : `Firm ${f.id}`})</span>
-                    </button>
-                  </div>
+            {/* PRESET COMPANY COUNT SELECTOR */}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-indigo-50/90 p-3 rounded-xl border border-indigo-200">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-black text-indigo-950 flex items-center gap-1">
+                  🏷️ કંપની સંખ્યા પસંદ કરો:
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[1, 2, 3, 4, 5].map(num => {
+                    const activeCount = firms.filter(f => f.selected !== false).length;
+                    const isSelectedPreset = activeCount === num;
+                    return (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => handleSelectFirmCountPreset(num)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-black cursor-pointer border transition-all ${
+                          isSelectedPreset
+                            ? 'bg-indigo-900 text-white border-indigo-950 shadow-xs ring-2 ring-indigo-400'
+                            : 'bg-white text-neutral-800 border-neutral-300 hover:bg-indigo-100'
+                        }`}
+                      >
+                        {num} {num === 1 ? 'કંપની' : 'કંપનીઓ'}
+                      </button>
+                    );
+                  })}
                 </div>
-              ))}
+              </div>
+              <div className="text-[11px] text-neutral-700 font-bold bg-white px-2.5 py-1 rounded-lg border border-neutral-200">
+                સિલેક્ટેડ: <b className="text-indigo-900 font-black">{firms.filter(f => f.selected !== false).length} કંપનીઓ</b>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {firms.map(f => {
+                const isSelected = f.selected !== false;
+                return (
+                  <div
+                    key={f.id}
+                    className={`p-3 rounded-xl border space-y-2 relative transition-all ${
+                      !isSelected
+                        ? 'bg-neutral-100 border-neutral-200 opacity-60'
+                        : f.id === 1
+                        ? 'bg-white border-2 border-emerald-500 shadow-sm'
+                        : 'bg-white border-neutral-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between border-b pb-1.5">
+                      <label className="flex items-center gap-2 cursor-pointer font-black text-xs select-none">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleFirmSelection(f.id)}
+                          className="w-4 h-4 text-indigo-600 rounded cursor-pointer accent-indigo-700"
+                        />
+                        <span className={!isSelected ? 'text-neutral-500 line-through' : f.id === 1 ? 'text-emerald-700' : 'text-neutral-800'}>
+                          {f.id === 1 ? '🏆 Firm 1 (L1 - આપણી દુકાન)' : `કંપની ${f.id}`}
+                        </span>
+                      </label>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${isSelected ? 'bg-neutral-100' : 'bg-neutral-200 text-neutral-400'}`}>
+                        કુલ: ₹{calculateFirmTotal(f.id)}
+                      </span>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-neutral-500">કંપની/દુકાનનું નામ:</label>
+                      <input
+                        type="text"
+                        value={f.name}
+                        onChange={e => handleUpdateFirmDetail(f.id, 'name', e.target.value)}
+                        className="w-full text-xs font-black p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600 disabled:bg-neutral-100"
+                        disabled={!isSelected}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-neutral-500">ટેગલાઇન / સબ-ટાઇટલ:</label>
+                      <input
+                        type="text"
+                        value={f.tagline}
+                        onChange={e => handleUpdateFirmDetail(f.id, 'tagline', e.target.value)}
+                        className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600 disabled:bg-neutral-100"
+                        disabled={!isSelected}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-neutral-500">સરનામું:</label>
+                      <input
+                        type="text"
+                        value={f.address}
+                        onChange={e => handleUpdateFirmDetail(f.id, 'address', e.target.value)}
+                        className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600 disabled:bg-neutral-100"
+                        disabled={!isSelected}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <div>
+                        <label className="block text-[10px] text-neutral-500">ફોન નંબર:</label>
+                        <input
+                          type="text"
+                          value={f.phone}
+                          onChange={e => handleUpdateFirmDetail(f.id, 'phone', e.target.value)}
+                          className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600 disabled:bg-neutral-100"
+                          placeholder="Phone"
+                          disabled={!isSelected}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] text-neutral-500">
+                          {includeGst ? 'GSTIN/TAN:' : 'GSTIN (Non-GST):'}
+                        </label>
+                        <input
+                          type="text"
+                          value={f.gstin}
+                          onChange={e => handleUpdateFirmDetail(f.id, 'gstin', e.target.value)}
+                          className="w-full text-[11px] font-mono font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600 disabled:bg-neutral-100"
+                          placeholder="GSTIN No"
+                          disabled={!isSelected}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-neutral-500">ક્વોટેશન / બિલ નંબર:</label>
+                      <input
+                        type="text"
+                        value={f.quoteNo}
+                        onChange={e => handleUpdateFirmDetail(f.id, 'quoteNo', e.target.value)}
+                        className="w-full text-[11px] font-mono font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600 disabled:bg-neutral-100"
+                        placeholder="Quote No"
+                        disabled={!isSelected}
+                      />
+                    </div>
+
+                    <div className="pt-1 flex items-center justify-between gap-1">
+                      <button
+                        type="button"
+                        onClick={() => handlePrintSingleQuotation(f)}
+                        className={`flex-1 font-black py-1.5 rounded text-[11px] flex items-center justify-center gap-1 cursor-pointer transition-all ${
+                          isSelected
+                            ? 'bg-neutral-900 hover:bg-black text-white'
+                            : 'bg-neutral-300 text-neutral-600 cursor-not-allowed'
+                        }`}
+                      >
+                        <Printer className="w-3.5 h-3.5 text-amber-400" />
+                        <span>પ્રિન્ટ / PDF ({f.id === 1 ? 'L1' : `Firm ${f.id}`})</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
           {/* PRINT ALL BUTTONS BAR */}
           <div className="bg-indigo-950 text-white p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
             <div>
-              <p className="font-black text-amber-300 text-xs">
-                ✨ ૧ ક્લિકમાં બધી ૫ કંપનીના અલગ અલગ ક્વોટેશન તૈયાર છે
+              <p className="font-black text-amber-300 text-xs flex items-center gap-1.5">
+                <span>✨ ૧ ક્લિકમાં પસંદ કરેલ ({firms.filter(f => f.selected !== false).length}) કંપનીઓના ક્વોટેશન & ભાવ તુલના પત્રક તૈયાર છે</span>
               </p>
               <p className="text-[11px] text-indigo-200 font-bold">
                 અલગ અલગ પ્રિન્ટ કાઢો અથવા ભાવ તુલનાત્મક પત્રક સીધું જ પ્રિન્ટ કરો.
@@ -964,7 +1105,7 @@ export default function MultiQuotationModal({
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow"
               >
                 <Printer className="w-4 h-4 text-amber-200" />
-                <span>⎙ એકસાથે ૫ ક્વોટેશન પ્રિન્ટ કરો</span>
+                <span>⎙ એકસાથે પસંદ કરેલ ({firms.filter(f => f.selected !== false).length}) ક્વોટેશન પ્રિન્ટ કરો</span>
               </button>
             </div>
           </div>

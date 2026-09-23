@@ -3,10 +3,26 @@ import { doc, onSnapshot, setDoc, getDoc, writeBatch } from 'firebase/firestore'
 import { db } from '../lib/firebase';
 
 // Global Quota & Resource Exhaustion Backoff Tracker
+const QUOTA_EXHAUSTED_KEY = 'prisha_firestore_quota_exhausted_until';
 let quotaExhaustedUntil = 0;
 
 export function isQuotaExhausted(): boolean {
-  return Date.now() < quotaExhaustedUntil;
+  if (Date.now() < quotaExhaustedUntil) return true;
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(QUOTA_EXHAUSTED_KEY);
+      if (saved) {
+        const until = parseInt(saved, 10);
+        if (Date.now() < until) {
+          quotaExhaustedUntil = until;
+          return true;
+        } else {
+          localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
+        }
+      }
+    } catch (e) {}
+  }
+  return false;
 }
 
 export function handleQuotaError(err: any): void {
@@ -17,9 +33,14 @@ export function handleQuotaError(err: any): void {
     msg.includes('Quota exceeded') ||
     msg.includes('429')
   ) {
-    // Back off cloud writes/reads for 5 minutes to prevent hammering quota limits
-    quotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
-    console.warn('⚠️ Firestore resource quota limit reached. Operations are running in 100% offline LocalStorage/IndexedDB mode and will sync automatically when quota resets.');
+    // Back off cloud writes/reads for 6 hours to prevent hammering quota limits
+    quotaExhaustedUntil = Date.now() + 6 * 60 * 60 * 1000;
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(QUOTA_EXHAUSTED_KEY, quotaExhaustedUntil.toString());
+      } catch (e) {}
+    }
+    console.warn('⚠️ Firestore resource write/read quota limit reached. Operations are running seamlessly in 100% offline LocalStorage/IndexedDB mode and will sync automatically when quota resets.');
   }
 }
 
