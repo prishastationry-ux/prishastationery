@@ -84,6 +84,11 @@ export interface OrderRecord {
   notes?: string;
   profit?: number;
   timestamp?: number;
+  paymentDetails?: {
+    transactionId?: string;
+    referenceNo?: string;
+    notes?: string;
+  };
   gemContractNo?: string;
   gemContractDate?: string;
   consigneeDept?: string;

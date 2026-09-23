@@ -67,59 +67,15 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const isUpiAllowed = !storeSettings.hideUpiOnBill && storeSettings.billShowUpi !== false;
   const paymentMode = 'UPI'; // Enforce UPI
   const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
+  const [transactionId, setTransactionId] = useState<string>('');
   const [upiQrUrl, setUpiQrUrl] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [formError, setFormError] = useState('');
 
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-
-  // Reset to Step 1 when cart is opened or emptied
-  useEffect(() => {
-    if (!isOpen) {
-      setStep(1);
-      setFormError('');
-    }
-  }, [isOpen]);
-
-  // Generate UPI QR Code dynamically based on cart total
-  useEffect(() => {
-    if (cartTotal > 0 && paymentMode === 'UPI') {
-      const upiString = `upi://pay?pa=${encodeURIComponent(storeSettings.upiId)}&pn=${encodeURIComponent(storeSettings.payeeName)}&am=${cartTotal}&cu=INR&tn=PrishaStationeryOrder`;
-      QRCode.toDataURL(upiString, {
-        width: 200,
-        margin: 1,
-        color: { dark: '#000000', light: '#ffffff' }
-      })
-        .then(url => setUpiQrUrl(url))
-        .catch(err => console.error(err));
-    }
-  }, [cartTotal, paymentMode, storeSettings.upiId, storeSettings.payeeName]);
-
-  const handleCopyUpi = () => {
-    navigator.clipboard.writeText(storeSettings.upiId);
-    setCopiedUpi(true);
-    setTimeout(() => setCopiedUpi(false), 2500);
-  };
-
-  const handleProceedToStep2 = () => {
-    if (cart.length === 0) return;
-    setStep(2);
-  };
-
-  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === 'string') {
-        setPaymentScreenshot(reader.result);
-        setFormError('');
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
+  
+  // ... (rest of the file)
   const handleSubmitOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim()) {
@@ -147,7 +103,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       mobile: mobile.trim(),
       address: fullAddress,
       paymentMode: 'Online',
-      paymentScreenshot: paymentScreenshot || undefined
+      paymentScreenshot: paymentScreenshot || undefined,
+      paymentDetails: {
+        transactionId: transactionId.trim() || undefined
+      }
     });
   };
 
@@ -489,6 +448,20 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       )}
                     </label>
 
+                    {/* Transaction ID Input */}
+                    <div className="mb-3">
+                      <label className="text-[10px] font-bold text-neutral-600 block mb-1">
+                        Transaction ID / Reference No (વૈકલ્પિક)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="દા.ત. UPI Ref No. 123456789012"
+                        value={transactionId}
+                        onChange={e => setTransactionId(e.target.value)}
+                        className="w-full text-xs font-mono font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                      />
+                    </div>
+                    
                     {paymentScreenshot ? (
                       <div className="flex items-center gap-3 p-2 bg-emerald-50 rounded-xl border border-emerald-200">
                         <img

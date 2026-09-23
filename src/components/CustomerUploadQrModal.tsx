@@ -153,6 +153,10 @@ export const CustomerUploadQrModal: React.FC<CustomerUploadQrModalProps> = ({
             </button>
           </div>
 
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-[11px] text-amber-900 font-bold leading-relaxed">
+            ⚠️ <b>નોંધ:</b> અપલોડ પૂર્ણ થયા પછી જ આગળ વધી શકાશે. અપલોડ પ્રગતિ (Upload Progress) માટે નીચે આપેલ બાર જુઓ.
+          </div>
+
         </div>
 
         {/* Footer */}
