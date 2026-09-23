@@ -24,10 +24,13 @@ import {
   Loader2,
   Zap,
   UploadCloud,
-  RefreshCw
+  RefreshCw,
+  QrCode,
+  Smartphone
 } from 'lucide-react';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { CustomerUploadQrModal } from './CustomerUploadQrModal';
 import { PrintJobRecord, PrintJobFile, StoreSettings, OrderRecord, BillItem } from '../types';
 import {
   getFileFromCloudStorage,
@@ -166,6 +169,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     file: PrintJobFile;
     job: PrintJobRecord;
   } | null>(null);
+  const [showCustomerQrModal, setShowCustomerQrModal] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -384,7 +388,8 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       const price = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || 0);
       const modeText = f.colorMode === 'black_white' ? 'B&W' : f.colorMode === 'color' ? 'કલર' : 'PVC કાર્ડ';
       const lamText = f.lamination ? ' + લેમિનેશન' : '';
-      itemsBreakdown += `${idx + 1}. *${f.fileName}*\n   (${modeText}, ${f.paperSize}, ${f.copies} કોપી${lamText}) = ₹${price}\n`;
+      const pagesText = f.pages && f.pages > 1 ? ` | ${f.pages} પેજ (કુલ ${f.pages * (f.copies || 1)} પાના)` : '';
+      itemsBreakdown += `${idx + 1}. *${f.fileName}*\n   (${modeText}, ${f.paperSize}${pagesText}, ${f.copies} કોપી${lamText}) = ₹${price}\n`;
     });
 
     if (extraCharge > 0) {
@@ -499,6 +504,16 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCustomerQrModal(true)}
+              className="bg-orange-500 hover:bg-orange-400 text-black font-black px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              title="ગ્રાહક પોતાના મોબાઇલથી PDF/ફોટો મોકલી શકે તે માટે QR કોડ અને લિંક"
+            >
+              <Smartphone className="w-4 h-4" />
+              <span>📲 ગ્રાહક અપલોડ QR & લિંક</span>
+            </button>
+
             {effectiveJobs.length > 0 && (
               <button
                 type="button"
@@ -752,6 +767,11 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                                   </span>
                                 )}
                                 <span className="font-black text-neutral-900">• કોપી: {file.copies}</span>
+                                {file.pages && file.pages > 1 && (
+                                  <span className="font-black text-purple-900 bg-purple-100 border border-purple-300 px-2 py-0.5 rounded text-[10px] flex items-center gap-1 shadow-2xs">
+                                    📄 {file.pages} પેજ {file.copies > 1 ? `(કુલ: ${file.pages * file.copies} પાના)` : ''}
+                                  </span>
+                                )}
                                 {file.uploadedToCloud ? (
                                   <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded flex items-center gap-1">
                                     <CheckCircle className="w-3 h-3 text-emerald-600" />
@@ -824,23 +844,30 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                             </button>
 
                             {/* Price field */}
-                            <div className="flex items-center gap-1 bg-white border border-neutral-300 rounded-xl px-2 py-1">
-                              <span className="text-xs font-black text-neutral-500">₹</span>
-                              <input
-                                type="number"
-                                min={0}
-                                step="any"
-                                value={currentPrice === 0 ? '' : currentPrice}
-                                placeholder="ભાવ"
-                                onChange={e => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  setEditingPrices(prev => ({
-                                    ...prev,
-                                    [file.id]: val
-                                  }));
-                                }}
-                                className="w-16 text-xs font-black text-neutral-900 focus:outline-none"
-                              />
+                            <div className="flex flex-col items-end">
+                              <div className="flex items-center gap-1 bg-white border border-neutral-300 rounded-xl px-2 py-1">
+                                <span className="text-xs font-black text-neutral-500">₹</span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step="any"
+                                  value={currentPrice === 0 ? '' : currentPrice}
+                                  placeholder="ભાવ"
+                                  onChange={e => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setEditingPrices(prev => ({
+                                      ...prev,
+                                      [file.id]: val
+                                    }));
+                                  }}
+                                  className="w-16 text-xs font-black text-neutral-900 focus:outline-none"
+                                />
+                              </div>
+                              {file.pages && file.pages > 1 && currentPrice > 0 && (
+                                <span className="text-[9.5px] font-bold text-neutral-500 mt-0.5">
+                                  ₹{(currentPrice / (file.pages * (file.copies || 1))).toFixed(1)}/પેજ
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -1184,6 +1211,13 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
           </div>
         </div>
       )}
+
+      {/* CUSTOMER MOBILE FILE UPLOAD QR & LINK MODAL */}
+      <CustomerUploadQrModal
+        isOpen={showCustomerQrModal}
+        onClose={() => setShowCustomerQrModal(false)}
+        showToast={showToast}
+      />
     </div>
   );
 };

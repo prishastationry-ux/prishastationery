@@ -52,6 +52,29 @@ export function generateSyncUpiQrSvgDataUri(
 }
 
 /**
+ * Synchronously generates an offline SVG QR Code for any URL or text.
+ */
+export function generateSyncQrSvg(text: string): string {
+  try {
+    const qr = QRCode.create(text, { errorCorrectionLevel: 'M' });
+    const size = qr.modules.size;
+    const data = qr.modules.data;
+    let path = '';
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (data[r * size + c]) {
+          path += `M${c},${r}h1v1h-1z `;
+        }
+      }
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ${size + 4} ${size + 4}" width="220" height="220"><rect x="-2" y="-2" width="${size + 4}" height="${size + 4}" fill="#ffffff"/><path d="${path.trim()}" fill="#000000"/></svg>`;
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  } catch (err) {
+    return '';
+  }
+}
+
+/**
  * Get an immediate local URL for the QR code (offline SVG Data URI)
  */
 export function getImmediateQrFallbackUrl(

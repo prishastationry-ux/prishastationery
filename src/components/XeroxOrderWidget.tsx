@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   Printer,
   UploadCloud,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ProductItem, StoreSettings } from '../types';
 import { saveFileToCloudStorage } from '../lib/fileStorage';
+import { inspectUploadedDocument, DocumentInspectionResult } from '../lib/pdfPageDetector';
 
 interface XeroxOrderWidgetProps {
   storeSettings: StoreSettings;
@@ -40,10 +41,22 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
 }) => {
   const [isOpenModal, setIsOpenModal] = useState<boolean>(false);
   const [serviceType, setServiceType] = useState<'print' | 'pvc_card' | 'call_letter'>('print');
+
+  // Auto-open modal if user opened direct upload link (?action=xerox or ?upload=1)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('action') === 'xerox' || params.get('action') === 'print' || params.get('upload') === '1') {
+        setIsOpenModal(true);
+      }
+    }
+  }, []);
   
   // File state
   const [file, setFile] = useState<File | null>(null);
   const [fileBase64, setFileBase64] = useState<string>('');
+  const [detectedPageInfo, setDetectedPageInfo] = useState<DocumentInspectionResult | null>(null);
+  const [isInspectingFile, setIsInspectingFile] = useState<boolean>(false);
   
   // Print options
   const [pageCount, setPageCount] = useState<number>(1);
@@ -121,20 +134,50 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   ]);
 
   const handleFileSelect = (selectedFile: File) => {
-    if (selectedFile.size > 25 * 1024 * 1024) {
-      showToast('⚠️ મહત્તમ 25 MB સુધીની ફાઇલ અપલોડ કરી શકાય છે.');
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      showToast('⚠️ મહત્તમ 50 MB સુધીની ફાઇલ અપલોડ કરી શકાય છે.');
       return;
     }
 
     setFile(selectedFile);
+    setIsInspectingFile(true);
 
     // Read as Base64 data URL for preview and storing in order
     const reader = new FileReader();
     reader.onload = () => {
       setFileBase64(reader.result as string);
-      showToast(`📄 "${selectedFile.name}" અપલોડ થઈ ગઈ.`);
     };
     reader.readAsDataURL(selectedFile);
+
+    // Inspect document & auto-detect exact page count
+    inspectUploadedDocument(selectedFile).then((inspection) => {
+      setDetectedPageInfo(inspection);
+      setIsInspectingFile(false);
+
+      if (inspection.detectedPages && inspection.detectedPages > 0) {
+        if (serviceType === 'call_letter') {
+          setCallLetterPages(inspection.detectedPages);
+        } else {
+          setPageCount(inspection.detectedPages);
+        }
+      }
+
+      if (inspection.fileType === 'pdf') {
+        if (inspection.detectedPages > 1) {
+          showToast(`⚡ PDF પેજ ડિટેક્ટ: કુલ ${inspection.detectedPages} પેજ આપોઆપ મળ્યા!`);
+        } else {
+          showToast(`📄 "${selectedFile.name}" અપલોડ થઈ ગઈ (૧ પેજ).`);
+        }
+      } else if (inspection.fileType === 'excel' || inspection.fileType === 'word') {
+        showToast(`📊 "${selectedFile.name}" અપલોડ થઈ ગઈ. પેજ સંખ્યા ચકાસો.`);
+      } else {
+        showToast(`📄 "${selectedFile.name}" અપલોડ થઈ ગઈ.`);
+      }
+    }).catch(err => {
+      console.warn('Document inspection error:', err);
+      setIsInspectingFile(false);
+      showToast(`📄 "${selectedFile.name}" અપલોડ થઈ ગઈ.`);
+    });
   };
 
   const handleFrontFileSelect = (selectedFile: File) => {
@@ -290,7 +333,7 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     const sideLabel = sideOption === 'single' ? 'એક બાજુ' : 'બંને બાજુ (Back-to-Back)';
     const lamText = needLamination ? ' + લેમિનેશન' : '';
 
-    const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string }> = [];
+    const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string; pages?: number }> = [];
     if (fileBase64) {
       const pId = `f-xerox-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const pName = file ? file.name : 'પ્રિન્ટ દસ્તાવેજ.pdf';
@@ -298,7 +341,8 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
         id: pId,
         fileName: pName,
         fileDataUrl: fileBase64,
-        fileSize: file?.size || Math.round(fileBase64.length * 0.75)
+        fileSize: file?.size || Math.round(fileBase64.length * 0.75),
+        pages: pageCount
       });
       saveFileToCloudStorage(pId, fileBase64, pName, file?.type || 'application/pdf', file?.size).catch(() => {});
     }
@@ -328,6 +372,8 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     // Reset file states so the customer can instantly add another document
     setFile(null);
     setFileBase64('');
+    setDetectedPageInfo(null);
+    setPageCount(1);
     setFrontFile(null);
     setFrontBase64('');
     setBackFile(null);
@@ -802,13 +848,20 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
                   {/* Pages, Copies & Lamination */}
                   <div className="grid grid-cols-3 gap-2">
                     <div>
-                      <label className="block text-[11px] font-bold text-neutral-700 mb-1">
-                        પેજ સંખ્યા:
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-bold text-neutral-700">
+                          પેજ સંખ્યા:
+                        </label>
+                        {detectedPageInfo?.isAutoDetected && (
+                          <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-1 py-0.2 rounded-md">
+                            ⚡ ઓટો
+                          </span>
+                        )}
+                      </div>
                       <input
                         type="number"
                         min="1"
-                        max="2000"
+                        max="5000"
                         value={pageCount}
                         onChange={e => setPageCount(Math.max(1, parseInt(e.target.value) || 1))}
                         className="w-full p-2 rounded-lg border border-neutral-300 bg-white text-xs font-black outline-none font-mono"
@@ -883,6 +936,8 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
                       onClick={() => {
                         setFile(null);
                         setFileBase64('');
+                        setDetectedPageInfo(null);
+                        setPageCount(1);
                         if (fileInputRef.current) fileInputRef.current.value = '';
                       }}
                       className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 cursor-pointer"
@@ -910,6 +965,67 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
                     <p className="text-[10px] text-neutral-500 mt-0.5">
                       PDF, JPG/PNG ફોટો, Excel, Word ડોક્યુમેન્ટ (મહત્તમ 50 MB)
                     </p>
+                  </div>
+                )}
+
+                {/* Auto Page Detection Result & Notice */}
+                {isInspectingFile && (
+                  <div className="mt-2 bg-blue-50 border border-blue-200 p-2.5 rounded-xl flex items-center gap-2 text-xs font-bold text-blue-900 animate-pulse">
+                    <span className="text-base">⏳</span>
+                    <span>ફાઇલ તપાસી રહ્યા છીએ અને પેજ સંખ્યા ગણી રહ્યા છીએ...</span>
+                  </div>
+                )}
+
+                {detectedPageInfo && !isInspectingFile && (
+                  <div className={`mt-2 p-2.5 rounded-xl border text-xs space-y-1.5 ${
+                    detectedPageInfo.fileType === 'pdf'
+                      ? 'bg-blue-50 border-blue-200 text-blue-950'
+                      : detectedPageInfo.fileType === 'excel'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                      : 'bg-amber-50 border-amber-300 text-amber-950'
+                  }`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0 font-black">
+                        <span className="text-base shrink-0">
+                          {detectedPageInfo.fileType === 'pdf' ? '📄' : detectedPageInfo.fileType === 'excel' ? '📊' : '📝'}
+                        </span>
+                        <span className="truncate">{detectedPageInfo.message}</span>
+                      </div>
+                      {detectedPageInfo.isAutoDetected ? (
+                        <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
+                          ✓ {pageCount} પેજ ગણાયા
+                        </span>
+                      ) : (
+                        <span className="bg-amber-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-2xs">
+                          પેજ પસંદ કરો
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quick helper for Excel and Word files */}
+                    {(detectedPageInfo.fileType === 'excel' || detectedPageInfo.fileType === 'word') && (
+                      <div className="pt-1 border-t border-dashed border-neutral-300">
+                        <p className="text-[10px] font-bold text-neutral-600 mb-1">
+                          📊 પ્રિન્ટ પેજ સંખ્યા પસંદ કરો (અથવા જાતે ઉપર લખો):
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {[1, 2, 5, 10, 20, 50, 100].map(pg => (
+                            <button
+                              key={pg}
+                              type="button"
+                              onClick={() => setPageCount(pg)}
+                              className={`px-2 py-0.5 rounded text-[11px] font-bold border transition-colors cursor-pointer ${
+                                pageCount === pg
+                                  ? 'bg-[#0B1E48] text-white border-blue-950 shadow-xs'
+                                  : 'bg-white text-neutral-700 border-neutral-300 hover:bg-neutral-100'
+                              }`}
+                            >
+                              {pg} પેજ
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

@@ -16,6 +16,7 @@ export interface ProductItem {
     fileDataUrl: string;
     fileSize?: number;
     id?: string;
+    pages?: number;
   }>;
   badge?: string;
   isSpecial?: boolean;
@@ -74,6 +75,7 @@ export interface OrderRecord {
     fileSize?: number;
     itemName?: string;
     id?: string;
+    pages?: number;
   }>;
   orderType?: 'online' | 'counter';
   orderStatus?: 'placed' | 'confirmed' | 'packed' | 'out_for_delivery' | 'delivered' | 'cancelled';
@@ -310,6 +312,7 @@ export interface PrintJobFile {
   uploadProgress?: number; // 0 to 100
   uploadSpeed?: string; // e.g. "2.4 MB/s"
   copies: number;
+  pages?: number;
   colorMode: 'black_white' | 'color' | 'pvc_card';
   sideOption: 'single_side' | 'double_side';
   paperSize: 'A4' | 'A5' | 'Legal' | '4x6 Photo' | 'PVC Card';

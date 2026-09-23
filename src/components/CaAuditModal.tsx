@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import {
   FileSpreadsheet,
   Printer,
@@ -13,7 +14,8 @@ import {
   DollarSign,
   UserCheck,
   Building2,
-  Filter
+  Filter,
+  FileDown
 } from 'lucide-react';
 import {
   OrderRecord,
@@ -24,6 +26,7 @@ import {
   RojmelEntry,
   KhataAccount
 } from '../types';
+import { calculateGstBreakup, detectHsnAndGst } from '../lib/gstHsnMaster';
 
 interface CaAuditModalProps {
   isOpen: boolean;
@@ -204,6 +207,250 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
     if (str === null || str === undefined) return '""';
     const s = String(str).replace(/"/g, '""');
     return `"${s}"`;
+  };
+
+  // 1. Professional Multi-Tab GSTR-1 / GSTR-3B Excel (.xlsx) Workbook Generator for CA & GST Filing
+  const handleExportExcelXlsx = () => {
+    const periodName = getPeriodLabel().replace(/[^a-zA-Z0-9_\u0A80-\u0AFF]/g, '_');
+    const storeName = (storeSettings.storeNameEn || 'PRISHA_STATIONERY').replace(/\s+/g, '_');
+
+    const wb = XLSX.utils.book_new();
+
+    // --- TAB 1: GSTR-1 B2C / B2B SALES INVOICES ---
+    const salesRows: any[] = [];
+    salesRows.push({
+      'Invoice No': 'SUMMARY INFO',
+      'Invoice Date': `Period: ${getPeriodLabel()}`,
+      'Customer Name': storeSettings.storeNameGu || storeSettings.storeNameEn,
+      'Customer Mobile': `GSTIN: ${storeSettings.gstNumber || 'Unregistered'}`,
+      'Item Description': `PAN: ${storeSettings.panNumber || 'N/A'}`,
+      'HSN/SAC Code': '',
+      'Quantity': '',
+      'Unit': '',
+      'Item Rate (₹)': '',
+      'Taxable Value (₹)': '',
+      'CGST Rate (%)': '',
+      'CGST Amount (₹)': '',
+      'SGST Rate (%)': '',
+      'SGST Amount (₹)': '',
+      'Total Invoice Value (₹)': '',
+      'Payment Mode': '',
+      'Payment Status': ''
+    });
+    salesRows.push({}); // Empty separator row
+
+    let totalTaxableVal = 0;
+    let totalCgstVal = 0;
+    let totalSgstVal = 0;
+    let totalGrossVal = 0;
+
+    const hsnAggregator: Record<string, { desc: string; unit: string; totalQty: number; totalVal: number; taxableVal: number; cgst: number; sgst: number }> = {};
+
+    filteredOrders.forEach((o) => {
+      const breakup = calculateGstBreakup(
+        o.items.map(it => ({
+          name: it.name,
+          qty: it.qty,
+          price: it.price,
+          hsnCode: it.hsnCode,
+          gstRate: it.gstRate
+        })),
+        o.discount || 0
+      );
+
+      totalTaxableVal += breakup.totalTaxableValue;
+      totalCgstVal += breakup.totalCgst;
+      totalSgstVal += breakup.totalSgst;
+      totalGrossVal += Number(o.total) || 0;
+
+      // Group into HSN Summary
+      breakup.rows.forEach(hs => {
+        const key = hs.hsnCode || 'N/A';
+        if (!hsnAggregator[key]) {
+          hsnAggregator[key] = {
+            desc: hs.description,
+            unit: 'PCS / NOS',
+            totalQty: 0,
+            totalVal: 0,
+            taxableVal: 0,
+            cgst: 0,
+            sgst: 0
+          };
+        }
+        hsnAggregator[key].totalVal += hs.totalAmount;
+        hsnAggregator[key].taxableVal += hs.taxableValue;
+        hsnAggregator[key].cgst += hs.cgstAmount;
+        hsnAggregator[key].sgst += hs.sgstAmount;
+      });
+
+      // Add item-level or invoice rows
+      if (o.items && o.items.length > 0) {
+        o.items.forEach((it, idx) => {
+          const rate = it.gstRate !== undefined ? it.gstRate : detectHsnAndGst(it.name).gstRate;
+          const hsn = it.hsnCode || detectHsnAndGst(it.name).hsnCode;
+          const lineTotal = Number(it.price) * (Number(it.qty) || 1);
+          const taxable = lineTotal / (1 + rate / 100);
+          const tax = lineTotal - taxable;
+          const cgst = tax / 2;
+          const sgst = tax / 2;
+
+          if (hsnAggregator[hsn]) {
+            hsnAggregator[hsn].totalQty += (Number(it.qty) || 1);
+          }
+
+          salesRows.push({
+            'Invoice No': o.invoiceNo,
+            'Invoice Date': o.date,
+            'Customer Name': o.customerName,
+            'Customer Mobile': o.mobile || '',
+            'Item Description': it.name,
+            'HSN/SAC Code': hsn,
+            'Quantity': it.qty,
+            'Unit': it.unit || 'NOS',
+            'Item Rate (₹)': Number(it.price).toFixed(2),
+            'Taxable Value (₹)': taxable.toFixed(2),
+            'CGST Rate (%)': (rate / 2).toFixed(1),
+            'CGST Amount (₹)': cgst.toFixed(2),
+            'SGST Rate (%)': (rate / 2).toFixed(1),
+            'SGST Amount (₹)': sgst.toFixed(2),
+            'Total Invoice Value (₹)': idx === 0 ? Number(o.total).toFixed(2) : '',
+            'Payment Mode': o.paymentMode,
+            'Payment Status': o.paymentStatus || 'Paid'
+          });
+        });
+      } else {
+        salesRows.push({
+          'Invoice No': o.invoiceNo,
+          'Invoice Date': o.date,
+          'Customer Name': o.customerName,
+          'Customer Mobile': o.mobile || '',
+          'Item Description': 'General Sale',
+          'HSN/SAC Code': '9983',
+          'Quantity': 1,
+          'Unit': 'NOS',
+          'Item Rate (₹)': Number(o.total).toFixed(2),
+          'Taxable Value (₹)': (Number(o.total) / 1.18).toFixed(2),
+          'CGST Rate (%)': '9.0',
+          'CGST Amount (₹)': ((Number(o.total) - Number(o.total) / 1.18) / 2).toFixed(2),
+          'SGST Rate (%)': '9.0',
+          'SGST Amount (₹)': ((Number(o.total) - Number(o.total) / 1.18) / 2).toFixed(2),
+          'Total Invoice Value (₹)': Number(o.total).toFixed(2),
+          'Payment Mode': o.paymentMode,
+          'Payment Status': o.paymentStatus || 'Paid'
+        });
+      }
+    });
+
+    salesRows.push({});
+    salesRows.push({
+      'Invoice No': 'TOTALS',
+      'Invoice Date': '',
+      'Customer Name': '',
+      'Customer Mobile': '',
+      'Item Description': '',
+      'HSN/SAC Code': '',
+      'Quantity': '',
+      'Unit': '',
+      'Item Rate (₹)': '',
+      'Taxable Value (₹)': totalTaxableVal.toFixed(2),
+      'CGST Rate (%)': '',
+      'CGST Amount (₹)': totalCgstVal.toFixed(2),
+      'SGST Rate (%)': '',
+      'SGST Amount (₹)': totalSgstVal.toFixed(2),
+      'Total Invoice Value (₹)': totalGrossVal.toFixed(2),
+      'Payment Mode': '',
+      'Payment Status': ''
+    });
+
+    const wsSales = XLSX.utils.json_to_sheet(salesRows);
+    XLSX.utils.book_append_sheet(wb, wsSales, 'GSTR1_Sales');
+
+    // --- TAB 2: HSN / SAC TAX SUMMARY ---
+    const hsnRows: any[] = Object.entries(hsnAggregator).map(([code, data]) => ({
+      'HSN/SAC Code': code,
+      'Description': data.desc,
+      'UQC (Unit)': data.unit,
+      'Total Quantity': data.totalQty,
+      'Total Value (₹)': data.totalVal.toFixed(2),
+      'Taxable Value (₹)': data.taxableVal.toFixed(2),
+      'Central Tax CGST (₹)': data.cgst.toFixed(2),
+      'State Tax SGST (₹)': data.sgst.toFixed(2),
+      'Integrated Tax IGST (₹)': '0.00',
+      'Total Tax Amount (₹)': (data.cgst + data.sgst).toFixed(2)
+    }));
+    const wsHsn = XLSX.utils.json_to_sheet(hsnRows.length > 0 ? hsnRows : [{ 'HSN/SAC Code': 'No Data' }]);
+    XLSX.utils.book_append_sheet(wb, wsHsn, 'HSN_SAC_Summary');
+
+    // --- TAB 3: GSTR-2 PURCHASES ---
+    const purchaseRows: any[] = filteredPurchases.map((p, idx) => ({
+      'Sr No': idx + 1,
+      'Purchase Date': p.date,
+      'Bill / Invoice No': p.billNo || `PUR-${idx + 1}`,
+      'Supplier / Vendor Name': p.supplierName,
+      'Items Count': p.itemsCount || 1,
+      'Payment Status': p.paymentStatus || 'Paid',
+      'Total Purchase Amount (₹)': Number(p.totalAmount).toFixed(2)
+    }));
+    const wsPurchases = XLSX.utils.json_to_sheet(purchaseRows.length > 0 ? purchaseRows : [{ 'Sr No': 'No Purchases' }]);
+    XLSX.utils.book_append_sheet(wb, wsPurchases, 'Purchases_GSTR2');
+
+    // --- TAB 4: EXPENSES REGISTER ---
+    const expenseRows: any[] = filteredExpenses.map((e, idx) => ({
+      'Sr No': idx + 1,
+      'Date': e.date,
+      'Category': e.category,
+      'Title / Expense Head': e.title,
+      'Notes': e.notes || '-',
+      'Amount (₹)': Number(e.amount).toFixed(2)
+    }));
+    const wsExpenses = XLSX.utils.json_to_sheet(expenseRows.length > 0 ? expenseRows : [{ 'Sr No': 'No Expenses' }]);
+    XLSX.utils.book_append_sheet(wb, wsExpenses, 'Expense_Register');
+
+    // --- TAB 5: CLOSING STOCK VALUATION ---
+    const stockRows: any[] = products.map((p, idx) => {
+      const units = typeof p.stock === 'number' ? Math.max(0, p.stock) : 0;
+      const cost = Number(p.costPrice) || (Number(p.price) * 0.7) || 0;
+      const costVal = units * cost;
+      return {
+        'Sr No': idx + 1,
+        'Product Name': p.nameGu,
+        'English Name': p.nameEn || '',
+        'Category': p.category,
+        'HSN Code': p.hsnCode || detectHsnAndGst(p.nameGu).hsnCode,
+        'Stock Quantity': units,
+        'Unit': p.unit || 'NOS',
+        'Cost Price (₹)': cost.toFixed(2),
+        'Total Cost Valuation (₹)': costVal.toFixed(2),
+        'Selling Price (₹)': Number(p.price).toFixed(2),
+        'MRP (₹)': p.mrp ? Number(p.mrp).toFixed(2) : ''
+      };
+    });
+    const wsStock = XLSX.utils.json_to_sheet(stockRows);
+    XLSX.utils.book_append_sheet(wb, wsStock, 'Stock_Valuation');
+
+    // --- TAB 6: CA TAX & P&L COMPUTATION ---
+    const caSummaryRows = [
+      { 'Particulars': 'Business Name / Trade Name', 'Amount (₹)': storeSettings.storeNameGu || storeSettings.storeNameEn },
+      { 'Particulars': 'GSTIN', 'Amount (₹)': storeSettings.gstNumber || 'Unregistered' },
+      { 'Particulars': 'PAN', 'Amount (₹)': storeSettings.panNumber || 'N/A' },
+      { 'Particulars': 'Audit Period', 'Amount (₹)': getPeriodLabel() },
+      { 'Particulars': '----------------------------------------', 'Amount (₹)': '-----------------' },
+      { 'Particulars': 'Total Gross Sales (Revenue)', 'Amount (₹)': totalGrossVal.toFixed(2) },
+      { 'Particulars': 'Total Taxable Turnover', 'Amount (₹)': totalTaxableVal.toFixed(2) },
+      { 'Particulars': 'Total Output CGST (Payable)', 'Amount (₹)': totalCgstVal.toFixed(2) },
+      { 'Particulars': 'Total Output SGST (Payable)', 'Amount (₹)': totalSgstVal.toFixed(2) },
+      { 'Particulars': 'Total Output GST (CGST + SGST)', 'Amount (₹)': (totalCgstVal + totalSgstVal).toFixed(2) },
+      { 'Particulars': '----------------------------------------', 'Amount (₹)': '-----------------' },
+      { 'Particulars': 'Total Purchases (Cost of Goods)', 'Amount (₹)': totalPurchasesAmount.toFixed(2) },
+      { 'Particulars': 'Total Operating Expenses', 'Amount (₹)': totalExpensesAmount.toFixed(2) },
+      { 'Particulars': 'Estimated Net Operating Profit', 'Amount (₹)': (totalGrossVal - totalPurchasesAmount - totalExpensesAmount).toFixed(2) },
+      { 'Particulars': 'Closing Stock Cost Valuation', 'Amount (₹)': totalStockCostValuation.toFixed(2) }
+    ];
+    const wsCaSummary = XLSX.utils.json_to_sheet(caSummaryRows);
+    XLSX.utils.book_append_sheet(wb, wsCaSummary, 'CA_Tax_Summary');
+
+    // Trigger XLSX file download
+    XLSX.writeFile(wb, `GSTR1_Audit_${storeName}_${periodName}.xlsx`);
   };
 
   // 1. One-Click Excel / CSV Export for CA
@@ -480,12 +727,22 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               type="button"
+              onClick={handleExportExcelXlsx}
+              className="bg-emerald-400 hover:bg-emerald-500 text-emerald-950 px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-transform active:scale-95"
+              title="CA માટે મલ્ટિ-શીટ GSTR-1 / GSTR-3B એક્સેલ ફાઇલ (.xlsx) ડાઉનલોડ કરો"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-950" />
+              <span>📊 GSTR-1 Excel (.xlsx)</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => handleExportCsv('all_package')}
-              className="bg-emerald-500 hover:bg-emerald-600 text-black px-3.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-transform active:scale-95"
-              title="CA માટે સમગ્ર ડેટા એક ક્લિકમાં એક્સેલ/CSV ડાઉનલોડ કરો"
+              className="bg-blue-800 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer transition-transform active:scale-95"
+              title="CSV ફાઇલ ડાઉનલોડ કરો"
             >
               <Download className="w-4 h-4" />
-              <span>📥 CA પેકેજ (Excel)</span>
+              <span>CSV</span>
             </button>
 
             <button

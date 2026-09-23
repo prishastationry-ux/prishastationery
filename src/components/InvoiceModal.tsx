@@ -1112,28 +1112,35 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   const handleWhatsAppShare = () => {
     let itemsText = '';
     order.items.forEach((item, idx) => {
-      itemsText += `${idx + 1}. *${item.name}* x ${item.qty} = ₹${item.price * item.qty}\n`;
+      const hsnStr = item.hsnCode ? ` [HSN:${item.hsnCode}]` : '';
+      itemsText += `${idx + 1}. *${item.name}*${hsnStr} x ${item.qty} = ₹${(item.price * item.qty).toFixed(2)}\n`;
     });
 
-    const msg =
-      `🧾 *ટેક્સ ઇન્વોઇસ - ${storeSettings.storeNameGu}*\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🆔 *બિલ / ઇન્વોઇસ નં:* ${order.invoiceNo}\n` +
-      `📅 *તારીખ:* ${order.date}\n` +
-      `👤 *ગ્રાહક:* ${order.customerName}\n` +
-      `📞 *મોબાઇલ:* +91 ${order.mobile}\n` +
-      `📍 *સરનામું:* ${order.address || 'Tharad'}\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🛒 *આઇટમ્સ:*\n${itemsText}` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `💰 *કુલ ચૂકવવાપાત્ર રકમ:* ₹${order.total}/-\n` +
-      `💳 *પેમેન્ટ:* ${order.paymentMode} (${order.paymentStatus})\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `📍 *દુકાન:* ${storeSettings.address}\n` +
-      `📞 *સંપર્ક:* +91 ${storeSettings.phone}\n\n` +
-      `ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!`;
+    const targetMobile = (order.mobile || '').replace(/\D/g, '').slice(-10) || (storeSettings.phone || '').replace(/\D/g, '').slice(-10);
 
-    window.open(`https://wa.me/91${storeSettings.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    const msg =
+      `🧾 *TAX INVOICE - ${storeSettings.storeNameEn || storeSettings.storeNameGu || 'PRISHA STATIONERY'}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🆔 *ઇન્વોઇસ નં:* ${order.invoiceNo}\n` +
+      `📅 *તારીખ:* ${order.date}\n` +
+      `👤 *ગ્રાહકનું નામ:* ${order.customerName}\n` +
+      (order.mobile ? `📞 *મોબાઇલ:* +91 ${order.mobile}\n` : '') +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🛒 *આઇટમ્સ વિગત:*\n${itemsText}` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💵 *સબટોટલ:* ₹${(order.subtotal || order.total).toFixed(2)}\n` +
+      ((order.discount || 0) > 0 ? `🏷️ *ડિસ્કાઉન્ટ:* -₹${Number(order.discount).toFixed(2)}\n` : '') +
+      `🏛️ *કરપાત્ર રકમ (Taxable Value):* ₹${gstBreakup.totalTaxableValue.toFixed(2)}\n` +
+      `🏛️ *CGST:* ₹${gstBreakup.totalCgst.toFixed(2)} | *SGST:* ₹${gstBreakup.totalSgst.toFixed(2)}\n` +
+      `💰 *ચોખ્ખી રકમ (Total Payable):* ₹${order.total}/-\n` +
+      `💳 *પેમેન્ટ સ્થિતિ:* ${order.paymentMode} (${order.paymentStatus === 'Paid' ? '✅ ચૂકવેલ' : '⏳ બાકી'})\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      (storeSettings.gstNumber ? `🏛️ GSTIN: ${storeSettings.gstNumber}\n` : '') +
+      `📍 *દુકાન:* ${storeSettings.address || 'થરાદ'}\n` +
+      `📞 *સંપર્ક:* +91 ${storeSettings.phone}\n\n` +
+      `🙏 ખરીદી બદલ આપનો ખૂબ ખૂબ આભાર!`;
+
+    window.open(`https://wa.me/91${targetMobile}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   return (

@@ -47,7 +47,9 @@ import {
   Share2,
   Newspaper,
   Heart,
-  ArrowDownUp
+  ArrowDownUp,
+  Calculator,
+  Smartphone
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
@@ -63,9 +65,11 @@ import { ConfirmDeleteModal, DeleteTargetInfo } from './components/ConfirmDelete
 import { MultiPlatformSyncModal } from './components/MultiPlatformSyncModal';
 import { RojmelKhataModal } from './components/RojmelKhataModal';
 import { CaAuditModal } from './components/CaAuditModal';
+import { DailyCashClosingModal } from './components/DailyCashClosingModal';
 import { StoreSettingsModal } from './components/StoreSettingsModal';
 import { XeroxOrderWidget } from './components/XeroxOrderWidget';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
+import { CustomerUploadQrModal } from './components/CustomerUploadQrModal';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
@@ -122,6 +126,7 @@ export default function App() {
   // Online Print Jobs & Customer Uploaded Documents
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
   const [showPrintJobsModal, setShowPrintJobsModal] = useState<boolean>(false);
+  const [showCustomerUploadQrModal, setShowCustomerUploadQrModal] = useState<boolean>(false);
 
   // Expenses & Purchases
   const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v5', []);
@@ -130,6 +135,7 @@ export default function App() {
   // Rojmel (Daily Income/Expense) & Khata (Customer & Supplier Ledger) ERP States
   const [showRojmelModal, setShowRojmelModal] = useState<boolean>(false);
   const [showCaAuditModal, setShowCaAuditModal] = useState<boolean>(false);
+  const [showDailyCashClosingModal, setShowDailyCashClosingModal] = useState<boolean>(false);
   const [showStoreSettingsModal, setShowStoreSettingsModal] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
   const [rojmelEntries, setRojmelEntries] = useFirebaseSync<RojmelEntry[]>('rojmel', 'prisha_rojmel_v1', []);
@@ -321,6 +327,40 @@ export default function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
   };
+
+  // Superfast POS & Global Keyboard Shortcuts (F2: Product search, F4: Custom item, F9: Daily Cash Closing, Esc: Close)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isTyping = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT');
+
+      if (e.key === 'F2') {
+        e.preventDefault();
+        const searchEl = document.getElementById('pos-product-select') || document.getElementById('admin-search-input');
+        if (searchEl) {
+          searchEl.focus();
+          showToast('⚡ F2: કાઉન્ટર આઇટમ સિલેક્ટ ફોકસ');
+        }
+      } else if (e.key === 'F4') {
+        e.preventDefault();
+        setShowCustomPosInput(prev => !prev);
+        showToast('⚡ F4: કસ્ટમ આઇટમ ઇનપુટ મોડ');
+      } else if (e.key === 'F9') {
+        e.preventDefault();
+        setShowDailyCashClosingModal(true);
+      } else if (e.key === 'Escape') {
+        if (showDailyCashClosingModal) setShowDailyCashClosingModal(false);
+        else if (showCaAuditModal) setShowCaAuditModal(false);
+        else if (showRojmelModal) setShowRojmelModal(false);
+        else if (showPrintJobsModal) setShowPrintJobsModal(false);
+        else if (activeInvoiceOrder) setActiveInvoiceOrder(null);
+        else if (isCartDrawerOpen) setIsCartDrawerOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showDailyCashClosingModal, showCaAuditModal, showRojmelModal, showPrintJobsModal, activeInvoiceOrder, isCartDrawerOpen]);
 
   // Convert File to Base64
   const fileToBase64 = (file: File): Promise<string> => {
@@ -650,10 +690,11 @@ export default function App() {
     const collectedAttachedFiles: Array<{
       id: string;
       fileName: string;
-      fileDataUrl: string;
+      fileDataUrl?: string;
       fileSize?: number;
       itemName?: string;
       copies?: number;
+      pages?: number;
       colorMode?: 'black_white' | 'color' | 'pvc_card';
       sideOption?: 'single_side' | 'double_side';
       paperSize?: 'A4' | 'A5' | 'Legal' | '4x6 Photo' | 'PVC Card';
@@ -665,6 +706,8 @@ export default function App() {
       const isColor = c.product.nameGu.includes('કલર');
       const isDouble = c.product.nameGu.includes('બંને બાજુ');
       const isLam = c.product.nameGu.includes('લેમિનેશન');
+      const pageMatch = c.product.nameGu.match(/(\d+)\s*પેજ/);
+      const parsedPages = pageMatch ? parseInt(pageMatch[1], 10) : 1;
 
       if (c.product.attachedFiles && c.product.attachedFiles.length > 0) {
         c.product.attachedFiles.forEach((af, idx) => {
@@ -676,6 +719,7 @@ export default function App() {
             fileSize: af.fileSize || Math.round(af.fileDataUrl.length * 0.75),
             itemName: c.product.nameGu,
             copies: c.quantity || 1,
+            pages: af.pages || parsedPages || 1,
             colorMode: isPvc ? 'pvc_card' : isColor ? 'color' : 'black_white',
             sideOption: isDouble ? 'double_side' : 'single_side',
             paperSize: isPvc ? 'PVC Card' : 'A4',
@@ -704,6 +748,7 @@ export default function App() {
             fileSize: Math.round(img.length * 0.75),
             itemName: c.product.nameGu,
             copies: c.quantity || 1,
+            pages: 1,
             colorMode: isPvc ? 'pvc_card' : 'color',
             sideOption: isDouble ? 'double_side' : 'single_side',
             paperSize: isPvc ? 'PVC Card' : 'A4',
@@ -722,6 +767,7 @@ export default function App() {
           fileSize: Math.round(c.product.imageUrl.length * 0.75),
           itemName: c.product.nameGu,
           copies: c.quantity || 1,
+          pages: parsedPages || 1,
           colorMode: isPvc ? 'pvc_card' : isColor ? 'color' : 'black_white',
           sideOption: isDouble ? 'double_side' : 'single_side',
           paperSize: isPvc ? 'PVC Card' : 'A4',
@@ -803,6 +849,7 @@ export default function App() {
             fileType: isImg ? 'image/jpeg' : isPdf ? 'application/pdf' : isExcel ? 'application/vnd.ms-excel' : 'application/octet-stream',
             fileDataUrl: af.fileDataUrl,
             copies: af.copies || 1,
+            pages: af.pages || 1,
             colorMode: af.colorMode || (isImg ? 'color' : 'black_white'),
             sideOption: af.sideOption || 'single_side',
             paperSize: af.paperSize || (isImg ? '4x6 Photo' : 'A4'),
@@ -2204,6 +2251,17 @@ export default function App() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
+              {/* CUSTOMER DIRECT UPLOAD QR & LINK BUTTON */}
+              <button
+                type="button"
+                onClick={() => setShowCustomerUploadQrModal(true)}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-emerald-400"
+                title="ગ્રાહક પોતાના મોબાઇલથી PDF/ફોટો મોકલી શકે તે માટે QR કોડ અને લિંક"
+              >
+                <Smartphone className="w-4 h-4 text-emerald-200" />
+                <span>📲 ફાઇલ અપલોડ QR & લિંક</span>
+              </button>
+
               {/* PRINT JOBS & UPLOADED DOCUMENTS BUTTON (PDF, JPG, PNG, EXCEL) */}
               <button
                 type="button"
@@ -2224,6 +2282,17 @@ export default function App() {
               >
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
                 <span>📈 રોજમેળ (Daily ERP)</span>
+              </button>
+
+              {/* DAILY CASH CLOSING SUMMARY BUTTON */}
+              <button
+                type="button"
+                onClick={() => setShowDailyCashClosingModal(true)}
+                className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-amber-300"
+                title="દૈનિક ગલ્લા બંધ હિસાબ & નોટોની ગણતરી (શોર્ટકટ: F9)"
+              >
+                <Calculator className="w-4 h-4 text-amber-200" />
+                <span>💰 ગલ્લા હિસાબ [F9]</span>
               </button>
 
               {/* CA AUDIT & GST EXPORT BUTTON */}
@@ -2447,13 +2516,15 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-neutral-900 flex items-center gap-1">
                     <span>➕ બિલમાં વસ્તુ ઉમેરો</span>
+                    <span className="bg-orange-200 text-orange-950 text-[9.5px] px-1 rounded font-mono font-black" title="શોર્ટકટ F2">[F2]</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowCustomPosInput(!showCustomPosInput)}
-                    className="text-[11px] font-black text-blue-700 hover:underline"
+                    className="text-[11px] font-black text-blue-700 hover:underline flex items-center gap-1"
                   >
-                    {showCustomPosInput ? 'લિસ્ટેડ આઇટમ' : '+ કસ્ટમ આઇટમ'}
+                    <span>{showCustomPosInput ? 'લિસ્ટેડ આઇટમ' : '+ કસ્ટમ આઇટમ'}</span>
+                    <span className="bg-blue-100 text-blue-900 text-[9px] px-1 rounded font-mono font-bold">[F4]</span>
                   </button>
                 </div>
 
@@ -2461,9 +2532,10 @@ export default function App() {
                   /* Standard Product Dropdown Selector */
                   <div className="space-y-1.5">
                     <select
+                      id="pos-product-select"
                       value={posSelectedProdId}
                       onChange={e => setPosSelectedProdId(e.target.value)}
-                      className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-orange-500"
+                      className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-400"
                     >
                       <option value="">-- લિસ્ટમાંથી વસ્તુ પસંદ કરો --</option>
                       {posItems.map(prod => (
@@ -4524,6 +4596,19 @@ export default function App() {
         />
       )}
 
+      {/* 13.C DAILY CASH DRAWER CLOSING MODAL */}
+      {showDailyCashClosingModal && (
+        <DailyCashClosingModal
+          isOpen={showDailyCashClosingModal}
+          onClose={() => setShowDailyCashClosingModal(false)}
+          orders={orders}
+          expenses={expenses}
+          rojmelEntries={rojmelEntries}
+          storeSettings={storeSettings}
+          showToast={showToast}
+        />
+      )}
+
       {/* ========================================================================= */}
       {/* 14. PROFESSIONAL FOOTER WITH REAL VISITOR COUNTER */}
       {/* ========================================================================= */}
@@ -4618,6 +4703,13 @@ export default function App() {
           relatedProducts={posItems.filter(p => p.category === selectedProductForModal.category && p.id !== selectedProductForModal.id).slice(0, 4)}
         />
       )}
+
+      {/* MOBILE FILE UPLOAD QR & DIRECT LINK MODAL */}
+      <CustomerUploadQrModal
+        isOpen={showCustomerUploadQrModal}
+        onClose={() => setShowCustomerUploadQrModal(false)}
+        showToast={showToast}
+      />
     </div>
   );
 }
