@@ -49,7 +49,8 @@ import {
   Heart,
   ArrowDownUp,
   Calculator,
-  Smartphone
+  Smartphone,
+  Building
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';

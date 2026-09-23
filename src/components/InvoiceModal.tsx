@@ -27,7 +27,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 }) => {
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
-  const [billFormat, setBillFormat] = useState<'a4' | 'corporate_gst' | 'gem_portal' | 'thermal'>('a4');
+  const [billFormat, setBillFormat] = useState<'a4' | 'corporate_gst' | 'gem_portal' | 'thermal'>(
+    order.gemContractNo ? 'gem_portal' : 'a4'
+  );
   const [gemContractNo, setGemContractNo] = useState<string>(
     order.gemContractNo || `GEMC-511687705${Math.floor(100000 + Math.random() * 900000)}`
   );
@@ -129,7 +131,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
         const itemHsn = it.hsnCode || detectHsnAndGst(it.name).hsnCode;
         const itemRate = it.gstRate !== undefined ? it.gstRate : detectHsnAndGst(it.name).gstRate;
         const lineTotal = Number(it.price * it.qty);
+        const unitTaxableRate = (itemRate > 0 && (isCorporateGstMode || isGemPortalMode))
+          ? it.price / (1 + itemRate / 100)
+          : it.price;
         const taxableVal = itemRate > 0 ? lineTotal / (1 + itemRate / 100) : lineTotal;
+        const displayRate = (isCorporateGstMode || isGemPortalMode) ? unitTaxableRate : it.price;
 
         return `
         <tr style="border-bottom: 1.2px solid #1a1a1a;">
@@ -145,9 +151,9 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               : ''
           }
           <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-weight: 800;">${it.qty}</td>
-          <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 6px; text-align: right; font-weight: 600;">₹${Number(it.price).toFixed(2)}</td>
+          <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 6px; text-align: right; font-weight: 600;">₹${displayRate.toFixed(2)}</td>
           ${
-            isCorporateGstMode
+            (isCorporateGstMode || isGemPortalMode)
               ? `<td style="border-right: 1.2px solid #1a1a1a; padding: 4px 5px; text-align: right; font-size: 10px;">₹${taxableVal.toFixed(2)}</td>
                  <td style="border-right: 1.2px solid #1a1a1a; padding: 4px 4px; text-align: center; font-size: 10px;">${itemRate}%</td>`
               : ''
@@ -501,7 +507,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       <!-- 1. Corporate / GeM Header Strip -->
       <div class="govt-strip" style="${isGemPortalMode ? 'background: #0B1E48; color: #ffffff; padding: 4px 8px; font-weight: 900;' : ''}">
         <span>${isGemPortalMode ? '🏛️ GOVERNMENT e-MARKETPLACE (GeM) - TAX INVOICE / સરકારી ટેક્સ ઇન્વોઇસ' : '🇮🇳 ટેક્સ ઇન્વોઇસ (TAX INVOICE)'}</span>
-        <span>${isGemPortalMode ? '✓ 100% GeM CONTRACT MATCHED (PDF < 5 MB)' : 'અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)'}</span>
+        <span>${isGemPortalMode ? 'ORIGINAL FOR RECIPIENT' : 'અસલ ગ્રાહક નકલ (ORIGINAL FOR RECIPIENT)'}</span>
       </div>
 
       <!-- 2. Store Header with Logos -->
@@ -572,7 +578,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <div><b>બિલ નં (Inv No):</b> <span style="font-weight: 800; font-size: 12px;">${order.invoiceNo}</span></div>
             <div><b>ઇન્વોઇસ તારીખ:</b> ${order.date}</div>
             ${isGemPortalMode ? `<div><b>GeM કન્ટ્રાક્ટ નં:</b> <b style="font-family: monospace;">${gemContractNo}</b></div>` : ''}
-            <div><b>ચૂકવણી પદ્ધતિ:</b> ${order.paymentMode} (${order.paymentStatus})</div>
+            <div><b>ચૂકવણી પદ્ધતિ:</b> ${isGemPortalMode ? 'GeM Online Payment / PFMS' : order.paymentMode} (${order.paymentStatus || 'Paid'})</div>
             <div><b>સપ્લાય સ્થળ:</b> 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
             <div><b>રિવર્સ ચાર્જ (Reverse Charge):</b> ના (No)</div>
           </td>
@@ -615,7 +621,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               : `<div class="words-text">${storeSettings.storeNameGu} • અધિકૃત ટેક્સ ઇન્વોઇસ</div>`
           }
           <div style="margin-top: 4px; font-size: 10px; font-weight: 700; color: #047857;">
-            ${isGemPortalMode ? '✓ GeM પોર્ટલ કમ્પ્લાયન્ટ બિલ • 100% સરકારી મંજૂર સેમ્પલ' : '✓ પ્રમાણિત કર ઇન્વોઇસ • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે'}
+            ${isGemPortalMode ? '✓ GeM Portal Government Tax Invoice' : '✓ પ્રમાણિત કર ઇન્વોઇસ • ગ્રાહક સંતોષ એ અમારો ધ્યેય છે'}
           </div>
         </div>
         <div class="summary-right">
@@ -1542,8 +1548,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                   <span>🏛️</span>
                   <span>GOVERNMENT e-MARKETPLACE (GeM) - TAX INVOICE / સરકારી ટેક્સ ઇન્વોઇસ</span>
                 </span>
-                <span className="text-[10px] sm:text-[11px] text-emerald-800 font-black flex items-center gap-1">
-                  <span>✓ 100% GeM Matched Order Invoice (PDF &lt; 5 MB)</span>
+                <span className="text-[10px] sm:text-[11px] text-neutral-800 font-black flex items-center gap-1">
+                  <span>ORIGINAL FOR RECIPIENT</span>
                 </span>
               </div>
             ) : (
@@ -1683,7 +1689,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     બિલ નં: <span className="font-mono font-black text-xs">{order.invoiceNo}</span>
                   </div>
                   <div className="font-bold text-black">તારીખ: {order.date}</div>
-                  <div className="font-bold text-black">ચૂકવણી: {order.paymentMode} ({order.paymentStatus})</div>
+                  <div className="font-bold text-black">ચૂકવણી: {isGemPortalMode ? 'GeM Online Payment / PFMS' : order.paymentMode} ({order.paymentStatus})</div>
                   <div className="text-black text-[10px]">સપ્લાય સ્થળ: 24-ગુજરાત (Place of Supply: 24-Gujarat)</div>
                   <div className="text-[10px] text-neutral-600">રિવર્સ ચાર્જ: ના (No)</div>
                 </div>
@@ -1714,7 +1720,11 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     const itemHsn = it.hsnCode || detectHsnAndGst(it.name).hsnCode;
                     const itemGstRate = it.gstRate !== undefined ? it.gstRate : detectHsnAndGst(it.name).gstRate;
                     const itemLineTotal = Number(it.price * it.qty);
-                    const itemTaxable = itemGstRate > 0 ? itemLineTotal / (1 + itemGstRate / 100) : itemLineTotal;
+                    const unitTaxableRate = (itemGstRate > 0 && (isCorporateGstMode || isGemPortalMode))
+                      ? it.price / (1 + itemGstRate / 100)
+                      : it.price;
+                    const itemTaxable = unitTaxableRate * it.qty;
+                    const displayRate = (isCorporateGstMode || isGemPortalMode) ? unitTaxableRate : it.price;
 
                     return (
                       <tr key={idx} className="border-b border-black">
@@ -1729,7 +1739,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                         )}
                         <td className="p-1.5 text-center font-black text-black border-r border-black">{it.qty}</td>
                         <td className="p-1.5 text-right font-medium text-black border-r border-black">
-                          ₹{Number(it.price).toFixed(2)}
+                          ₹{displayRate.toFixed(2)}
                         </td>
                         {(isCorporateGstMode || isGemPortalMode) && (
                           <>

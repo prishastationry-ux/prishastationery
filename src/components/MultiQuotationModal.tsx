@@ -316,6 +316,123 @@ export default function MultiQuotationModal({
     }
   };
 
+  // Direct Browser Print for ALL 5 firm quotations combined in one print job
+  const handlePrintAllQuotations = () => {
+    const allPagesHtml = firms
+      .map((firm, fIdx) => {
+        const total = calculateFirmTotal(firm.id);
+        const itemsRows = items
+          .map(
+            (it, idx) => `
+          <tr style="border-bottom: 1.2px solid #000;">
+            <td style="padding: 6px; text-align: center; border-right: 1.2px solid #000;">${idx + 1}</td>
+            <td style="padding: 6px; border-right: 1.2px solid #000;"><b>${it.name}</b></td>
+            <td style="padding: 6px; text-align: center; border-right: 1.2px solid #000;">${it.qty} ${it.unit}</td>
+            <td style="padding: 6px; text-align: right; border-right: 1.2px solid #000;">₹${(it.firmPrices[firm.id] || it.basePrice).toFixed(2)}</td>
+            <td style="padding: 6px; text-align: right; font-weight: bold;">₹${((it.firmPrices[firm.id] || it.basePrice) * it.qty).toFixed(2)}</td>
+          </tr>
+        `
+          )
+          .join('');
+
+        return `
+          <div class="quote-box" style="${fIdx < firms.length - 1 ? 'page-break-after: always; break-after: page;' : ''}">
+            <div class="header-box">
+              <div class="firm-title">${firm.name}</div>
+              <div class="firm-sub">${firm.tagline}</div>
+              <div style="font-size: 11px; margin-top: 3px;">📍 ${firm.address} | 📞 +91 ${firm.phone} ${firm.gstin ? `| GSTIN: ${firm.gstin}` : ''}</div>
+              <div style="font-size: 14px; font-weight: 900; margin-top: 8px; border-top: 1px dashed #000; padding-top: 4px;">
+                📋 ભાવ પત્રક / ક્વોટેશન (QUOTATION - ${firm.id === 1 ? 'L1 Lowest' : `Firm ${firm.id}`})
+              </div>
+            </div>
+
+            <table class="meta-table">
+              <tr>
+                <td style="width: 60%;">
+                  <b>પ્રતિ (To):</b><br/>
+                  <div style="font-size: 14px; font-weight: bold; margin-top: 2px;">${deptName}</div>
+                </td>
+                <td style="width: 40%;">
+                  <b>ક્વોટેશન નં:</b> ${firm.quoteNo}<br/>
+                  <b>તારીખ:</b> ${quoteDate}<br/>
+                  <b>સંદર્ભ:</b> ${refNo}
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2">
+                  <b>વિષય:</b> ${subject}
+                </td>
+              </tr>
+            </table>
+
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th style="width: 35px;">અ.નં</th>
+                  <th>વસ્તુ / સાહિત્યની વિગત</th>
+                  <th style="width: 80px;">જથ્થો</th>
+                  <th style="width: 90px;">ભાવ દર (₹)</th>
+                  <th style="width: 100px;">કુલ રકમ (₹)</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsRows}
+              </tbody>
+            </table>
+
+            <div style="text-align: right; font-size: 14px; font-weight: 900; padding: 6px; border: 1.5px solid #000; background: #fafafa;">
+              કુલ રકમ (Total Amount): ₹${total.toFixed(2)}/-
+            </div>
+
+            <div style="margin-top: 12px; font-size: 10.5px; border-top: 1px dashed #000; padding-top: 6px;">
+              <b>શરતો:</b> ${validityNote}
+            </div>
+
+            <div class="sign-box">
+              <div style="font-weight: bold; text-transform: uppercase;">For, ${firm.name}</div>
+              <div style="height: 45px;"></div>
+              <div style="border-top: 1px solid #000; font-weight: bold; font-size: 11px;">અધિકૃત સહી & સિક્કો</div>
+            </div>
+            <div style="clear: both;"></div>
+          </div>
+        `;
+      })
+      .join('\n');
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>All 5 Quotations - ${refNo}</title>
+        <style>
+          @page { size: A4 portrait; margin: 10mm; }
+          body { font-family: -apple-system, sans-serif; font-size: 12px; color: #000; margin: 0; padding: 0; }
+          .quote-box { border: 2px solid #000; padding: 15px; margin-bottom: 20px; box-sizing: border-box; min-height: 260mm; }
+          .header-box { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
+          .firm-title { font-size: 20px; font-weight: 900; text-transform: uppercase; }
+          .firm-sub { font-size: 13px; font-weight: bold; margin-top: 2px; }
+          .meta-table { width: 100%; border-collapse: collapse; margin-bottom: 10px; border: 1.2px solid #000; }
+          .meta-table td { padding: 6px; border: 1.2px solid #000; vertical-align: top; }
+          .items-table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 10px; }
+          .items-table th { border: 1.2px solid #000; background: #f3f4f6; padding: 6px; text-align: center; }
+          .sign-box { width: 220px; text-align: center; float: right; margin-top: 30px; }
+        </style>
+      </head>
+      <body>
+        ${allPagesHtml}
+      </body>
+      </html>
+    `;
+
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => win.print(), 300);
+    }
+  };
+
   // Direct Comparative Statement Print
   const handlePrintComparativeStatement = () => {
     const itemsRows = items
@@ -761,11 +878,7 @@ export default function MultiQuotationModal({
 
               <button
                 type="button"
-                onClick={() => {
-                  firms.forEach((f, idx) => {
-                    setTimeout(() => handlePrintSingleQuotation(f), idx * 600);
-                  });
-                }}
+                onClick={handlePrintAllQuotations}
                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow"
               >
                 <Printer className="w-4 h-4 text-amber-200" />

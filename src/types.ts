@@ -61,6 +61,7 @@ export interface OrderRecord {
   customerName: string;
   mobile: string;
   address: string;
+  gstin?: string;
   items: BillItem[];
   subtotal: number;
   discount: number;
@@ -82,6 +83,7 @@ export interface OrderRecord {
   statusUpdatedAt?: string;
   notes?: string;
   profit?: number;
+  timestamp?: number;
   gemContractNo?: string;
   gemContractDate?: string;
   consigneeDept?: string;

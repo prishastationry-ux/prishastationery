@@ -132,8 +132,9 @@ export default function GemBillGeneratorModal({
       })),
       subtotal: sub,
       discount: 0,
+      tax: 0,
       total: sub,
-      paymentMode: 'GeM Portal Online (Govt Bill)',
+      paymentMode: 'GeM Online Payment / PFMS' as any,
       paymentStatus: 'Paid',
       orderStatus: 'delivered',
       orderType: 'counter',
@@ -475,7 +476,6 @@ export default function GemBillGeneratorModal({
           storeSettings={storeSettings}
           onClose={() => setPreviewOrder(null)}
           isSuccessView={false}
-          showToast={showToast}
         />
       )}
     </div>
