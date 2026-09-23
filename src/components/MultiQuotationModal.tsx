@@ -38,7 +38,8 @@ export default function MultiQuotationModal({
   const [quoteDate, setQuoteDate] = useState(new Date().toLocaleDateString('en-IN'));
   const [refNo, setRefNo] = useState(`QTN/2026-27/${Math.floor(100 + Math.random() * 900)}`);
   const [subject, setSubject] = useState('કચેરીના વર્ષ ૨૦૨૬-૨૭ ના ઉપયોગ અર્થે જરૂરી સ્ટેશનરી સાહિત્ય સપ્લાય કરવા બાબત.');
-  const [validityNote, setValidityNote] = useState('૧. ભાવ ૩૦ દિવસ સુધી માન્ય રહેશે. ૨. જીએસટી અલગથી / સમાવિષ્ટ. ૩. માલ સમયસર કચેરીએ પહોંચતો કરવામાં આવશે.');
+  const [validityNote, setValidityNote] = useState('૧. ભાવ ૩૦ દિવસ સુધી માન્ય રહેશે. ૨. માલ સમયસર કચેરીએ પહોંચતો કરવામાં આવશે.');
+  const [includeGst, setIncludeGst] = useState<boolean>(true);
 
   // 5 Firm Profiles
   const [firms, setFirms] = useState<FirmProfile[]>([
@@ -248,9 +249,9 @@ export default function MultiQuotationModal({
           <div class="header-box">
             <div class="firm-title">${firm.name}</div>
             <div class="firm-sub">${firm.tagline}</div>
-            <div style="font-size: 11px; margin-top: 3px;">📍 ${firm.address} | 📞 +91 ${firm.phone} ${firm.gstin ? `| GSTIN: ${firm.gstin}` : ''}</div>
+            <div style="font-size: 11px; margin-top: 3px;">📍 ${firm.address} | 📞 +91 ${firm.phone}${includeGst && firm.gstin ? ` | GSTIN: ${firm.gstin}` : ' | (Non-GST / ટેક્સ મુક્ત)'}</div>
             <div style="font-size: 14px; font-weight: 900; margin-top: 8px; border-top: 1px dashed #000; padding-top: 4px;">
-              📋 ભાવ પત્રક / ક્વોટેશન (QUOTATION)
+              ${includeGst ? '📋 ભાવ પત્રક / ક્વોટેશન (QUOTATION)' : '📋 ભાવ પત્રક / અંદાજપત્રક (ESTIMATE / NON-GST QUOTATION)'}
             </div>
           </div>
 
@@ -293,7 +294,7 @@ export default function MultiQuotationModal({
           </div>
 
           <div style="margin-top: 12px; font-size: 10.5px; border-top: 1px dashed #000; padding-top: 6px;">
-            <b>શરતો:</b> ${validityNote}
+            <b>શરતો:</b> ${validityNote} ${includeGst ? ' (જીએસટી સહિત / અલગથી)' : ' (નોંધ: ભાવ વિધાઉટ જીએસટી / ટેક્સ મુક્ત છે)'}
           </div>
 
           <div class="sign-box">
@@ -340,9 +341,9 @@ export default function MultiQuotationModal({
             <div class="header-box">
               <div class="firm-title">${firm.name}</div>
               <div class="firm-sub">${firm.tagline}</div>
-              <div style="font-size: 11px; margin-top: 3px;">📍 ${firm.address} | 📞 +91 ${firm.phone} ${firm.gstin ? `| GSTIN: ${firm.gstin}` : ''}</div>
+              <div style="font-size: 11px; margin-top: 3px;">📍 ${firm.address} | 📞 +91 ${firm.phone}${includeGst && firm.gstin ? ` | GSTIN: ${firm.gstin}` : ' | (Non-GST / ટેક્સ મુક્ત)'}</div>
               <div style="font-size: 14px; font-weight: 900; margin-top: 8px; border-top: 1px dashed #000; padding-top: 4px;">
-                📋 ભાવ પત્રક / ક્વોટેશન (QUOTATION - ${firm.id === 1 ? 'L1 Lowest' : `Firm ${firm.id}`})
+                ${includeGst ? `📋 ભાવ પત્રક / ક્વોટેશન (QUOTATION - ${firm.id === 1 ? 'L1 Lowest' : `Firm ${firm.id}`})` : `📋 ભાવ પત્રક / અંદાજપત્રક (ESTIMATE - ${firm.id === 1 ? 'L1' : `Firm ${firm.id}`})`}
               </div>
             </div>
 
@@ -385,7 +386,7 @@ export default function MultiQuotationModal({
             </div>
 
             <div style="margin-top: 12px; font-size: 10.5px; border-top: 1px dashed #000; padding-top: 6px;">
-              <b>શરતો:</b> ${validityNote}
+              <b>શરતો:</b> ${validityNote} ${includeGst ? ' (જીએસટી સહિત / અલગથી)' : ' (નોંધ: ભાવ વિધાઉટ જીએસટી / ટેક્સ મુક્ત છે)'}
             </div>
 
             <div class="sign-box">
@@ -476,7 +477,7 @@ export default function MultiQuotationModal({
       <body>
         <div class="box">
           <div class="title">ભાવ તુલનાત્મક પત્રક (COMPARATIVE STATEMENT / TENDER SUMMARY)</div>
-          <div class="sub">ખરીદનાર વિભાગ: ${deptName} | તારીખ: ${quoteDate} | સંદર્ભ નં: ${refNo}</div>
+          <div class="sub">ખરીદનાર વિભાગ: ${deptName} | તારીખ: ${quoteDate} | સંદર્ભ નં: ${refNo} | મોડ: <b>${includeGst ? 'GST ટેક્સ પત્રક' : 'Non-GST / વિધાઉટ ટેક્સ અંદાજપત્રક'}</b></div>
           <div style="font-weight: bold; margin-bottom: 6px;">વિષય: ${subject}</div>
 
           <table>
@@ -490,7 +491,10 @@ export default function MultiQuotationModal({
                     f => `
                   <th style="${f.id === 1 ? 'background: #dcfce7;' : ''}">
                     ${f.name}<br/>
-                    <span style="font-size: 9px; color: #374151;">${f.id === 1 ? '🏆 (L1 - નિમ્નતમ)' : `Firm ${f.id}`}</span>
+                    <span style="font-size: 9px; color: #374151;">
+                      ${f.id === 1 ? '🏆 (L1 - નિમ્નતમ)' : `Firm ${f.id}`}
+                      ${includeGst && f.gstin ? `<br/>GST: ${f.gstin}` : ''}
+                    </span>
                   </th>
                 `
                   )
@@ -616,7 +620,33 @@ export default function MultiQuotationModal({
                 />
               </div>
 
-              <div className="sm:col-span-2 lg:col-span-3">
+              <div>
+                <label className="block text-[11px] font-extrabold text-neutral-700 mb-1">
+                  📊 ટેક્સ મોડ (GST / વિધાઉટ GST):
+                </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIncludeGst(true)}
+                    className={`flex-1 py-2 px-2 rounded-lg text-xs font-black cursor-pointer border transition-all ${
+                      includeGst ? 'bg-emerald-600 text-white border-emerald-700 shadow-xs' : 'bg-white text-neutral-700 border-neutral-300'
+                    }`}
+                  >
+                    ✅ GST સાથે (With GST)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIncludeGst(false)}
+                    className={`flex-1 py-2 px-2 rounded-lg text-xs font-black cursor-pointer border transition-all ${
+                      !includeGst ? 'bg-amber-500 text-black border-amber-600 shadow-xs' : 'bg-white text-neutral-700 border-neutral-300'
+                    }`}
+                  >
+                    📄 વિધાઉટ GST (Non-GST / Estimate)
+                  </button>
+                </div>
+              </div>
+
+              <div className="sm:col-span-2 lg:col-span-2">
                 <label className="block text-[11px] font-extrabold text-neutral-700 mb-1">
                   📌 વિષય (Subject):
                 </label>
@@ -625,6 +655,18 @@ export default function MultiQuotationModal({
                   value={subject}
                   onChange={e => setSubject(e.target.value)}
                   className="w-full text-xs font-black p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-indigo-700"
+                />
+              </div>
+
+              <div className="sm:col-span-2 lg:col-span-3">
+                <label className="block text-[11px] font-extrabold text-neutral-700 mb-1">
+                  📑 શરતો અને નોંધ (Terms & Conditions):
+                </label>
+                <input
+                  type="text"
+                  value={validityNote}
+                  onChange={e => setValidityNote(e.target.value)}
+                  className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-indigo-700"
                 />
               </div>
             </div>
@@ -819,24 +861,64 @@ export default function MultiQuotationModal({
                       type="text"
                       value={f.name}
                       onChange={e => handleUpdateFirmDetail(f.id, 'name', e.target.value)}
-                      className="w-full text-xs font-black p-1 border border-neutral-300 rounded outline-none"
+                      className="w-full text-xs font-black p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] text-neutral-500">સરનામું & ફોન:</label>
+                    <label className="block text-[10px] text-neutral-500">ટેગલાઇન / સબ-ટાઇટલ:</label>
+                    <input
+                      type="text"
+                      value={f.tagline}
+                      onChange={e => handleUpdateFirmDetail(f.id, 'tagline', e.target.value)}
+                      className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-neutral-500">સરનામું:</label>
                     <input
                       type="text"
                       value={f.address}
                       onChange={e => handleUpdateFirmDetail(f.id, 'address', e.target.value)}
-                      className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none mb-1"
+                      className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
                     />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <label className="block text-[10px] text-neutral-500">ફોન નંબર:</label>
+                      <input
+                        type="text"
+                        value={f.phone}
+                        onChange={e => handleUpdateFirmDetail(f.id, 'phone', e.target.value)}
+                        className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
+                        placeholder="Phone"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] text-neutral-500">
+                        {includeGst ? 'GSTIN/TAN:' : 'GSTIN (Non-GST):'}
+                      </label>
+                      <input
+                        type="text"
+                        value={f.gstin}
+                        onChange={e => handleUpdateFirmDetail(f.id, 'gstin', e.target.value)}
+                        className="w-full text-[11px] font-mono font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
+                        placeholder="GSTIN No"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-neutral-500">ક્વોટેશન / બિલ નંબર:</label>
                     <input
                       type="text"
-                      value={f.phone}
-                      onChange={e => handleUpdateFirmDetail(f.id, 'phone', e.target.value)}
-                      className="w-full text-[11px] font-bold p-1 border border-neutral-300 rounded outline-none"
-                      placeholder="Phone"
+                      value={f.quoteNo}
+                      onChange={e => handleUpdateFirmDetail(f.id, 'quoteNo', e.target.value)}
+                      className="w-full text-[11px] font-mono font-bold p-1 border border-neutral-300 rounded outline-none focus:border-indigo-600"
+                      placeholder="Quote No"
                     />
                   </div>
 
