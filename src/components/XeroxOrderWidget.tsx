@@ -16,10 +16,17 @@ import {
   X,
   Settings,
   ArrowRight,
-  Plus
+  Plus,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { ProductItem, StoreSettings } from '../types';
-import { saveFileToCloudStorage } from '../lib/fileStorage';
+import {
+  saveFileToCloudStorage,
+  uploadFileObjectInChunks,
+  saveBlobToStorage,
+  registerLocalBlobUrl
+} from '../lib/fileStorage';
 import { inspectUploadedDocument, DocumentInspectionResult } from '../lib/pdfPageDetector';
 
 interface XeroxOrderWidgetProps {
@@ -54,7 +61,10 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   
   // File state
   const [file, setFile] = useState<File | null>(null);
+  const [fileId, setFileId] = useState<string>('');
   const [fileBase64, setFileBase64] = useState<string>('');
+  const [cloudUploadStatus, setCloudUploadStatus] = useState<'idle' | 'uploading' | 'completed' | 'error'>('idle');
+  const [cloudUploadProgress, setCloudUploadProgress] = useState<number>(0);
   const [detectedPageInfo, setDetectedPageInfo] = useState<DocumentInspectionResult | null>(null);
   const [isInspectingFile, setIsInspectingFile] = useState<boolean>(false);
   
@@ -70,9 +80,13 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   const [pvcCardCount, setPvcCardCount] = useState<number>(1);
   const [pvcSideOption, setPvcSideOption] = useState<'double' | 'single'>('double'); // બંને બાજુ (Front & Back) By Default!
   const [frontFile, setFrontFile] = useState<File | null>(null);
+  const [frontFileId, setFrontFileId] = useState<string>('');
   const [frontBase64, setFrontBase64] = useState<string>('');
+  const [frontUploadStatus, setFrontUploadStatus] = useState<'idle' | 'uploading' | 'completed' | 'error'>('idle');
   const [backFile, setBackFile] = useState<File | null>(null);
+  const [backFileId, setBackFileId] = useState<string>('');
   const [backBase64, setBackBase64] = useState<string>('');
+  const [backUploadStatus, setBackUploadStatus] = useState<'idle' | 'uploading' | 'completed' | 'error'>('idle');
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
   
@@ -139,17 +153,48 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       return;
     }
 
+    const newId = `f-prn-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     setFile(selectedFile);
+    setFileId(newId);
+    setCloudUploadStatus('uploading');
+    setCloudUploadProgress(10);
     setIsInspectingFile(true);
 
-    // Read as Base64 data URL for preview and storing in order
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFileBase64(reader.result as string);
-    };
-    reader.readAsDataURL(selectedFile);
+    // 1. Immediately cache in local IndexedDB
+    saveBlobToStorage(newId, selectedFile, selectedFile.name, selectedFile.type || 'application/pdf').catch(() => {});
 
-    // Inspect document & auto-detect exact page count
+    // 2. Read preview URL
+    if (selectedFile.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = () => setFileBase64(reader.result as string);
+      reader.readAsDataURL(selectedFile);
+    } else {
+      const objUrl = registerLocalBlobUrl(URL.createObjectURL(selectedFile));
+      setFileBase64(objUrl);
+    }
+
+    // 3. Immediately stream chunks to Firestore in background
+    uploadFileObjectInChunks(
+      selectedFile,
+      newId,
+      selectedFile.name,
+      selectedFile.type || 'application/pdf',
+      (prog) => {
+        setCloudUploadProgress(prog.percent);
+      }
+    ).then((success) => {
+      if (success) {
+        setCloudUploadStatus('completed');
+        setCloudUploadProgress(100);
+      } else {
+        setCloudUploadStatus('error');
+      }
+    }).catch((err) => {
+      console.error('File upload error:', err);
+      setCloudUploadStatus('error');
+    });
+
+    // 4. Inspect document & auto-detect exact page count
     inspectUploadedDocument(selectedFile).then((inspection) => {
       setDetectedPageInfo(inspection);
       setIsInspectingFile(false);
@@ -185,13 +230,28 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       showToast('⚠️ મહત્તમ 25 MB સુધીની ફાઇલ અપલોડ કરી શકાય છે.');
       return;
     }
+    const newId = `f-pvc-front-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     setFrontFile(selectedFile);
+    setFrontFileId(newId);
+    setFrontUploadStatus('uploading');
+
+    saveBlobToStorage(newId, selectedFile, selectedFile.name, selectedFile.type || 'image/jpeg').catch(() => {});
+
     const reader = new FileReader();
     reader.onload = () => {
       setFrontBase64(reader.result as string);
-      showToast(`💳 આગળની બાજુ (Front) ફાઇલ અપલોડ થઈ ગઈ.`);
     };
     reader.readAsDataURL(selectedFile);
+
+    uploadFileObjectInChunks(
+      selectedFile,
+      newId,
+      `Front_${selectedFile.name}`,
+      selectedFile.type || 'image/jpeg'
+    ).then((success) => {
+      setFrontUploadStatus(success ? 'completed' : 'error');
+      if (success) showToast('💳 આગળની બાજુ (Front) ક્લાઉડમાં સુરક્ષિત સેવ થઈ ગઈ.');
+    }).catch(() => setFrontUploadStatus('error'));
   };
 
   const handleBackFileSelect = (selectedFile: File) => {
@@ -199,13 +259,28 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       showToast('⚠️ મહત્તમ 25 MB સુધીની ફાઇલ અપલોડ કરી શકાય છે.');
       return;
     }
+    const newId = `f-pvc-back-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     setBackFile(selectedFile);
+    setBackFileId(newId);
+    setBackUploadStatus('uploading');
+
+    saveBlobToStorage(newId, selectedFile, selectedFile.name, selectedFile.type || 'image/jpeg').catch(() => {});
+
     const reader = new FileReader();
     reader.onload = () => {
       setBackBase64(reader.result as string);
-      showToast(`💳 પાછળની બાજુ (Back) ફાઇલ અપલોડ થઈ ગઈ.`);
     };
     reader.readAsDataURL(selectedFile);
+
+    uploadFileObjectInChunks(
+      selectedFile,
+      newId,
+      `Back_${selectedFile.name}`,
+      selectedFile.type || 'image/jpeg'
+    ).then((success) => {
+      setBackUploadStatus(success ? 'completed' : 'error');
+      if (success) showToast('💳 પાછળની બાજુ (Back) ક્લાઉડમાં સુરક્ષિત સેવ થઈ ગઈ.');
+    }).catch(() => setBackUploadStatus('error'));
   };
 
   const handleDrop = (e: React.DragEvent) => {
@@ -239,40 +314,46 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
 
       const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string }> = [];
 
-      if (frontBase64) {
-        const fId = `f-pvc-front-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      if (frontBase64 || frontFile) {
+        const fId = frontFileId || `f-pvc-front-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const fName = `આગળની બાજુ (Front) - ${frontFile ? frontFile.name : `${pvcCardType}_Front.jpg`}`;
         attachedFilesList.push({
           id: fId,
           fileName: fName,
           fileDataUrl: frontBase64,
-          fileSize: frontFile?.size || Math.round(frontBase64.length * 0.75)
+          fileSize: frontFile?.size || Math.round((frontBase64?.length || 1000) * 0.75)
         });
-        saveFileToCloudStorage(fId, frontBase64, fName, frontFile?.type || 'image/jpeg', frontFile?.size).catch(() => {});
+        if (frontFile && frontUploadStatus !== 'completed') {
+          saveFileToCloudStorage(fId, frontFile, fName, frontFile.type || 'image/jpeg', frontFile.size).catch(() => {});
+        }
       }
 
-      if (pvcSideOption === 'double' && backBase64) {
-        const bId = `f-pvc-back-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      if (pvcSideOption === 'double' && (backBase64 || backFile)) {
+        const bId = backFileId || `f-pvc-back-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const bName = `પાછળની બાજુ (Back) - ${backFile ? backFile.name : `${pvcCardType}_Back.jpg`}`;
         attachedFilesList.push({
           id: bId,
           fileName: bName,
           fileDataUrl: backBase64,
-          fileSize: backFile?.size || Math.round(backBase64.length * 0.75)
+          fileSize: backFile?.size || Math.round((backBase64?.length || 1000) * 0.75)
         });
-        saveFileToCloudStorage(bId, backBase64, bName, backFile?.type || 'image/jpeg', backFile?.size).catch(() => {});
+        if (backFile && backUploadStatus !== 'completed') {
+          saveFileToCloudStorage(bId, backFile, bName, backFile.type || 'image/jpeg', backFile.size).catch(() => {});
+        }
       }
 
-      if (fileBase64 && attachedFilesList.length === 0) {
-        const docId = `f-pvc-doc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const docName = file ? file.name : `${pvcCardType}.pdf`;
+      if (file && attachedFilesList.length === 0) {
+        const docId = fileId || `f-pvc-doc-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const docName = file.name;
         attachedFilesList.push({
           id: docId,
           fileName: docName,
           fileDataUrl: fileBase64,
-          fileSize: file?.size || Math.round(fileBase64.length * 0.75)
+          fileSize: file.size
         });
-        saveFileToCloudStorage(docId, fileBase64, docName, file?.type || 'application/pdf', file?.size).catch(() => {});
+        if (cloudUploadStatus !== 'completed') {
+          saveFileToCloudStorage(docId, file, docName, file.type || 'application/pdf', file.size).catch(() => {});
+        }
       }
 
       return {
@@ -298,16 +379,18 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
 
     if (serviceType === 'call_letter') {
       const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string }> = [];
-      if (fileBase64) {
-        const cId = `f-call-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      if (file || fileBase64) {
+        const cId = fileId || `f-call-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const cName = file ? file.name : 'કોલ લેટર.pdf';
         attachedFilesList.push({
           id: cId,
           fileName: cName,
           fileDataUrl: fileBase64,
-          fileSize: file?.size || Math.round(fileBase64.length * 0.75)
+          fileSize: file?.size || Math.round((fileBase64?.length || 1000) * 0.75)
         });
-        saveFileToCloudStorage(cId, fileBase64, cName, file?.type || 'application/pdf', file?.size).catch(() => {});
+        if (file && cloudUploadStatus !== 'completed') {
+          saveFileToCloudStorage(cId, file, cName, file.type || 'application/pdf', file.size).catch(() => {});
+        }
       }
 
       return {
@@ -334,17 +417,19 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     const lamText = needLamination ? ' + લેમિનેશન' : '';
 
     const attachedFilesList: Array<{ fileName: string; fileDataUrl: string; fileSize?: number; id: string; pages?: number }> = [];
-    if (fileBase64) {
-      const pId = `f-xerox-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    if (file || fileBase64) {
+      const pId = fileId || `f-xerox-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       const pName = file ? file.name : 'પ્રિન્ટ દસ્તાવેજ.pdf';
       attachedFilesList.push({
         id: pId,
         fileName: pName,
         fileDataUrl: fileBase64,
-        fileSize: file?.size || Math.round(fileBase64.length * 0.75),
+        fileSize: file?.size || Math.round((fileBase64?.length || 1000) * 0.75),
         pages: pageCount
       });
-      saveFileToCloudStorage(pId, fileBase64, pName, file?.type || 'application/pdf', file?.size).catch(() => {});
+      if (file && cloudUploadStatus !== 'completed') {
+        saveFileToCloudStorage(pId, file, pName, file.type || 'application/pdf', file.size).catch(() => {});
+      }
     }
 
     return {
@@ -371,13 +456,20 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
     showToast(`🛒 "${item.nameGu.slice(0, 35)}..." કાર્ટમાં ઉમેરાઈ ગયું! હવે બીજી ફાઇલ ઉમેરો.`);
     // Reset file states so the customer can instantly add another document
     setFile(null);
+    setFileId('');
     setFileBase64('');
+    setCloudUploadStatus('idle');
+    setCloudUploadProgress(0);
     setDetectedPageInfo(null);
     setPageCount(1);
     setFrontFile(null);
+    setFrontFileId('');
     setFrontBase64('');
+    setFrontUploadStatus('idle');
     setBackFile(null);
+    setBackFileId('');
     setBackBase64('');
+    setBackUploadStatus('idle');
     setInstructions('');
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (frontInputRef.current) frontInputRef.current.value = '';
@@ -921,30 +1013,85 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
                 />
 
                 {file ? (
-                  <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-300 flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {getFileIcon(file.name)}
-                      <div className="min-w-0">
-                        <p className="text-xs font-black text-emerald-950 truncate">{file.name}</p>
-                        <p className="text-[10px] text-emerald-700 font-bold">
-                          {(file.size / 1024).toFixed(1)} KB • તૈયાર છે
-                        </p>
+                  <div className="space-y-1.5">
+                    <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-300 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {getFileIcon(file.name)}
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-emerald-950 truncate">{file.name}</p>
+                          <p className="text-[10px] text-emerald-700 font-bold">
+                            {(file.size / 1024).toFixed(1)} KB
+                          </p>
+                        </div>
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFile(null);
+                          setFileId('');
+                          setFileBase64('');
+                          setCloudUploadStatus('idle');
+                          setCloudUploadProgress(0);
+                          setDetectedPageInfo(null);
+                          setPageCount(1);
+                          if (fileInputRef.current) fileInputRef.current.value = '';
+                        }}
+                        className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 cursor-pointer"
+                        title="ફાઇલ દૂર કરો"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setFile(null);
-                        setFileBase64('');
-                        setDetectedPageInfo(null);
-                        setPageCount(1);
-                        if (fileInputRef.current) fileInputRef.current.value = '';
-                      }}
-                      className="p-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 cursor-pointer"
-                      title="ફાઇલ દૂર કરો"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+
+                    {/* Live Cloud Upload Progress Badge */}
+                    {cloudUploadStatus === 'uploading' && (
+                      <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-xl flex items-center justify-between text-xs text-blue-900 font-bold animate-pulse">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                          <span>પ્રિન્ટ સર્વરમાં ઓરિજનલ ફાઇલ સેવ થઈ રહી છે...</span>
+                        </div>
+                        <span className="font-mono text-[11px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full font-black">
+                          {cloudUploadProgress}%
+                        </span>
+                      </div>
+                    )}
+
+                    {cloudUploadStatus === 'completed' && (
+                      <div className="bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs text-emerald-900 font-bold">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>✅ ૧૦૦% ક્લાઉડ સુરક્ષિત - પ્રિન્ટિંગ માટે તૈયાર!</span>
+                      </div>
+                    )}
+
+                    {cloudUploadStatus === 'error' && (
+                      <div className="bg-rose-50 border border-rose-200 px-3 py-2 rounded-xl flex items-center justify-between text-xs text-rose-900 font-bold">
+                        <span>⚠️ સર્વર પર અપલોડ ધીમું છે</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!file) return;
+                            const tId = fileId || `f-prn-${Date.now()}`;
+                            setFileId(tId);
+                            setCloudUploadStatus('uploading');
+                            setCloudUploadProgress(15);
+                            uploadFileObjectInChunks(
+                              file,
+                              tId,
+                              file.name,
+                              file.type || 'application/pdf',
+                              (prog) => setCloudUploadProgress(prog.percent)
+                            ).then((s) => {
+                              setCloudUploadStatus(s ? 'completed' : 'error');
+                              if (s) setCloudUploadProgress(100);
+                            }).catch(() => setCloudUploadStatus('error'));
+                          }}
+                          className="bg-rose-600 hover:bg-rose-700 text-white px-2 py-1 rounded text-[10px] font-black cursor-pointer flex items-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>ફરી અપલોડ કરો</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div

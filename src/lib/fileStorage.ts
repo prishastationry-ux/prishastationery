@@ -78,6 +78,23 @@ export function isForeignBlobUrl(url?: string): boolean {
   return !activeLocalBlobUrls.has(url);
 }
 
+// Check if a file string is empty, truncated by Firestore sync (...[IDB_STORED]), corrupted, or an invalid foreign blob URL
+export function isCorruptedOrNeedsFetch(url?: string | null): boolean {
+  if (!url || typeof url !== 'string') return true;
+  const trimmed = url.trim();
+  if (trimmed.length === 0) return true;
+  if (trimmed.includes('[IDB_STORED]')) return true;
+  if (trimmed.includes('...')) return true;
+  if (trimmed.startsWith('blob:')) {
+    return isForeignBlobUrl(trimmed);
+  }
+  // If it's a data URL, any legitimate document (PDF/Image) is at least 300 characters
+  if (trimmed.startsWith('data:') && trimmed.length < 300) {
+    return true;
+  }
+  return false;
+}
+
 // 1. Save dataUrl to local browser IndexedDB
 export async function saveFileToStorage(
   fileId: string,
@@ -281,15 +298,24 @@ export async function uploadFileObjectInChunks(
   }
 }
 
-// 5. Save dataUrl string to Cloud Firestore (with chunking for legacy base64 strings)
+// 5. Save dataUrl string or File/Blob to Cloud Firestore (with chunking)
 export async function saveFileToCloudStorage(
   fileId: string,
-  dataUrl: string,
+  dataUrlOrFile: string | File | Blob,
   fileName: string,
   fileType: string,
-  fileSize: number = 0
+  fileSize: number = 0,
+  onProgress?: (progress: StorageProgress) => void
 ): Promise<boolean> {
-  if (!fileId || !dataUrl || dataUrl.length < 20) return false;
+  if (!fileId || !dataUrlOrFile) return false;
+
+  // If a File or Blob is provided, upload directly with zero Base64 overhead
+  if (typeof dataUrlOrFile !== 'string') {
+    return await uploadFileObjectInChunks(dataUrlOrFile, fileId, fileName, fileType, onProgress);
+  }
+
+  const dataUrl = dataUrlOrFile;
+  if (dataUrl.length < 20 || dataUrl.includes('[IDB_STORED]')) return false;
 
   // Never store client-side transient blob URL in Firestore
   if (dataUrl.startsWith('blob:')) {
@@ -303,7 +329,7 @@ export async function saveFileToCloudStorage(
   try {
     const blob = dataUrlToBlob(dataUrl);
     if (blob) {
-      return await uploadFileObjectInChunks(blob, fileId, fileName, fileType);
+      return await uploadFileObjectInChunks(blob, fileId, fileName, fileType, onProgress);
     }
     return false;
   } catch (err) {
@@ -322,7 +348,7 @@ export async function getFileFromCloudStorage(
   // 1. Check local IndexedDB first
   try {
     const local = await getFileFromStorage(fileId);
-    if (local && local.length > 50) {
+    if (local && !isCorruptedOrNeedsFetch(local)) {
       if (onProgress) {
         onProgress({ percent: 100, loadedBytes: 1000, totalBytes: 1000, speed: 'Done', bytesPerSec: 0 });
       }
@@ -335,24 +361,44 @@ export async function getFileFromCloudStorage(
   // 2. Fetch from Firestore
   try {
     const metaSnap = await getDoc(doc(db, 'print_files', fileId));
-    if (!metaSnap.exists()) {
-      return null;
-    }
+    let totalChunks = 0;
+    let totalBytes = 0;
+    let mime = 'application/pdf';
+    let fileName = 'document.pdf';
 
-    const data = metaSnap.data();
+    if (metaSnap.exists()) {
+      const data = metaSnap.data();
 
-    // Check for legacy inline dataUrl
-    const inlineData = data.fileDataUrl || data.dataUrl;
-    if (inlineData && typeof inlineData === 'string' && !inlineData.startsWith('blob:')) {
-      if (onProgress) {
-        onProgress({ percent: 100, loadedBytes: data.fileSize || inlineData.length, totalBytes: data.fileSize || inlineData.length, speed: 'Done', bytesPerSec: 0 });
+      // Check for legacy inline dataUrl
+      const inlineData = data.fileDataUrl || data.dataUrl;
+      if (inlineData && typeof inlineData === 'string' && !isCorruptedOrNeedsFetch(inlineData)) {
+        if (onProgress) {
+          onProgress({ percent: 100, loadedBytes: data.fileSize || inlineData.length, totalBytes: data.fileSize || inlineData.length, speed: 'Done', bytesPerSec: 0 });
+        }
+        return inlineData;
       }
-      return inlineData;
+
+      totalChunks = (data.totalChunks as number) || 0;
+      totalBytes = (data.fileSize as number) || 0;
+      mime = data.fileType || 'application/pdf';
+      fileName = data.fileName || 'file';
+    } else {
+      // Resilient Fallback: check chunk 0 directly if metadata document is not found
+      try {
+        const chunk0Doc = await getDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_0`));
+        if (chunk0Doc.exists()) {
+          const c0Data = chunk0Doc.data();
+          totalChunks = (c0Data.totalChunks as number) || 1;
+          totalBytes = (c0Data.chunkSize || 0) * totalChunks;
+          mime = fileId.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image/jpeg' : 'application/pdf';
+        } else {
+          return null;
+        }
+      } catch {
+        return null;
+      }
     }
 
-    // Chunked file: download chunks with real-time speed & progress
-    const totalChunks = data.totalChunks as number;
-    const totalBytes = (data.fileSize as number) || 0;
     if (!totalChunks || totalChunks <= 0) return null;
 
     const byteArrays: Uint8Array[] = new Array(totalChunks);
@@ -415,12 +461,11 @@ export async function getFileFromCloudStorage(
       await Promise.all(batchPromises);
     }
 
-    const mime = data.fileType || 'application/octet-stream';
     const finalBlob = new Blob(byteArrays, { type: mime });
     if (finalBlob.size === 0) return null;
 
     // Cache assembled blob in IndexedDB
-    saveBlobToStorage(fileId, finalBlob, data.fileName || 'file', mime).catch(() => {});
+    saveBlobToStorage(fileId, finalBlob, fileName, mime).catch(() => {});
 
     const totalElapsedSec = (Date.now() - startTime) / 1000;
     const finalSpeed = totalElapsedSec > 0 ? (finalBlob.size / totalElapsedSec) : 0;
@@ -445,7 +490,7 @@ export async function getFileFromCloudStorage(
 export function dataUrlToBlob(input: string): Blob | null {
   if (!input || typeof input !== 'string') return null;
   const str = input.trim();
-  if (str.length === 0) return null;
+  if (str.length === 0 || str.includes('[IDB_STORED]') || str.includes('...')) return null;
 
   if (str.startsWith('blob:') || str.startsWith('http://') || str.startsWith('https://')) {
     return null;
@@ -520,9 +565,20 @@ export function dataUrlToBlob(input: string): Blob | null {
 export async function dataUrlToBlobAsync(input: string): Promise<Blob | null> {
   if (!input || typeof input !== 'string') return null;
   const str = input.trim();
-  if (str.length === 0) return null;
+  if (str.length === 0 || str.includes('[IDB_STORED]') || str.includes('...')) return null;
 
-  if (str.startsWith('blob:') || str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
+  if (str.startsWith('blob:')) {
+    if (isForeignBlobUrl(str)) return null;
+    try {
+      const res = await fetch(str);
+      const blob = await res.blob();
+      if (blob && blob.size > 0) return blob;
+    } catch {
+      return null;
+    }
+  }
+
+  if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
     try {
       const res = await fetch(str);
       const blob = await res.blob();

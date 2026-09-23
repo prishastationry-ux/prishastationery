@@ -38,6 +38,7 @@ import {
   uploadFileObjectInChunks,
   deleteFileFromCloudStorage,
   isForeignBlobUrl,
+  isCorruptedOrNeedsFetch,
   createBlobUrl,
   createBlobUrlAsync,
   downloadFileSafely,
@@ -204,7 +205,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   // Retrieve complete file dataUrl from memory, IndexedDB, or chunked cloud storage
   const getFullFileDataUrl = async (file: PrintJobFile): Promise<string | null> => {
-    if (file.fileDataUrl && file.fileDataUrl.length > 50 && !isForeignBlobUrl(file.fileDataUrl)) {
+    if (file.fileDataUrl && !isCorruptedOrNeedsFetch(file.fileDataUrl)) {
       return file.fileDataUrl;
     }
     return await getFileFromCloudStorage(file.id);
@@ -216,7 +217,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'શોધી રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:');
+      const needsFreshFetch = isCorruptedOrNeedsFetch(fileUrl);
       if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
@@ -234,7 +235,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         fileUrl = await getFileFromStorage(file.id);
       }
 
-      if (!fileUrl) {
+      if (!fileUrl || isCorruptedOrNeedsFetch(fileUrl)) {
         if (activeJob) {
           setMissingFileData({ file, job: activeJob });
         } else {
@@ -265,7 +266,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     setDownloadProgress({ fileId: file.id, percent: 0, speed: 'લોડ થઈ રહ્યું છે...' });
     try {
       let fileUrl = file.fileDataUrl;
-      const needsFreshFetch = !fileUrl || fileUrl.length < 50 || fileUrl.startsWith('blob:');
+      const needsFreshFetch = isCorruptedOrNeedsFetch(fileUrl);
       if (needsFreshFetch) {
         fileUrl = await getFileFromCloudStorage(file.id, (prog) => {
           setDownloadProgress({
@@ -283,7 +284,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
         fileUrl = await getFileFromStorage(file.id);
       }
 
-      if (!fileUrl) {
+      if (!fileUrl || isCorruptedOrNeedsFetch(fileUrl)) {
         if (activeJob) {
           setMissingFileData({ file, job: activeJob });
         } else {
@@ -1135,6 +1136,16 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
+                  onClick={() => window.open(viewingFile.blobUrl, '_blank')}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-sm transition"
+                  title="નવી ટેબમાં પૂરી સ્ક્રીન સાથે PDF ખોલો"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span className="hidden sm:inline">નવી ટેબમાં ખોલો</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => {
                     const printWin = window.open(viewingFile.blobUrl, '_blank');
                     if (printWin) {
@@ -1174,11 +1185,47 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
             {/* Viewer Content Body */}
             <div className="flex-1 bg-neutral-100 p-2 sm:p-4 overflow-auto flex items-center justify-center">
               {viewingFile.file.fileType.includes('pdf') || viewingFile.file.fileName.toLowerCase().endsWith('.pdf') ? (
-                <iframe
-                  src={`${viewingFile.blobUrl}#toolbar=1`}
-                  className="w-full h-full rounded-2xl border border-neutral-300 bg-white shadow-inner"
-                  title={viewingFile.file.fileName}
-                />
+                <div className="w-full h-full flex flex-col items-center justify-center relative bg-neutral-900 rounded-2xl overflow-hidden p-1">
+                  <object
+                    data={`${viewingFile.blobUrl}#toolbar=1&navpanes=0`}
+                    type="application/pdf"
+                    className="w-full h-full rounded-xl bg-white"
+                  >
+                    <iframe
+                      src={`${viewingFile.blobUrl}#toolbar=1`}
+                      className="w-full h-full rounded-xl bg-white"
+                      title={viewingFile.file.fileName}
+                    >
+                      <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-white rounded-xl">
+                        <FileText className="w-16 h-16 text-red-500 mb-3" />
+                        <h4 className="font-black text-neutral-900 mb-2">{viewingFile.file.fileName}</h4>
+                        <p className="text-xs text-neutral-600 mb-4 max-w-sm">
+                          પીડીએફ સીધી જોવા માટે અથવા પ્રિન્ટ કરવા માટે નીચેના બટન પર ક્લિક કરો.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => window.open(viewingFile.blobUrl, '_blank')}
+                            className="bg-blue-600 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+                          >
+                            <ExternalLink className="w-4 h-4" />
+                            <span>નવી વિન્ડોમાં PDF ખોલો</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              await downloadFileSafely(viewingFile.blobUrl, viewingFile.file.fileName);
+                            }}
+                            className="bg-emerald-600 text-white font-black px-4 py-2 rounded-xl text-xs flex items-center gap-2 cursor-pointer"
+                          >
+                            <FileDown className="w-4 h-4" />
+                            <span>ડાઉનલોડ કરો</span>
+                          </button>
+                        </div>
+                      </div>
+                    </iframe>
+                  </object>
+                </div>
               ) : viewingFile.file.fileType?.includes('image') ||
                 ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'ico', 'gif', 'svg'].some(ext => viewingFile.file.fileName.toLowerCase().endsWith(ext)) ? (
                 <div className="w-full h-full flex items-center justify-center bg-neutral-900 rounded-2xl p-2 overflow-auto">
