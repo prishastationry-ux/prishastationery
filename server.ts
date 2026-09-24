@@ -3,10 +3,9 @@ import path from 'path';
 import fs from 'fs';
 import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
-import { createServer as createViteServer } from 'vite';
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 // Increase body limit for large 4K file chunk uploads
 app.use(express.json({ limit: '50mb' }));
@@ -448,8 +447,9 @@ app.get('/api/sqlite/schema', (req, res) => {
 // 6. VITE MIDDLEWARE (DEV) & STATIC SERVING (PROD)
 // =========================================================================
 async function start() {
-  const isProduction = process.env.NODE_ENV === 'production' || process.cwd().includes('dist');
+  const isProduction = process.env.NODE_ENV === 'production' || (!!process.env.PORT && process.env.PORT !== '3000');
   if (!isProduction) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -457,14 +457,24 @@ async function start() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.get('*', (req, res) => {
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Prisha Stationery Multi-Platform Server active on http://0.0.0.0:${PORT}`);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM signal received: closing HTTP server');
+    server.close(() => {
+      console.log('HTTP server closed');
+      process.exit(0);
+    });
   });
 }
 

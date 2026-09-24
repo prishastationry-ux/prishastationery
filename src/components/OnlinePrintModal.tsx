@@ -27,6 +27,7 @@ import { PrintJobFile, PrintJobRecord, StoreSettings } from '../types';
 import {
   saveFileToStorage,
   uploadFileObjectInChunks,
+  calculateFilePrice,
   formatFileSize,
   MAX_FILE_SIZE
 } from '../lib/fileStorage';
@@ -230,14 +231,9 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       return;
     }
 
-    if (!customerName.trim()) {
-      alert('કૃપા કરીને તમારું પૂરું નામ લખો.');
-      return;
-    }
-    if (!mobile.trim() || mobile.trim().length < 10) {
-      alert('કૃપા કરીને ૧૦ અંકનો સાચો મોબાઇલ નંબર લખો.');
-      return;
-    }
+    const finalCustomerName = customerName.trim() || 'દુકાન ગ્રાહક (Quick QR Upload)';
+    const finalMobile = mobile.trim() || storeSettings.phone || '9723712381';
+    const finalAddress = address.trim() || (deliveryType === 'pickup' ? 'દુકાન પિકઅપ' : 'હોમ ડિલિવરી');
 
     setIsSubmitting(true);
 
@@ -247,27 +243,35 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
     const totalJobSize = filesList.reduce((sum, f) => sum + (f.fileSize || 0), 0);
 
-    // Strip in-memory blob references before storing
+    let computedSubtotal = 0;
+
+    // Strip in-memory blob references before storing & calculate individual file prices
     const cleanFiles = filesList.map(f => {
+      const filePrice = calculateFilePrice(f, storeSettings);
+      computedSubtotal += filePrice;
       const { fileBlob, ...rest } = f;
-      return rest;
+      return {
+        ...rest,
+        pricePerUnit: f.pricePerUnit || filePrice,
+        totalPrice: filePrice
+      };
     });
 
     const newJob: PrintJobRecord = {
       id: `print-job-${Date.now()}`,
       jobNo,
-      customerName: customerName.trim(),
-      mobile: mobile.trim(),
-      address: address.trim(),
+      customerName: finalCustomerName,
+      mobile: finalMobile,
+      address: finalAddress,
       deliveryType,
       files: cleanFiles,
       totalJobSize,
       createdAt: dateFormatted,
       status: 'received',
-      subtotal: 0,
+      subtotal: computedSubtotal,
       extraCharges: 0,
       discount: 0,
-      totalAmount: 0,
+      totalAmount: computedSubtotal,
       paymentStatus: 'Pending',
       paymentMode: 'UPI'
     };

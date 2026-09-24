@@ -75,6 +75,9 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   const [sideOption, setSideOption] = useState<'single' | 'double'>('single');
   const [needLamination, setNeedLamination] = useState<boolean>(false);
   
+  // Session Job ID to group Front & Back or multiple files of an order together
+  const [sessionJobId, setSessionJobId] = useState<string>(() => `PRN-${Math.floor(1000 + Math.random() * 9000)}`);
+
   // PVC Card options
   const [pvcCardType, setPvcCardType] = useState<string>('આધાર કાર્ડ (Aadhaar Card)');
   const [pvcCardCount, setPvcCardCount] = useState<number>(1);
@@ -181,6 +184,15 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       selectedFile.type || 'application/pdf',
       (prog) => {
         setCloudUploadProgress(prog.percent);
+      },
+      {
+        jobId: sessionJobId,
+        customerName: 'ઓનલાઇન કસ્ટમર (મોબાઇલ ફાઇલ)',
+        mobile: storeSettings?.phone || '9723712381',
+        copies: serviceType === 'call_letter' ? callLetterCopies : copies,
+        colorMode: colorMode,
+        sideOption: sideOption === 'single' ? 'single_side' : 'double_side',
+        paperSize: 'A4'
       }
     ).then((success) => {
       if (success) {
@@ -247,7 +259,17 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       selectedFile,
       newId,
       `Front_${selectedFile.name}`,
-      selectedFile.type || 'image/jpeg'
+      selectedFile.type || 'image/jpeg',
+      undefined,
+      {
+        jobId: sessionJobId,
+        customerName: 'ઓનલાઇન કસ્ટમર (PVC સ્માર્ટ કાર્ડ)',
+        mobile: storeSettings?.phone || '9723712381',
+        paperSize: 'PVC Card',
+        colorMode: 'pvc_card',
+        sideOption: pvcSideOption === 'double' ? 'double_side' : 'single_side',
+        copies: pvcCardCount
+      }
     ).then((success) => {
       setFrontUploadStatus(success ? 'completed' : 'error');
       if (success) showToast('💳 આગળની બાજુ (Front) ક્લાઉડમાં સુરક્ષિત સેવ થઈ ગઈ.');
@@ -276,7 +298,17 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
       selectedFile,
       newId,
       `Back_${selectedFile.name}`,
-      selectedFile.type || 'image/jpeg'
+      selectedFile.type || 'image/jpeg',
+      undefined,
+      {
+        jobId: sessionJobId,
+        customerName: 'ઓનલાઇન કસ્ટમર (PVC સ્માર્ટ કાર્ડ)',
+        mobile: storeSettings?.phone || '9723712381',
+        paperSize: 'PVC Card',
+        colorMode: 'pvc_card',
+        sideOption: pvcSideOption === 'double' ? 'double_side' : 'single_side',
+        copies: pvcCardCount
+      }
     ).then((success) => {
       setBackUploadStatus(success ? 'completed' : 'error');
       if (success) showToast('💳 પાછળની બાજુ (Back) ક્લાઉડમાં સુરક્ષિત સેવ થઈ ગઈ.');

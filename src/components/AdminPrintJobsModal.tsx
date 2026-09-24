@@ -37,6 +37,8 @@ import {
   getFileFromStorage,
   uploadFileObjectInChunks,
   deleteFileFromCloudStorage,
+  getDeletedCloudFileIds,
+  calculateFilePrice,
   isForeignBlobUrl,
   isCorruptedOrNeedsFetch,
   createBlobUrl,
@@ -89,52 +91,103 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
   const effectiveJobs = useMemo(() => {
     const baseJobs = Array.isArray(printJobs) ? [...printJobs] : [];
-    
-    // Check if any cloudFile is missing from baseJobs
+    const deletedCloudIds = getDeletedCloudFileIds();
+
+    // 1. Gather existing file IDs in baseJobs
     const existingFileIds = new Set<string>();
     baseJobs.forEach(job => {
-      (job.files || []).forEach(f => existingFileIds.add(f.id));
+      (job.files || []).forEach(f => {
+        if (f.id) existingFileIds.add(f.id);
+      });
     });
 
-    const unlinkedFiles = cloudFiles.filter(cf => cf && cf.id && !existingFileIds.has(cf.id));
-    
-    const synthesizedJobs: PrintJobRecord[] = unlinkedFiles.map((cf) => {
-      const isImg = cf.fileType?.includes('image') || cf.fileName?.match(/\.(jpg|jpeg|png|webp|ico|bmp|svg|gif)$/i);
-      const isPdf = cf.fileType?.includes('pdf') || cf.fileName?.toLowerCase().endsWith('.pdf');
-      const dateStr = cf.uploadedAt ? new Date(cf.uploadedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'તાજેતરમાં અપલોડ';
-      return {
-        id: `cloud-${cf.id}`,
-        jobNo: `PRN-${cf.id.slice(-4).toUpperCase()}`,
-        customerName: 'ઓનલાઇન કસ્ટમર (મોબાઇલ ફાઇલ)',
-        mobile: storeSettings?.phone || '9723712381',
-        address: 'દુકાન પિકઅપ',
-        deliveryType: 'pickup',
-        files: [{
+    // 2. Filter unlinked files that are NOT in baseJobs and NOT marked deleted
+    const unlinkedFiles = cloudFiles.filter(cf => 
+      cf && 
+      cf.id && 
+      !existingFileIds.has(cf.id) && 
+      !deletedCloudIds.has(cf.id)
+    );
+
+    // 3. GROUP unlinked files by jobId, or by (customerMobile + 15-min window)
+    const groupsMap = new Map<string, any[]>();
+
+    unlinkedFiles.forEach(cf => {
+      let key = cf.jobId;
+      if (!key) {
+        const mob = cf.mobile || cf.customerMobile || 'quick-upload';
+        const timeWindow = cf.uploadedAt ? Math.floor(cf.uploadedAt / (15 * 60 * 1000)) : 0;
+        key = `group-${mob}-${timeWindow}`;
+      }
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, []);
+      }
+      groupsMap.get(key)!.push(cf);
+    });
+
+    // 4. Synthesize ONE PrintJobRecord per group
+    const synthesizedJobs: PrintJobRecord[] = [];
+
+    groupsMap.forEach((filesInGroup, groupKey) => {
+      const firstFile = filesInGroup[0];
+      const isJobId = groupKey && !groupKey.startsWith('group-');
+      const jobNo = isJobId ? groupKey : `PRN-${firstFile.id.slice(-4).toUpperCase()}`;
+
+      const custName = filesInGroup.find(f => f.customerName)?.customerName || firstFile.customerName || 'ઓનલાઇન કસ્ટમર (મોબાઇલ ફાઇલ)';
+      const custMobile = filesInGroup.find(f => f.mobile)?.mobile || firstFile.mobile || storeSettings?.phone || '9723712381';
+      const custAddress = filesInGroup.find(f => f.address)?.address || firstFile.address || 'દુકાન પિકઅપ';
+
+      const jobFiles: PrintJobFile[] = filesInGroup.map(cf => {
+        const isImg = cf.fileType?.includes('image') || cf.fileName?.match(/\.(jpg|jpeg|png|webp|ico|bmp|svg|gif)$/i);
+        const isPdf = cf.fileType?.includes('pdf') || cf.fileName?.toLowerCase().endsWith('.pdf');
+        
+        const fileObj: PrintJobFile = {
           id: cf.id,
           fileName: cf.fileName || 'ડોક્યુમેન્ટ ફાઇલ',
           fileSize: cf.fileSize || 0,
           fileType: cf.fileType || (isImg ? 'image/jpeg' : isPdf ? 'application/pdf' : 'application/octet-stream'),
-          copies: 1,
-          colorMode: isImg ? 'color' : 'black_white',
-          sideOption: 'single_side',
-          paperSize: isImg ? '4x6 Photo' : 'A4',
-          lamination: false,
-          notes: 'મોબાઇલ લિંક પરથી સીધું અપલોડ',
+          copies: cf.copies || 1,
+          colorMode: cf.colorMode || (isImg ? 'color' : 'black_white'),
+          sideOption: cf.sideOption || 'single_side',
+          paperSize: cf.paperSize || (isImg ? '4x6 Photo' : 'A4'),
+          lamination: cf.lamination || false,
+          notes: cf.notes || 'મોબાઇલ લિંક પરથી સીધું અપલોડ',
           uploadedToCloud: true,
           uploadStatus: 'completed',
           uploadProgress: 100,
           fileDataUrl: ''
-        }],
-        totalJobSize: cf.fileSize || 0,
+        };
+
+        const calcPrice = calculateFilePrice(fileObj, storeSettings);
+        fileObj.pricePerUnit = calcPrice;
+        fileObj.totalPrice = calcPrice;
+        return fileObj;
+      });
+
+      const totalJobSize = jobFiles.reduce((s, f) => s + f.fileSize, 0);
+      const subtotal = jobFiles.reduce((s, f) => s + (f.pricePerUnit || 0), 0);
+
+      const earliestTime = Math.min(...filesInGroup.map(f => f.uploadedAt || Date.now()));
+      const dateStr = new Date(earliestTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+
+      synthesizedJobs.push({
+        id: `cloud-group-${groupKey}`,
+        jobNo,
+        customerName: custName,
+        mobile: custMobile,
+        address: custAddress,
+        deliveryType: 'pickup',
+        files: jobFiles,
+        totalJobSize,
         createdAt: dateStr,
         status: 'received',
-        subtotal: isImg ? 15 : 5,
+        subtotal,
         extraCharges: 0,
         discount: 0,
-        totalAmount: isImg ? 15 : 5,
+        totalAmount: subtotal,
         paymentStatus: 'Pending',
         paymentMode: 'UPI'
-      };
+      });
     });
 
     return [...synthesizedJobs, ...baseJobs];
@@ -397,11 +450,13 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     }
   };
 
-  // Calculate live total based on edited prices
+  // Calculate live total based on edited prices or auto-calculated rates
   const calculateTotal = (job: PrintJobRecord) => {
     let subtotal = 0;
     job.files.forEach(f => {
-      const unitPrice = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || 0);
+      const unitPrice = editingPrices[f.id] !== undefined 
+        ? editingPrices[f.id] 
+        : (f.pricePerUnit || calculateFilePrice(f, storeSettings));
       subtotal += unitPrice;
     });
 
@@ -418,16 +473,67 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   };
 
   const handleSendWhatsAppBill = (job: PrintJobRecord) => {
-    // Re-implement or fix logic here based on original if missing
-    console.log('WhatsApp bill for', job.jobNo);
+    const { subtotal, finalTotal } = calculateTotal(job);
+    let itemsText = job.files.map((f, i) => {
+      const price = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || calculateFilePrice(f, storeSettings));
+      return `${i + 1}. ${f.fileName} (${f.paperSize}, ${f.colorMode === 'black_white' ? 'B&W' : f.colorMode === 'color' ? 'Color' : 'PVC Card'}): ₹${price}`;
+    }).join('\n');
+
+    if (extraCharge > 0) {
+      itemsText += `\n• ${extraChargeNote || 'બાઈન્ડિંગ / અન્ય ખર્ચ'}: +₹${extraCharge}`;
+    }
+    if (discountAmount > 0) {
+      itemsText += `\n• ડિસ્કાઉન્ટ: -₹${discountAmount}`;
+    }
+
+    const msg = `*પ્રીશા સ્ટેશનરી & પ્રિન્ટિંગ શૉપ*\n----------------------------------\n*પ્રિન્ટ ઓર્ડર બિલ:* #${job.jobNo}\n*ગ્રાહક:* ${job.customerName}\n*મોબાઇલ:* ${job.mobile}\n----------------------------------\n${itemsText}\n----------------------------------\n*કુલ ચૂકવવાપાત્ર રકમ: ₹${finalTotal.toFixed(2)}*\n\n*UPI ID for Payment:* ${storeSettings.upiId || '9723712381@okbizaxis'}\nઆભાર! 🙏`;
+
+    window.open(`https://wa.me/91${job.mobile}?text=${encodeURIComponent(msg)}`, '_blank');
+    showToast('📲 WhatsApp બિલ મેસેજ ખુલી ગયો!');
   };
   
   const handleSaveJobPricing = (job: PrintJobRecord) => {
-    console.log('Saved pricing for', job.jobNo);
+    const { subtotal, finalTotal } = calculateTotal(job);
+    const updatedFiles = job.files.map(f => {
+      const price = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || calculateFilePrice(f, storeSettings));
+      return { ...f, pricePerUnit: price, totalPrice: price };
+    });
+    onUpdateJob(job.id, {
+      subtotal,
+      extraCharges: extraCharge,
+      extraChargesNote: extraChargeNote,
+      discount: discountAmount,
+      totalAmount: finalTotal,
+      files: updatedFiles
+    });
+    showToast('✅ ભાવ સફળતાપૂર્વક સેવ કરવામાં આવ્યા!');
   };
 
   const handleConvertJobToInvoice = (job: PrintJobRecord) => {
-    console.log('Converting to invoice', job.jobNo);
+    const { subtotal, finalTotal } = calculateTotal(job);
+    const billItems: BillItem[] = job.files.map((f, i) => {
+      const price = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || calculateFilePrice(f, storeSettings));
+      return {
+        id: `item-${Date.now()}-${i}`,
+        name: `પ્રિન્ટ સર્વિસ: ${f.fileName} (${f.paperSize}, ${f.colorMode === 'black_white' ? 'B&W' : 'Color'}, ${f.sideOption === 'single_side' ? 'Single' : 'Double'})`,
+        qty: f.copies || 1,
+        price: price / (f.copies || 1),
+        total: price
+      };
+    });
+
+    if (extraCharge > 0) {
+      billItems.push({
+        id: `item-extra-${Date.now()}`,
+        name: extraChargeNote || 'બાઈન્ડિંગ / અન્ય ચાર્જ',
+        qty: 1,
+        price: extraCharge,
+        total: extraCharge
+      });
+    }
+
+    onConvertToInvoice(job, billItems, finalTotal);
+    showToast('📄 ૧ પેજ ઇન્વોઇસ બિલ બની ગયું!');
   };
 
   // Generate WhatsApp Invoice Message to Send to Customer
@@ -539,7 +645,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                         // Initialize price states
                         const prices: { [k: string]: number } = {};
                         job.files.forEach(f => {
-                          prices[f.id] = f.pricePerUnit || 0;
+                          prices[f.id] = f.pricePerUnit || calculateFilePrice(f, storeSettings);
                         });
                         setEditingPrices(prices);
                         setExtraCharge(job.extraCharges || 0);

@@ -186,12 +186,38 @@ export async function getFileFromStorage(fileId: string): Promise<string | null>
 
 // 4. Stream upload File/Blob in chunks with real-time speed and progress (Supports up to 1 GB!)
 // Uses native Firestore Bytes to prevent bit corruption and minimize bandwidth.
+// Persistent cache of deleted cloud file IDs to prevent deleted jobs from ever resurrecting
+const DELETED_FILES_KEY = 'prisha_deleted_cloud_file_ids';
+
+export function getDeletedCloudFileIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(DELETED_FILES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch (e) {}
+  return new Set();
+}
+
+export function markCloudFileAsDeleted(fileId: string): void {
+  if (!fileId || typeof window === 'undefined') return;
+  try {
+    const set = getDeletedCloudFileIds();
+    set.add(fileId);
+    const arr = Array.from(set).slice(-500);
+    localStorage.setItem(DELETED_FILES_KEY, JSON.stringify(arr));
+  } catch (e) {}
+}
+
 export async function uploadFileObjectInChunks(
   file: File | Blob,
   fileId: string,
   fileName: string,
   fileType: string,
-  onProgress?: (progress: StorageProgress) => void
+  onProgress?: (progress: StorageProgress) => void,
+  extraMetadata?: Record<string, any>
 ): Promise<boolean> {
   if (!file || !fileId) return false;
 
@@ -267,6 +293,13 @@ export async function uploadFileObjectInChunks(
       await Promise.all(batchPromises);
     }
 
+    const cleanExtra: Record<string, any> = {};
+    if (extraMetadata && typeof extraMetadata === 'object') {
+      for (const [k, v] of Object.entries(extraMetadata)) {
+        if (v !== undefined) cleanExtra[k] = v;
+      }
+    }
+
     // Save final metadata document
     await setDoc(doc(db, 'print_files', fileId), {
       id: fileId,
@@ -276,7 +309,8 @@ export async function uploadFileObjectInChunks(
       isChunked: true,
       totalChunks,
       chunkSize: BINARY_CHUNK_SIZE,
-      uploadedAt: Date.now()
+      uploadedAt: Date.now(),
+      ...cleanExtra
     });
 
     const totalElapsedSec = (Date.now() - startTime) / 1000;
@@ -305,13 +339,14 @@ export async function saveFileToCloudStorage(
   fileName: string,
   fileType: string,
   fileSize: number = 0,
-  onProgress?: (progress: StorageProgress) => void
+  onProgress?: (progress: StorageProgress) => void,
+  extraMetadata?: Record<string, any>
 ): Promise<boolean> {
   if (!fileId || !dataUrlOrFile) return false;
 
   // If a File or Blob is provided, upload directly with zero Base64 overhead
   if (typeof dataUrlOrFile !== 'string') {
-    return await uploadFileObjectInChunks(dataUrlOrFile, fileId, fileName, fileType, onProgress);
+    return await uploadFileObjectInChunks(dataUrlOrFile, fileId, fileName, fileType, onProgress, extraMetadata);
   }
 
   const dataUrl = dataUrlOrFile;
@@ -329,7 +364,7 @@ export async function saveFileToCloudStorage(
   try {
     const blob = dataUrlToBlob(dataUrl);
     if (blob) {
-      return await uploadFileObjectInChunks(blob, fileId, fileName, fileType, onProgress);
+      return await uploadFileObjectInChunks(blob, fileId, fileName, fileType, onProgress, extraMetadata);
     }
     return false;
   } catch (err) {
@@ -703,6 +738,7 @@ export async function downloadFileSafely(
 // Delete file and all its binary chunks from Cloud Firestore
 export async function deleteFileFromCloudStorage(fileId: string): Promise<boolean> {
   if (!fileId) return false;
+  markCloudFileAsDeleted(fileId);
   try {
     const metaRef = doc(db, 'print_files', fileId);
     const metaSnap = await getDoc(metaRef);
@@ -713,6 +749,8 @@ export async function deleteFileFromCloudStorage(fileId: string): Promise<boolea
         deleteDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${i}`)).catch(() => {});
       }
       await deleteDoc(metaRef);
+    } else {
+      await deleteDoc(metaRef).catch(() => {});
     }
     return true;
   } catch (e) {
@@ -743,4 +781,41 @@ export async function openFileInNewTab(dataUrl: string, fileName: string): Promi
     console.warn('Open in new tab failed:', err);
     return false;
   }
+}
+
+// Calculate estimated rate for print/xerox/pvc file based on store settings
+export function calculateFilePrice(file: any, storeSettings: any): number {
+  if (!file) return 0;
+
+  const bwSingleRate = storeSettings?.xeroxBwSingleRate ?? 2;
+  const bwDoubleRate = storeSettings?.xeroxBwDoubleRate ?? 3;
+  const colorSingleRate = storeSettings?.xeroxColorSingleRate ?? 10;
+  const colorDoubleRate = storeSettings?.xeroxColorDoubleRate ?? 15;
+  const laminationRate = storeSettings?.xeroxLaminationRate ?? 20;
+  const pvcCardRate = storeSettings?.pvcCardRate ?? 100;
+
+  const copies = file.copies || 1;
+  const pages = file.pages || 1;
+
+  if (file.paperSize === 'PVC Card' || file.colorMode === 'pvc_card') {
+    return (file.pricePerUnit || pvcCardRate) * copies;
+  }
+
+  if (file.paperSize === '4x6 Photo') {
+    return (file.pricePerUnit || 15) * copies;
+  }
+
+  let rate = 0;
+  if (file.colorMode === 'color') {
+    rate = file.sideOption === 'double_side' ? colorDoubleRate : colorSingleRate;
+  } else {
+    rate = file.sideOption === 'double_side' ? bwDoubleRate : bwSingleRate;
+  }
+
+  let total = rate * pages * copies;
+  if (file.lamination) {
+    total += laminationRate * pages * copies;
+  }
+
+  return Math.max(0, total);
 }
