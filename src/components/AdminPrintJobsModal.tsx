@@ -410,104 +410,10 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   };
 
   // Generate WhatsApp Invoice Message to Send to Customer
-  const handleSendWhatsAppBill = (job: PrintJobRecord) => {
-    const { subtotal, finalTotal } = calculateTotal(job);
-
-    let itemsBreakdown = '';
-    job.files.forEach((f, idx) => {
-      const price = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || 0);
-      const modeText = f.colorMode === 'black_white' ? 'B&W' : f.colorMode === 'color' ? 'કલર' : 'PVC કાર્ડ';
-      const lamText = f.lamination ? ' + લેમિનેશન' : '';
-      const pagesText = f.pages && f.pages > 1 ? ` | ${f.pages} પેજ (કુલ ${f.pages * (f.copies || 1)} પાના)` : '';
-      itemsBreakdown += `${idx + 1}. *${f.fileName}*\n   (${modeText}, ${f.paperSize}${pagesText}, ${f.copies} કોપી${lamText}) = ₹${price}\n`;
-    });
-
-    if (extraCharge > 0) {
-      itemsBreakdown += `➕ *${extraChargeNote || 'અન્ય ચાર્જ'}:* ₹${extraCharge}\n`;
-    }
-    if (discountAmount > 0) {
-      itemsBreakdown += `➖ *ડિસ્કાઉન્ટ:* -₹${discountAmount}\n`;
-    }
-
-    const msg =
-      `🧾 *પ્રિન્ટિંગ બિલ - ${storeSettings.storeNameGu}*\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🆔 *જોબ નં:* ${job.jobNo}\n` +
-      `👤 *ગ્રાહક:* ${job.customerName}\n` +
-      `📞 *મોબાઇલ:* +91 ${job.mobile}\n` +
-      `📅 *તારીખ:* ${job.createdAt}\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `📑 *પ્રિન્ટ વિગત & રકમ:*\n${itemsBreakdown}` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `💰 *કુલ ચૂકવવાપાત્ર રકમ:* ₹${finalTotal}/-\n` +
-      `💳 *UPI ID:* ${storeSettings.upiId}\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
-      `✅ તમારી ફાઇલો પ્રિન્ટ થઈને તૈયાર છે. રૂબરૂ મેળવવા અથવા ડિલિવરી માટે સંપર્ક કરો.\n\n` +
-      `દુકાન: ${storeSettings.address}\n` +
-      `સંપર્ક: +91 ${storeSettings.phone}`;
-
-    window.open(`https://wa.me/91${job.mobile}?text=${encodeURIComponent(msg)}`, '_blank');
-  };
-
-  // Save customized pricing to Job Record
-  const handleSaveJobPricing = (job: PrintJobRecord) => {
-    const { subtotal, finalTotal } = calculateTotal(job);
-    const updatedFiles = job.files.map(f => ({
-      ...f,
-      pricePerUnit: editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || 0)
-    }));
-
-    onUpdateJob(job.id, {
-      files: updatedFiles,
-      subtotal,
-      extraCharges: extraCharge,
-      extraChargesNote: extraChargeNote,
-      discount: discountAmount,
-      totalAmount: finalTotal
-    });
-
-    alert('✅ ભાવ અને બિલ વિગત સાચવાઈ ગઈ!');
-  };
-
-  // Convert Job directly to official Store Invoice
-  const handleConvertJobToInvoice = (job: PrintJobRecord) => {
-    const { subtotal, finalTotal } = calculateTotal(job);
-
-    const billItems: BillItem[] = job.files.map((f, idx) => {
-      const price = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || 0);
-      const modeText = f.colorMode === 'black_white' ? 'B&W' : f.colorMode === 'color' ? 'કલર' : 'PVC';
-      return {
-        name: `પ્રિન્ટ: ${f.fileName} (${modeText} ${f.paperSize})`,
-        qty: f.copies || 1,
-        price: price || 0,
-        unit: 'કોપી'
-      };
-    });
-
-    if (extraCharge > 0) {
-      billItems.push({
-        name: extraChargeNote || 'બાઈન્ડિંગ / અન્ય સર્વિસ',
-        qty: 1,
-        price: extraCharge,
-        unit: 'સર્વિસ'
-      });
-    }
-
-    onConvertToInvoice(job, billItems, finalTotal);
-  };
-
-  const getFileIcon = (fileType: string, fileName: string) => {
-    const ext = fileName.split('.').pop()?.toLowerCase();
-    if (fileType.includes('pdf') || ext === 'pdf') {
-      return <FileText className="w-5 h-5 text-red-600" />;
-    }
-    if (fileType.includes('image') || ['jpg', 'jpeg', 'png', 'webp', 'bmp'].includes(ext || '')) {
-      return <ImageIcon className="w-5 h-5 text-blue-600" />;
-    }
-    if (fileType.includes('sheet') || fileType.includes('excel') || ['xls', 'xlsx', 'csv'].includes(ext || '')) {
-      return <FileSpreadsheet className="w-5 h-5 text-emerald-600" />;
-    }
-    return <FileCheck className="w-5 h-5 text-orange-600" />;
+  const handleConfirmPayment = (job: PrintJobRecord) => {
+    if (!window.confirm('શું તમે ખરેખર આ ઓર્ડરનું પેમેન્ટ વેરિફાય કરી લીધું છે? આનાથી ઓર્ડર "કમ્પ્લીટ" ગણાશે.')) return;
+    onUpdateJob(job.id, { status: 'ready', paymentStatus: 'Verified' });
+    showToast('✅ પેમેન્ટ વેરિફાય થયું! ઓર્ડર તૈયાર મોડમાં મૂકાયો છે.');
   };
 
   return (
@@ -707,6 +613,16 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
 
                 {/* Status Switcher & Delete */}
                 <div className="flex items-center gap-2 flex-wrap">
+                  {activeJob.paymentStatus !== 'Verified' && (
+                     <button
+                        type="button"
+                        onClick={() => handleConfirmPayment(activeJob)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                     >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>પેમેન્ટ કન્ફર્મ કરો</span>
+                     </button>
+                  )}
                   <select
                     value={activeJob.status}
                     onChange={e => onUpdateJob(activeJob.id, { status: e.target.value as any })}
