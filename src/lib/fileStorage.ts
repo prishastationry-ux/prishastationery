@@ -211,6 +211,8 @@ export function markCloudFileAsDeleted(fileId: string): void {
   } catch (e) {}
 }
 
+let globalQuotaExceeded = false;
+
 export async function uploadFileObjectInChunks(
   file: File | Blob,
   fileId: string,
@@ -226,6 +228,19 @@ export async function uploadFileObjectInChunks(
 
   // Cache in IndexedDB first so sender has instant offline access
   saveBlobToStorage(fileId, file, fileName, fileType).catch(() => {});
+
+  if (globalQuotaExceeded) {
+    if (onProgress) {
+      onProgress({
+        percent: 100,
+        loadedBytes: totalBytes,
+        totalBytes,
+        speed: 'લોકલ (સુરક્ષિત)',
+        bytesPerSec: 0
+      });
+    }
+    return true;
+  }
 
   const totalChunks = Math.ceil(totalBytes / BINARY_CHUNK_SIZE);
   const startTime = Date.now();
@@ -249,6 +264,7 @@ export async function uploadFileObjectInChunks(
           // Retry up to 3 times for bulletproof upload over mobile/slow connections
           let writeSuccess = false;
           let lastErr: any = null;
+          let quotaExceeded = false;
           for (let attempt = 0; attempt < 3; attempt++) {
             try {
               await setDoc(doc(db, 'print_file_chunks', `${fileId}_chunk_${chunkIdx}`), {
@@ -261,10 +277,20 @@ export async function uploadFileObjectInChunks(
               });
               writeSuccess = true;
               break;
-            } catch (err) {
+            } catch (err: any) {
               lastErr = err;
+              const msg = err?.message || '';
+              if (msg.includes('resource-exhausted') || err?.code === 'resource-exhausted' || msg.includes('Quota limit exceeded')) {
+                quotaExceeded = true;
+                globalQuotaExceeded = true;
+                break;
+              }
               await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
             }
+          }
+
+          if (quotaExceeded) {
+            throw new Error('QUOTA_EXCEEDED');
           }
 
           if (!writeSuccess) {
@@ -301,17 +327,24 @@ export async function uploadFileObjectInChunks(
     }
 
     // Save final metadata document
-    await setDoc(doc(db, 'print_files', fileId), {
-      id: fileId,
-      fileName,
-      fileType: fileType || 'application/octet-stream',
-      fileSize: totalBytes,
-      isChunked: true,
-      totalChunks,
-      chunkSize: BINARY_CHUNK_SIZE,
-      uploadedAt: Date.now(),
-      ...cleanExtra
-    });
+    try {
+      await setDoc(doc(db, 'print_files', fileId), {
+        id: fileId,
+        fileName,
+        fileType: fileType || 'application/octet-stream',
+        fileSize: totalBytes,
+        isChunked: true,
+        totalChunks,
+        chunkSize: BINARY_CHUNK_SIZE,
+        uploadedAt: Date.now(),
+        ...cleanExtra
+      });
+    } catch (metaErr: any) {
+      const msg = metaErr?.message || '';
+      if (msg.includes('resource-exhausted') || metaErr?.code === 'resource-exhausted') {
+        console.warn('Firestore quota exceeded on metadata write. File cached locally.');
+      }
+    }
 
     const totalElapsedSec = (Date.now() - startTime) / 1000;
     const finalSpeed = totalElapsedSec > 0 ? (totalBytes / totalElapsedSec) : 0;
@@ -326,7 +359,21 @@ export async function uploadFileObjectInChunks(
     }
 
     return true;
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.message === 'QUOTA_EXCEEDED' || err?.message?.includes('resource-exhausted')) {
+      globalQuotaExceeded = true;
+      console.warn('Firestore quota limit reached. File successfully cached locally in IndexedDB.');
+      if (onProgress) {
+        onProgress({
+          percent: 100,
+          loadedBytes: totalBytes,
+          totalBytes,
+          speed: 'લોકલ (સુરક્ષિત)',
+          bytesPerSec: 0
+        });
+      }
+      return true;
+    }
     console.error('uploadFileObjectInChunks error:', err);
     return false;
   }
@@ -823,4 +870,40 @@ export function calculateFilePrice(file: any, storeSettings: any, allFiles?: any
   }
 
   return Math.max(0, total);
+}
+
+export async function getPDFPageCount(blob: Blob | File): Promise<number> {
+  try {
+    const fileName = 'name' in blob ? (blob as File).name : '';
+    if (!blob || (blob.type !== 'application/pdf' && !fileName.toLowerCase().endsWith('.pdf'))) {
+      return 1;
+    }
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    const decoder = new TextDecoder('latin1');
+    const text = decoder.decode(bytes);
+
+    const countMatch = text.match(/\/Count\s+(\d+)/g);
+    if (countMatch && countMatch.length > 0) {
+      let maxCount = 1;
+      for (const m of countMatch) {
+        const numMatch = m.match(/\/Count\s+(\d+)/);
+        if (numMatch && numMatch[1]) {
+          const val = parseInt(numMatch[1], 10);
+          if (val > maxCount && val < 10000) {
+            maxCount = val;
+          }
+        }
+      }
+      if (maxCount > 1) return maxCount;
+    }
+
+    const pageMatches = text.match(/\/Type\s*\/Page\b/g);
+    if (pageMatches && pageMatches.length > 0) {
+      return Math.max(1, pageMatches.length);
+    }
+  } catch (e) {
+    console.warn('PDF page count error:', e);
+  }
+  return 1;
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   UploadCloud,
   FileText,
@@ -31,7 +31,8 @@ import {
   uploadFileObjectInChunks,
   calculateFilePrice,
   formatFileSize,
-  MAX_FILE_SIZE
+  MAX_FILE_SIZE,
+  getPDFPageCount
 } from '../lib/fileStorage';
 
 interface OnlinePrintModalProps {
@@ -54,7 +55,28 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
   const [deliveryType, setDeliveryType] = useState<'pickup' | 'home_delivery'>('pickup');
   const [submittedJob, setSubmittedJob] = useState<PrintJobRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [countdown, setCountdown] = useState<number>(30);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!submittedJob) {
+      setCountdown(30);
+      return;
+    }
+    const timer = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          setSubmittedJob(null);
+          setFilesList([]);
+          onClose();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [submittedJob, onClose]);
 
   if (!isOpen) return null;
 
@@ -76,8 +98,9 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       }
     }
 
-    filesArray.forEach((file: File) => {
+    filesArray.forEach(async (file: File) => {
       const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+      const detectedPages = await getPDFPageCount(file);
       const newFileItem: PrintJobFile = {
         id: fileId,
         fileName: file.name,
@@ -88,6 +111,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
         uploadProgress: 0,
         uploadSpeed: 'શરૂ થઈ રહ્યું છે...',
         copies: 1,
+        pages: detectedPages,
         colorMode: 'black_white',
         sideOption: 'single_side',
         paperSize: 'A4',
@@ -371,6 +395,11 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                 <p className="text-sm font-bold text-orange-700">
                   જોબ નંબર: <span className="font-mono text-base font-black bg-orange-100 px-2 py-0.5 rounded">{submittedJob.jobNo}</span>
                 </p>
+                <div className="pt-2">
+                  <span className="text-xs font-black text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-xl border border-emerald-300 inline-block">
+                    ⏱️ {countdown} સેકન્ડમાં હોમ પેજ પર પરત જઈ રહ્યા છીએ (સ્ક્રીનશોટ લો 📸)
+                  </span>
+                </div>
                 <p className="text-xs text-neutral-600 max-w-md mx-auto pt-1">
                   તમારી કુલ <span className="font-black text-neutral-900">{submittedJob.files.length} ફાઇલો ({formatFileSize(submittedJob.totalJobSize || 0)})</span> દુકાનદારને સુરક્ષિત મળી ગઈ છે.
                 </p>
