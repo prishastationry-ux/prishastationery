@@ -784,7 +784,7 @@ export async function openFileInNewTab(dataUrl: string, fileName: string): Promi
 }
 
 // Calculate estimated rate for print/xerox/pvc file based on store settings
-export function calculateFilePrice(file: any, storeSettings: any): number {
+export function calculateFilePrice(file: any, storeSettings: any, allFiles?: any[]): number {
   if (!file) return 0;
 
   const bwSingleRate = storeSettings?.xeroxBwSingleRate ?? 2;
@@ -798,7 +798,12 @@ export function calculateFilePrice(file: any, storeSettings: any): number {
   const pages = file.pages || 1;
 
   if (file.paperSize === 'PVC Card' || file.colorMode === 'pvc_card') {
-    return (file.pricePerUnit || pvcCardRate) * copies;
+    const pvcFiles = allFiles ? allFiles.filter(f => f.paperSize === 'PVC Card' || f.colorMode === 'pvc_card') : [file];
+    const pvcCount = Math.max(1, pvcFiles.length);
+    const totalCards = Math.max(1, Math.ceil(pvcCount / 2));
+    const totalPriceForPvc = totalCards * pvcCardRate;
+    const pricePerPvcFile = totalPriceForPvc / pvcCount;
+    return pricePerPvcFile * copies;
   }
 
   if (file.paperSize === '4x6 Photo') {

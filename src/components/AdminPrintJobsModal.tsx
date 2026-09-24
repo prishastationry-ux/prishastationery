@@ -159,7 +159,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
           fileDataUrl: ''
         };
 
-        const calcPrice = calculateFilePrice(fileObj, storeSettings);
+        const calcPrice = calculateFilePrice(fileObj, storeSettings, filesInGroup);
         fileObj.pricePerUnit = calcPrice;
         fileObj.totalPrice = calcPrice;
         return fileObj;

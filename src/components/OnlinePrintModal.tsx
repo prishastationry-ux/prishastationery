@@ -250,7 +250,7 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
 
     // Strip in-memory blob references before storing & calculate individual file prices
     const cleanFiles = filesList.map(f => {
-      const filePrice = calculateFilePrice(f, storeSettings);
+      const filePrice = calculateFilePrice(f, storeSettings, filesList);
       computedSubtotal += filePrice;
       const { fileBlob, ...rest } = f;
       return {
