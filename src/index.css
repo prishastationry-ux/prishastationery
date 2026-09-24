@@ -60,7 +60,7 @@
     display: none !important;
   }
 
-  /* 2. Flat container for A4 dimensions - no backdrop, fixed bounds, or viewport clipping */
+  /* 2. Perfectly centered container for A4 dimensions */
   .invoice-modal-overlay {
     position: static !important;
     inset: auto !important;
@@ -69,9 +69,11 @@
     height: auto !important;
     background: transparent !important;
     padding: 0 !important;
-    margin: 0 !important;
+    margin: 0 auto !important;
     overflow: visible !important;
-    display: block !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: flex-start !important;
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
     z-index: auto !important;
@@ -80,8 +82,8 @@
   .invoice-modal-card {
     position: static !important;
     width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
+    max-width: 194mm !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
@@ -90,21 +92,20 @@
     display: block !important;
   }
 
-  /* 3. Targeted invoice container - 100% A4 width fit, zero blank pages */
+  /* 3. Targeted invoice container - Perfectly centered, automatic page breaks */
   #printable-bill-area {
     display: block !important;
     visibility: visible !important;
     position: static !important;
     width: 100% !important;
-    max-width: 100% !important;
-    margin: 0 !important;
+    max-width: 194mm !important;
+    margin: 0 auto !important;
     padding: 0 !important;
     border: none !important;
     box-shadow: none !important;
     background: #ffffff !important;
     color: #000000 !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+    overflow: visible !important;
   }
 
   #printable-bill-area * {
@@ -116,11 +117,34 @@
   #printable-bill-area table {
     width: 100% !important;
     border-collapse: collapse !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
   }
 
-  #printable-bill-area tr {
+  #printable-bill-area thead {
+    display: table-header-group !important;
+  }
+
+  #printable-bill-area tfoot {
+    display: table-footer-group !important;
+  }
+
+  /* Handle page breaks gracefully without splitting rows or cutting off items */
+  #printable-bill-area tr,
+  #printable-bill-area .bill-wrapper,
+  #printable-bill-area .store-header-grid,
+  #printable-bill-area .meta-table,
+  #printable-bill-area .govt-strip,
+  #printable-bill-area .hsn-summary-box,
+  #printable-bill-area .totals-summary-box,
+  #printable-bill-area .authorized-signatory-box,
+  #printable-bill-area .terms-box {
     page-break-inside: avoid !important;
     break-inside: avoid !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
+    orphans: 3 !important;
+    widows: 3 !important;
   }
 }
 

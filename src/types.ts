@@ -39,9 +39,11 @@ export interface CartItem {
 }
 
 export interface BillItem {
+  id?: string;
   name: string;
   qty: number;
   price: number;
+  total?: number;
   unit?: string;
   productId?: string;
   hsnCode?: string;
