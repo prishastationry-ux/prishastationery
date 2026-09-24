@@ -72,6 +72,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [formError, setFormError] = useState('');
 
+  const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+
   // Generate QR Code when UPI ID or Total changes
   useEffect(() => {
     if (storeSettings.upiId && cartTotal > 0) {
@@ -81,9 +84,6 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
         .catch(err => console.error(err));
     }
   }, [storeSettings.upiId, cartTotal]);
-
-  const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(storeSettings.upiId);

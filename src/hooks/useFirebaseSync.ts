@@ -270,16 +270,35 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
+      
+      // Force immediate deletion tracking
       if (Array.isArray(prev) && Array.isArray(next)) {
         const deletedIds = getDeletedIds(localKey);
         let changed = false;
         const nextIds = new Set(next.map((item: any) => item?.id || item?.invoiceNo).filter(Boolean));
-        prev.forEach((item: any) => { if (item?.id && !nextIds.has(item.id)) { deletedIds.add(item.id); changed = true; } });
-        next.forEach((item: any) => { if (item?.id && deletedIds.has(item.id)) { deletedIds.delete(item.id); changed = true; } });
+        prev.forEach((item: any) => { 
+          const id = item?.id || item?.invoiceNo;
+          if (id && !nextIds.has(id)) { 
+            deletedIds.add(id); 
+            changed = true; 
+          } 
+        });
+        next.forEach((item: any) => { 
+          const id = item?.id || item?.invoiceNo;
+          if (id && deletedIds.has(id)) { 
+            deletedIds.delete(id); 
+            changed = true; 
+          } 
+        });
         if (changed) saveDeletedIds(localKey, deletedIds);
       }
+      
       safeLocalStorageSet(localKey, next);
+      
+      // Force immediate write to server instead of debouncing
       registerPendingWrite(docName, next);
+      executeBatchedFirestoreWrites(); 
+      
       return next;
     });
   };
