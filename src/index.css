@@ -2,9 +2,10 @@
 
 @layer base {
   body {
-    font-family: 'Noto Sans Gujarati', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    color: #000000;
-    background-color: #ffffff;
+    font-family: 'Inter', 'Noto Sans Gujarati', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color: #1f2937; /* A professional slate-800 */
+    background-color: #f3f4f6; /* A subtle gray-100 background */
+    -webkit-font-smoothing: antialiased;
   }
 }
 

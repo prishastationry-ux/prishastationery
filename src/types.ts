@@ -68,7 +68,7 @@ export interface OrderRecord {
   tax: number;
   total: number;
   paymentMode: 'UPI' | 'Cash' | 'Online' | 'બાકી (Credit)';
-  paymentStatus: 'Paid' | 'Pending' | 'બાકી';
+  paymentStatus: 'Paid' | 'Pending' | 'બાકી' | 'Verified';
   paymentScreenshot?: string;
   attachedFiles?: Array<{
     fileName: string;
@@ -348,7 +348,7 @@ export interface PrintJobRecord {
   extraChargesNote?: string;
   discount: number;
   totalAmount: number;
-  paymentStatus: 'Pending' | 'Paid' | 'બાકી';
+  paymentStatus: 'Pending' | 'Paid' | 'બાકી' | 'Verified';
   paymentMode?: 'UPI' | 'Cash' | 'Online' | 'બાકી (Credit)';
   adminNotes?: string;
   notes?: string;

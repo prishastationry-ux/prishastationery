@@ -444,6 +444,8 @@ export default function App() {
     });
   };
 
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
+
   // Handle Login Password Verification
   const handleVerifyPassword = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -451,8 +453,14 @@ export default function App() {
     if (enteredPassword === correctPass) {
       setIsAdminUnlocked(true);
       setShowPasswordModal(false);
+      setEnteredPassword('');
       setPasswordError('');
       setActiveTab('admin');
+      
+      // Trigger Welcome Modal
+      setShowWelcomeModal(true);
+      setTimeout(() => setShowWelcomeModal(false), 30000);
+      
       showToast('🔓 સ્વાગત છે ભરતભાઈ! એડમિન પેનલ અનલૉક થઈ ગઈ.');
     } else {
       setPasswordError('❌ ખોટો પાસવર્ડ! કૃપા કરીને સાચો પાસવર્ડ દાખલ કરો.');
@@ -2073,7 +2081,7 @@ export default function App() {
             <div className={`flex-1 w-full ${
               storeSettings.productLayoutMode === 'list' 
               ? "flex flex-col gap-3" 
-              : "grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-3.5 sm:gap-4.5"
+              : "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3 sm:gap-4"
             }`}>
               {filteredItems.map(item => {
                 const inCart = cart.find(c => c.product.id === item.id);
@@ -2083,7 +2091,7 @@ export default function App() {
               return (
                 <div
                   key={item.id}
-                  className={`bg-white rounded-2xl border border-neutral-300 hover:border-orange-500 shadow-2xs hover:shadow-md transition-all flex justify-between overflow-hidden group relative ${isListView ? 'flex-row items-center p-2 gap-3' : 'flex-col'}`}
+                  className={`bg-white rounded-xl border border-neutral-200 hover:border-blue-400 shadow-sm hover:shadow-lg transition-all flex justify-between overflow-hidden group relative ${isListView ? 'flex-row items-center p-2 gap-3' : 'flex-col'}`}
                   onClick={() => setSelectedProductForModal(item)}
                 >
                   {/* Top Badge */}
@@ -2542,17 +2550,16 @@ export default function App() {
           })()}
 
           {/* REAL-TIME ERP DASHBOARD (6 RESPONSIVE STAT CARDS) */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             <div
               onClick={() => {
                 const val = prompt('દૈનિક વેચાણ (Today) કરેક્શન/સુધારો (+/-):', (stats?.correctionDaily || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionDaily: Number(val) || 0 }));
               }}
-              className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-orange-500 transition-colors"
+              className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-orange-500 transition-colors"
             >
-              <p className="text-[10px] font-bold text-neutral-500">💰 આજનું વેચાણ</p>
-              <h3 className="text-sm sm:text-base font-black text-orange-600">₹{(displayTodaySales || 0).toFixed(2)}</h3>
-              <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
+              <p className="text-[11px] font-bold text-neutral-500 uppercase">💰 આજનું વેચાણ</p>
+              <h3 className="text-xl font-black text-orange-600 truncate">₹{(displayTodaySales || 0).toFixed(0)}</h3>
             </div>
 
             <div
@@ -2560,11 +2567,10 @@ export default function App() {
                 const val = prompt('અઠવાડિયાનું વેચાણ (Weekly) કરેક્શન/સુધારો (+/-):', (stats?.correctionWeekly || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionWeekly: Number(val) || 0 }));
               }}
-              className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-blue-500 transition-colors"
+              className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-blue-500 transition-colors"
             >
-              <p className="text-[10px] font-bold text-neutral-500">📅 આ અઠવાડિયાનું વેચાણ</p>
-              <h3 className="text-sm sm:text-base font-black text-blue-700">₹{(displayWeekSales || 0).toFixed(2)}</h3>
-              <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
+              <p className="text-[11px] font-bold text-neutral-500 uppercase">📅 આ અઠવાડિયું</p>
+              <h3 className="text-xl font-black text-blue-700 truncate">₹{(displayWeekSales || 0).toFixed(0)}</h3>
             </div>
 
             <div
@@ -2572,11 +2578,10 @@ export default function App() {
                 const val = prompt('મહિનાનું વેચાણ (Monthly) કરેક્શન/સુધારો (+/-):', (stats?.correctionMonthly || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionMonthly: Number(val) || 0 }));
               }}
-              className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-emerald-500 transition-colors"
+              className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-emerald-500 transition-colors"
             >
-              <p className="text-[10px] font-bold text-neutral-500">📈 આ મહિનાનું વેચાણ</p>
-              <h3 className="text-sm sm:text-base font-black text-emerald-600">₹{(displayMonthSales || 0).toFixed(2)}</h3>
-              <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
+              <p className="text-[11px] font-bold text-neutral-500 uppercase">📈 આ મહિનો</p>
+              <h3 className="text-xl font-black text-emerald-600 truncate">₹{(displayMonthSales || 0).toFixed(0)}</h3>
             </div>
 
             <div
@@ -2584,11 +2589,20 @@ export default function App() {
                 const val = prompt('આખા વર્ષનું વેચાણ (Yearly) કરેક્શન/સુધારો (+/-):', (stats?.correctionYearly || 0).toString());
                 if (val !== null) setStats(s => ({ ...s, correctionYearly: Number(val) || 0 }));
               }}
-              className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-purple-500 transition-colors"
+              className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-purple-500 transition-colors"
             >
-              <p className="text-[10px] font-bold text-neutral-500">🏆 વાર્ષિક વેચાણ</p>
-              <h3 className="text-sm sm:text-base font-black text-purple-700">₹{(displayYearSales || 0).toFixed(2)}</h3>
-              <span className="text-[9px] text-neutral-400 font-bold">ઓટો | ક્લિક કરી બદલો</span>
+              <p className="text-[11px] font-bold text-neutral-500 uppercase">🏆 વર્ષ</p>
+              <h3 className="text-xl font-black text-purple-700 truncate">₹{(displayYearSales || 0).toFixed(0)}</h3>
+            </div>
+            
+            <div className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm">
+              <p className="text-[11px] font-bold text-neutral-500 uppercase">📦 કુલ સ્ટોક</p>
+              <h3 className="text-xl font-black text-blue-900 truncate">{calcTotalStockUnits} નંગ</h3>
+            </div>
+            
+            <div className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm">
+              <p className="text-[11px] font-bold text-neutral-500 uppercase">📊 નફો</p>
+              <h3 className="text-xl font-black text-green-700 truncate">₹{(displaySellingStockValue - displayCostStockValue).toFixed(0)}</h3>
             </div>
 
             <div
@@ -4733,6 +4747,28 @@ export default function App() {
           storeSettings={storeSettings}
           showToast={showToast}
         />
+      )}
+
+      {/* WELCOME MODAL */}
+      {showWelcomeModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-4 border-orange-400 relative overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-100 to-emerald-100 opacity-50"></div>
+            <div className="relative z-10">
+              <div className="text-5xl mb-4">🎉</div>
+              <h2 className="text-2xl font-black text-blue-900 mb-2">સ્વાગત છે,</h2>
+              <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-red-600 mb-6">
+                ભરતભાઈ ચૌધરી
+              </h1>
+              <button
+                onClick={() => setShowWelcomeModal(false)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform active:scale-95"
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ========================================================================= */}

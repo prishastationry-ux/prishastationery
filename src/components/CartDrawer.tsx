@@ -72,10 +72,40 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [formError, setFormError] = useState('');
 
+  // Generate QR Code when UPI ID or Total changes
+  useEffect(() => {
+    if (storeSettings.upiId && cartTotal > 0) {
+      const upiLink = `upi://pay?pa=${storeSettings.upiId}&pn=PrishaStationery&am=${cartTotal}&cu=INR`;
+      QRCode.toDataURL(upiLink, { width: 256, margin: 1 })
+        .then(url => setUpiQrUrl(url))
+        .catch(err => console.error(err));
+    }
+  }, [storeSettings.upiId, cartTotal]);
+
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  
-  // ... (rest of the file)
+
+  const handleCopyUpi = () => {
+    navigator.clipboard.writeText(storeSettings.upiId);
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2000);
+  };
+
+  const handleScreenshotUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPaymentScreenshot(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleProceedToStep2 = () => {
+    setStep(2);
+  };
+
   const handleSubmitOrder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!customerName.trim()) {
@@ -103,10 +133,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       mobile: mobile.trim(),
       address: fullAddress,
       paymentMode: 'Online',
-      paymentScreenshot: paymentScreenshot || undefined,
-      paymentDetails: {
-        transactionId: transactionId.trim() || undefined
-      }
+      paymentScreenshot: paymentScreenshot || undefined
     });
   };
 
