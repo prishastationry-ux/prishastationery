@@ -23,6 +23,8 @@ import {
   RefreshCw,
   AlertTriangle
 } from 'lucide-react';
+import { doc, setDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
 import { PrintJobFile, PrintJobRecord, StoreSettings } from '../types';
 import {
   saveFileToStorage,
@@ -114,7 +116,8 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
                 : item
             )
           );
-        }
+        },
+        { submitted: false }
       ).then(success => {
         setFilesList(prev =>
           prev.map(item =>
@@ -277,6 +280,14 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
     };
 
     onSubmitJob(newJob);
+
+    // Mark files as officially submitted in Firestore so admin receives the order
+    for (const f of cleanFiles) {
+      if (f.id) {
+        setDoc(doc(db, 'print_files', f.id), { submitted: true }, { merge: true }).catch(() => {});
+      }
+    }
+
     setSubmittedJob(newJob);
     setIsSubmitting(false);
   };

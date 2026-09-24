@@ -101,12 +101,13 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       });
     });
 
-    // 2. Filter unlinked files that are NOT in baseJobs and NOT marked deleted
+    // 2. Filter unlinked files that are NOT in baseJobs, NOT marked deleted, and have been officially submitted
     const unlinkedFiles = cloudFiles.filter(cf => 
       cf && 
       cf.id && 
       !existingFileIds.has(cf.id) && 
-      !deletedCloudIds.has(cf.id)
+      !deletedCloudIds.has(cf.id) &&
+      (cf.submitted === true || cf.submitted === undefined)
     );
 
     // 3. GROUP unlinked files by jobId, or by (customerMobile + 15-min window)
