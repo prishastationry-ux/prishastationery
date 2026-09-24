@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { doc, onSnapshot, setDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 // Global Quota & Resource Exhaustion Backoff Tracker
@@ -40,57 +40,33 @@ export function handleQuotaError(err: any): void {
         localStorage.setItem(QUOTA_EXHAUSTED_KEY, quotaExhaustedUntil.toString());
       } catch (e) {}
     }
-    console.warn('⚠️ Firestore resource write/read quota limit reached. Operations are running seamlessly in 100% offline LocalStorage/IndexedDB mode and will sync automatically when quota resets.');
+    console.warn('⚠️ Firestore quota limit reached. Operations running in 100% offline LocalStorage mode.');
   }
 }
 
-/**
- * Recursively removes all `undefined` values and properties from objects and arrays,
- * because Firebase Firestore setDoc() throws an error if any field is undefined:
- * "Unsupported field value: undefined"
- */
 export function sanitizeForFirestore(val: any): any {
-  if (val === undefined) {
-    return null;
-  }
-  if (val === null || typeof val !== 'object') {
-    return val;
-  }
-  if (Array.isArray(val)) {
-    return val
-      .filter(item => item !== undefined)
-      .map(item => sanitizeForFirestore(item));
-  }
+  if (val === undefined) return null;
+  if (val === null || typeof val !== 'object') return val;
+  if (Array.isArray(val)) return val.filter(item => item !== undefined).map(item => sanitizeForFirestore(item));
   const result: Record<string, any> = {};
   for (const [k, v] of Object.entries(val)) {
-    if (v !== undefined) {
-      result[k] = sanitizeForFirestore(v);
-    }
+    if (v !== undefined) result[k] = sanitizeForFirestore(v);
   }
   return result;
 }
 
-/**
- * Strips huge binary base64 strings from documents before pushing to Firestore.
- * Attached print files (PDFs, high-res scans) are preserved safely in IndexedDB and Chunked storage.
- * Note: Product imageUrl and icons are kept intact!
- */
 function compressForStorage(val: any): any {
   if (!val) return val;
   if (typeof val === 'string') {
-    // Only truncate huge attachments (>50KB) that are stored in fileStorage
     if (val.startsWith('data:') && val.length > 50000 && (val.includes('application/pdf') || val.includes('octet-stream'))) {
       return val.slice(0, 100) + '...[IDB_STORED]';
     }
     return val;
   }
-  if (Array.isArray(val)) {
-    return val.map(compressForStorage);
-  }
+  if (Array.isArray(val)) return val.map(compressForStorage);
   if (typeof val === 'object') {
     const copy: Record<string, any> = {};
     for (const [k, v] of Object.entries(val)) {
-      // Keep file identifiers, product images, and metadata intact
       if (k === 'fileDataUrl' || k === 'paymentScreenshot' || k === 'fileData') {
         if (typeof v === 'string' && v.startsWith('data:') && v.length > 50000) {
           copy[k] = v.slice(0, 100) + '...[IDB_STORED]';
@@ -104,7 +80,6 @@ function compressForStorage(val: any): any {
   return val;
 }
 
-// Safe LocalStorage setter with automatic quota recovery
 function safeLocalStorageSet(key: string, value: any): void {
   try {
     const str = JSON.stringify(compressForStorage(value));
@@ -112,7 +87,6 @@ function safeLocalStorageSet(key: string, value: any): void {
   } catch (err: any) {
     if (err?.name === 'QuotaExceededError' || String(err).includes('quota')) {
       try {
-        // Clear old temporary caches to free space
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
           if (k && (k.endsWith('_backup') || k.includes('temp') || k.includes('preview'))) {
@@ -121,22 +95,17 @@ function safeLocalStorageSet(key: string, value: any): void {
         }
         const str = JSON.stringify(compressForStorage(value));
         localStorage.setItem(key, str);
-      } catch (e) {
-        // Graceful silent fallback
-      }
+      } catch (e) {}
     }
   }
 }
 
-// Persistent Tombstone Tracker (Deleted IDs)
 export function getDeletedIds(localKey: string): Set<string> {
   try {
     const raw = localStorage.getItem(localKey + '_deleted_ids');
     if (raw) {
       const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) {
-        return new Set(arr);
-      }
+      if (Array.isArray(arr)) return new Set(arr);
     }
   } catch (e) {}
   return new Set();
@@ -148,7 +117,6 @@ export function saveDeletedIds(localKey: string, set: Set<string>): void {
   } catch (e) {}
 }
 
-// Pending writes registry, debounce timers, and payload deduplication cache
 const pendingWrites: Record<string, any> = {};
 const writeDebounceTimers: Record<string, any> = {};
 const lastWrittenPayloads: Record<string, string> = {};
@@ -159,7 +127,6 @@ async function executeBatchedFirestoreWrites() {
   const docsToCommit = Object.entries(pendingWrites);
   if (docsToCommit.length === 0) return;
 
-  // Clear debounce timers for items being processed
   for (const [docName] of docsToCommit) {
     if (writeDebounceTimers[docName]) {
       clearTimeout(writeDebounceTimers[docName]);
@@ -167,16 +134,13 @@ async function executeBatchedFirestoreWrites() {
     }
   }
 
-  // Filter out redundant payloads that match lastWrittenPayloads
   const validWrites: { docName: string; payload: any; payloadStr: string }[] = [];
   for (const [docName, rawData] of docsToCommit) {
     delete pendingWrites[docName];
     try {
       const sanitized = sanitizeForFirestore(compressForStorage(rawData));
       const payloadStr = JSON.stringify(sanitized);
-      if (lastWrittenPayloads[docName] === payloadStr) {
-        continue; // Skip write: Payload has not changed
-      }
+      if (lastWrittenPayloads[docName] === payloadStr) continue;
       validWrites.push({ docName, payload: sanitized, payloadStr });
     } catch (e) {}
   }
@@ -185,12 +149,10 @@ async function executeBatchedFirestoreWrites() {
 
   try {
     if (validWrites.length === 1) {
-      // Single Document Write
       const { docName, payload, payloadStr } = validWrites[0];
       await setDoc(doc(db, "store_data", docName), { data: payload });
       lastWrittenPayloads[docName] = payloadStr;
     } else {
-      // Atomic Multi-Document Batch Write
       const batch = writeBatch(db);
       for (const { docName, payload } of validWrites) {
         batch.set(doc(db, "store_data", docName), { data: payload });
@@ -202,10 +164,6 @@ async function executeBatchedFirestoreWrites() {
     }
   } catch (err: any) {
     handleQuotaError(err);
-    const msg = err?.message || String(err);
-    if (!msg.includes('resource-exhausted') && !msg.includes('Quota limit')) {
-      console.warn('Firebase batch sync notice:', err);
-    }
   }
 }
 
@@ -215,8 +173,8 @@ function registerPendingWrite(docName: string, data: any) {
     clearTimeout(writeDebounceTimers[docName]);
   }
   
-  // High-volume collections ('orders' & 'printJobs') get 1500ms debounce to aggregate rapid edits; standard collections get 1000ms
-  const delay = (docName === 'orders' || docName === 'printJobs') ? 1500 : 1000;
+  // Very aggressive debouncing to save writes (5 minutes)
+  const delay = 5 * 60 * 1000; 
   
   writeDebounceTimers[docName] = setTimeout(() => {
     delete writeDebounceTimers[docName];
@@ -224,7 +182,6 @@ function registerPendingWrite(docName: string, data: any) {
   }, delay);
 }
 
-// Flush all pending writes immediately when browser is closed, refreshed, or backgrounded
 if (typeof window !== 'undefined') {
   const flushAll = () => {
     executeBatchedFirestoreWrites();
@@ -237,65 +194,33 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
 
-  // Helper to filter out legacy starter demo mock records
   const filterMockData = (val: any): any => {
     if (!Array.isArray(val)) return val;
     if (docName === 'printJobs') {
-      return val.filter((j: any) => {
-        if (!j) return false;
-        const isMockId = j.id === 'prn-demo-1';
-        const isMockJobNo = j.jobNo === 'PRN-8821' || j.jobNo === 'PRN-6065';
-        const isSampleCustomer = typeof j.customerName === 'string' && j.customerName.toLowerCase().includes('sample');
-        const hasSampleFile = Array.isArray(j.files) && j.files.some((f: any) => 
-          typeof f.fileName === 'string' && (f.fileName.toLowerCase().includes('sample document') || f.fileName.toLowerCase().includes('sample'))
-        );
-        return !(isMockId || isMockJobNo || isSampleCustomer || hasSampleFile);
-      });
+      return val.filter((j: any) => j && j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821' && j.jobNo !== 'PRN-6065');
     }
     if (docName === 'orders') {
-      return val.filter((o: any) => {
-        if (!o) return false;
-        const isMockId = o.id === 'ord-101';
-        const isMockInvoice = o.invoiceNo === 'prisha000001';
-        const isSampleCustomer = typeof o.customerName === 'string' && o.customerName.toLowerCase().includes('sample');
-        const isMockJob = typeof o.notes === 'string' && (o.notes.includes('PRN-6065') || o.notes.includes('PRN-8821') || o.notes.toLowerCase().includes('sample'));
-        const hasSampleItem = Array.isArray(o.items) && o.items.some((it: any) => 
-          typeof it.name === 'string' && (it.name.toLowerCase().includes('sample document') || it.name.toLowerCase().includes('sample'))
-        );
-        return !(isMockId || isMockInvoice || isSampleCustomer || isMockJob || hasSampleItem);
-      });
+      return val.filter((o: any) => o && o.id !== 'ord-101' && o.invoiceNo !== 'prisha000001');
     }
     return val;
   };
 
-  // Load from local storage first with tombstone filter
   const [data, setData] = useState<T>(() => {
     const deletedIds = getDeletedIds(localKey);
-    let saved = localStorage.getItem(localKey);
-    if (!saved) {
-      saved = localStorage.getItem(localKey + '_backup');
-    }
+    let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
     let initialVal = initialData;
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         const cleaned = filterMockData(parsed);
         if (Array.isArray(cleaned)) {
-          initialVal = cleaned.filter((item: any) => {
-            const id = item?.id || item?.invoiceNo;
-            return !deletedIds.has(id);
-          }) as unknown as T;
+          initialVal = cleaned.filter((item: any) => !deletedIds.has(item?.id || item?.invoiceNo)) as unknown as T;
         } else if (cleaned !== undefined && cleaned !== null) {
           initialVal = cleaned as T;
         }
-      } catch (e) {
-        console.error(e);
-      }
+      } catch (e) {}
     } else if (Array.isArray(initialData)) {
-      initialVal = (initialData as any[]).filter((item: any) => {
-        const id = item?.id || item?.invoiceNo;
-        return !deletedIds.has(id);
-      }) as unknown as T;
+      initialVal = (initialData as any[]).filter((item: any) => !deletedIds.has(item?.id || item?.invoiceNo)) as unknown as T;
     }
     return initialVal;
   });
@@ -303,7 +228,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   useEffect(() => {
     const docRef = doc(db, "store_data", docName);
     
-    // Initial fetch & check: Immediately sync from cloud if available, or upload local data if cloud is empty
+    // Polling function instead of real-time listener
     const syncDocFromCloud = async () => {
       if (isQuotaExhausted()) return;
       try {
@@ -312,62 +237,21 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           const rawData = snapshot.data()?.data;
           if (rawData !== undefined && rawData !== null) {
             const rawCleaned = filterMockData(rawData);
-            if (rawCleaned !== undefined && rawCleaned !== null) {
-              const currentInit = initialDataRef.current;
-              const cleaned = (typeof currentInit === 'object' && currentInit !== null && !Array.isArray(currentInit))
-                ? { ...currentInit, ...rawCleaned }
-                : rawCleaned;
-
-              setData((prevData) => {
-                const deletedIds = getDeletedIds(localKey);
-                if (Array.isArray(cleaned) && Array.isArray(prevData)) {
-                  const validCloudItems = cleaned.filter((item: any) => {
-                    if (!item) return false;
-                    const id = item.id || item.invoiceNo;
-                    return !deletedIds.has(id);
-                  });
-
-                  const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
-                  const localUnsyncedItems = prevData.filter((localItem: any) => {
-                    if (!localItem) return false;
-                    const id = localItem.id || localItem.invoiceNo;
-                    return !deletedIds.has(id) && !cloudIds.has(id);
-                  });
-
-                  const localMap = new Map<string, any>();
-                  prevData.forEach((item: any) => {
-                    if (item) {
-                      const id = item.id || item.invoiceNo;
-                      if (id) localMap.set(id, item);
-                    }
-                  });
-
-                  const merged = [
-                    ...validCloudItems.map((c: any) => {
-                      const id = c.id || c.invoiceNo;
-                      return localMap.has(id) ? localMap.get(id) : c;
-                    }),
-                    ...localUnsyncedItems
-                  ];
-
-                  safeLocalStorageSet(localKey, merged);
-                  return merged as unknown as T;
-                }
-
-                safeLocalStorageSet(localKey, cleaned);
-                return cleaned as T;
-              });
-            }
-          }
-        } else {
-          // Cloud empty: upload local data
-          const saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            const cleaned = filterMockData(parsed);
-            if (Array.isArray(cleaned) && cleaned.length > 0) {
-              setDoc(docRef, { data: sanitizeForFirestore(compressForStorage(cleaned)) }).catch(handleQuotaError);
-            }
+            setData((prevData) => {
+              const deletedIds = getDeletedIds(localKey);
+              if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
+                const validCloudItems = rawCleaned.filter((item: any) => !deletedIds.has(item.id || item.invoiceNo));
+                const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
+                const localUnsyncedItems = prevData.filter((localItem: any) => !deletedIds.has(localItem.id || localItem.invoiceNo) && !cloudIds.has(localItem.id || localItem.invoiceNo));
+                const localMap = new Map();
+                prevData.forEach((item: any) => { if (item) localMap.set(item.id || item.invoiceNo, item); });
+                const merged = [ ...validCloudItems.map((c: any) => localMap.has(c.id || c.invoiceNo) ? localMap.get(c.id || c.invoiceNo) : c), ...localUnsyncedItems];
+                safeLocalStorageSet(localKey, merged);
+                return merged as unknown as T;
+              }
+              safeLocalStorageSet(localKey, rawCleaned);
+              return rawCleaned as T;
+            });
           }
         }
       } catch (e) {
@@ -377,142 +261,25 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
     syncDocFromCloud();
 
-    // Heartbeat sync interval: refresh every 90 seconds (1.5 min) to preserve quota while ensuring fallback sync
-    const heartbeatInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !isQuotaExhausted()) {
-        syncDocFromCloud();
-      }
-    }, 90000);
-
-    // Listen for real-time updates from Firebase
-    const unsubscribe = onSnapshot(docRef, {
-      next: (snapshot) => {
-        if (snapshot.exists()) {
-          const rawData = snapshot.data().data;
-          if (rawData === undefined || rawData === null) return;
-          const rawCleaned = filterMockData(rawData);
-          if (rawCleaned === undefined || rawCleaned === null) return;
-
-          const currentInit = initialDataRef.current;
-          const cleaned = (typeof currentInit === 'object' && currentInit !== null && !Array.isArray(currentInit))
-            ? { ...currentInit, ...rawCleaned }
-            : rawCleaned;
-
-          setData((prevData) => {
-            const deletedIds = getDeletedIds(localKey);
-
-            if (Array.isArray(cleaned) && Array.isArray(prevData)) {
-              // 1. Strict filter: Any cloud item that was deleted locally MUST NEVER be resurrected!
-              // Use unique item.id primarily to avoid clashing freshly created order numbers
-              const validCloudItems = cleaned.filter((item: any) => {
-                if (!item) return false;
-                const id = item.id || item.invoiceNo;
-                return !deletedIds.has(id);
-              });
-
-              // 2. Identify newly added local items that are not yet synced to the cloud
-              const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
-              const localUnsyncedItems = prevData.filter((localItem: any) => {
-                if (!localItem) return false;
-                const id = localItem.id || localItem.invoiceNo;
-                return !deletedIds.has(id) && !cloudIds.has(id);
-              });
-
-              // 3. For items in both cloud and local, prioritize local state modifications
-              const localMap = new Map<string, any>();
-              prevData.forEach((item: any) => {
-                if (item) {
-                  const id = item.id || item.invoiceNo;
-                  if (id) localMap.set(id, item);
-                }
-              });
-
-              const merged = [
-                ...validCloudItems.map((c: any) => {
-                  const id = c.id || c.invoiceNo;
-                  return localMap.has(id) ? localMap.get(id) : c;
-                }),
-                ...localUnsyncedItems
-              ];
-
-              safeLocalStorageSet(localKey, merged);
-              return merged as unknown as T;
-            }
-
-            safeLocalStorageSet(localKey, cleaned);
-            return cleaned as T;
-          });
-        }
-      },
-      error: (err) => {
-        handleQuotaError(err);
-        const msg = err?.message || String(err);
-        if (
-          !msg.includes('transport errored') && 
-          !msg.includes('WebChannel') && 
-          !msg.includes('offline') &&
-          !msg.includes('Quota limit exceeded') &&
-          !msg.includes('resource-exhausted')
-        ) {
-          console.warn(`Firestore sync note for ${docName}:`, msg);
-        }
-      }
-    });
+    // Poll every 30 minutes to stay within free quota
+    const pollInterval = setInterval(syncDocFromCloud, 30 * 60 * 1000);
     
-    return () => {
-      clearInterval(heartbeatInterval);
-      unsubscribe();
-    };
+    return () => clearInterval(pollInterval);
   }, [docName, localKey]);
 
-  // Robust state setter with automatic deletion tracking & immediate local persistence
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
-
-      // Detect deletions and additions when handling arrays
       if (Array.isArray(prev) && Array.isArray(next)) {
         const deletedIds = getDeletedIds(localKey);
         let changed = false;
-
         const nextIds = new Set(next.map((item: any) => item?.id || item?.invoiceNo).filter(Boolean));
-
-        // 1. Any ID in previous list missing in next list is a DELETION
-        prev.forEach((item: any) => {
-          const id = item?.id || item?.invoiceNo;
-          if (id && !nextIds.has(id)) {
-            deletedIds.add(id);
-            changed = true;
-          }
-        });
-
-        // 2. Any ID present in next list is ACTIVE (e.g. restored from Trash) -> Remove from tombstones
-        next.forEach((item: any) => {
-          const id = item?.id || item?.invoiceNo;
-          if (id && deletedIds.has(id)) {
-            deletedIds.delete(id);
-            changed = true;
-          }
-        });
-
-        if (changed) {
-          saveDeletedIds(localKey, deletedIds);
-        }
+        prev.forEach((item: any) => { if (item?.id && !nextIds.has(item.id)) { deletedIds.add(item.id); changed = true; } });
+        next.forEach((item: any) => { if (item?.id && deletedIds.has(item.id)) { deletedIds.delete(item.id); changed = true; } });
+        if (changed) saveDeletedIds(localKey, deletedIds);
       }
-
-      // Avoid redundant work if deeply identical
-      try {
-        if (JSON.stringify(prev) === JSON.stringify(next)) {
-          return prev;
-        }
-      } catch (e) {}
-
-      // 1. Save locally immediately (Authoritative instant offline persistence)
       safeLocalStorageSet(localKey, next);
-
-      // 2. Register for snappy debounced cloud sync
       registerPendingWrite(docName, next);
-
       return next;
     });
   };
