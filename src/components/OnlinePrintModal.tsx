@@ -246,18 +246,6 @@ export const OnlinePrintModal: React.FC<OnlinePrintModalProps> = ({
       return;
     }
 
-    const stillUploading = filesList.some(f => f.uploadStatus === 'uploading');
-    if (stillUploading) {
-      alert('⚠️ ફાઇલ હજી ક્લાઉડમાં અપલોડ થઈ રહી છે. કૃપા કરીને ૧૦૦% અપલોડ પૂર્ણ થવા દો.');
-      return;
-    }
-
-    const failedFiles = filesList.filter(f => f.uploadStatus === 'error' || !f.uploadedToCloud);
-    if (failedFiles.length > 0) {
-      alert(`⚠️ "${failedFiles[0].fileName}" ક્લાઉડમાં અપલોડ થઈ નથી. કૃપા કરીને 'ફરી પ્રયાસ કરો' બટન દબાવી અપલોડ પૂર્ણ કરો.`);
-      return;
-    }
-
     const finalCustomerName = customerName.trim() || 'દુકાન ગ્રાહક (Quick QR Upload)';
     const finalMobile = mobile.trim() || storeSettings.phone || '9723712381';
     const finalAddress = address.trim() || (deliveryType === 'pickup' ? 'દુકાન પિકઅપ' : 'હોમ ડિલિવરી');
