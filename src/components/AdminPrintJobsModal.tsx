@@ -115,9 +115,10 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     unlinkedFiles.forEach(cf => {
       let key = cf.jobId;
       if (!key) {
-        const mob = cf.mobile || cf.customerMobile || 'quick-upload';
-        const timeWindow = cf.uploadedAt ? Math.floor(cf.uploadedAt / (15 * 60 * 1000)) : 0;
-        key = `group-${mob}-${timeWindow}`;
+        const mob = (cf.mobile || cf.customerMobile || 'quick-upload').trim().replace(/\D/g, '');
+        const dateObj = cf.uploadedAt ? new Date(cf.uploadedAt) : new Date();
+        const dateStr = `${dateObj.getFullYear()}-${dateObj.getMonth() + 1}-${dateObj.getDate()}`;
+        key = `day-group-${mob || 'unknown'}-${dateStr}`;
       }
       if (!groupsMap.has(key)) {
         groupsMap.set(key, []);
