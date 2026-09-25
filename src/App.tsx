@@ -79,8 +79,18 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
-import { useFirebaseSync, isQuotaExhausted, handleQuotaError } from './hooks/useFirebaseSync';
-import { deleteFileFromCloudStorage, downloadFileSafely, saveFileToCloudStorage, getFileFromCloudStorage, isCorruptedOrNeedsFetch, formatFileSize } from './lib/fileStorage';
+import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds } from './hooks/useFirebaseSync';
+import {
+  deleteFileFromCloudStorage,
+  downloadFileSafely,
+  saveFileToCloudStorage,
+  getFileFromCloudStorage,
+  isCorruptedOrNeedsFetch,
+  formatFileSize,
+  markCloudFileAsDeleted,
+  getDeletedCloudFileIds,
+  isPurgedOrDeletedCloudFile
+} from './lib/fileStorage';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db } from './lib/firebase';
 import { getDefaultLeftLogoSvg, getDefaultRightLogoSvg } from './lib/invoiceUtils';
@@ -356,7 +366,9 @@ export default function App() {
         const list: any[] = [];
         snap.forEach((d) => {
           const data = d.data();
-          if (data) list.push({ ...data, id: d.id });
+          if (data && !isPurgedOrDeletedCloudFile({ ...data, id: d.id })) {
+            list.push({ ...data, id: d.id });
+          }
         });
         list.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
 
@@ -386,11 +398,18 @@ export default function App() {
   const { totalPrintCount, unlinkedCloudFilesCount } = React.useMemo(() => {
     const existingJobFileIds = new Set<string>();
     (printJobs || []).forEach(j => {
-      (j.files || []).forEach(f => existingJobFileIds.add(f.id));
+      if (j && !isPurgedOrDeletedCloudFile(j.id)) {
+        (j.files || []).forEach(f => {
+          if (f && f.id) existingJobFileIds.add(f.id);
+        });
+      }
     });
-    const unlinked = (cloudPrintFiles || []).filter(cf => cf && cf.id && !existingJobFileIds.has(cf.id));
+    const unlinked = (cloudPrintFiles || []).filter(
+      cf => cf && cf.id && !existingJobFileIds.has(cf.id) && !isPurgedOrDeletedCloudFile(cf)
+    );
+    const validPrintJobs = (printJobs || []).filter(j => j && !isPurgedOrDeletedCloudFile(j.id));
     return {
-      totalPrintCount: (printJobs || []).length + unlinked.length,
+      totalPrintCount: validPrintJobs.length + unlinked.length,
       unlinkedCloudFilesCount: unlinked.length
     };
   }, [printJobs, cloudPrintFiles]);
@@ -1159,6 +1178,23 @@ export default function App() {
           data: orderToDelete
         };
 
+        // Mark associated files and order as deleted in cloud registry
+        if (orderToDelete.attachedFiles) {
+          orderToDelete.attachedFiles.forEach(af => {
+            if (af.id) {
+              markCloudFileAsDeleted(af.id);
+              deleteFileFromCloudStorage(af.id).catch(() => {});
+            }
+          });
+        }
+        markCloudFileAsDeleted(orderToDelete.id);
+        if (orderToDelete.invoiceNo) markCloudFileAsDeleted(orderToDelete.invoiceNo);
+
+        const ordDeleted = getDeletedIds('prisha_orders_v4');
+        ordDeleted.add(orderToDelete.id);
+        if (orderToDelete.invoiceNo) ordDeleted.add(orderToDelete.invoiceNo);
+        saveDeletedIds('prisha_orders_v4', ordDeleted);
+
         setTrashList(prev => [trashRec, ...prev]);
         setOrders(prev => prev.filter(o => o.id !== id));
         showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થયું અને માલ સ્ટોકમાં જમા થયો!`);
@@ -1179,9 +1215,52 @@ export default function App() {
         showToast(`🗑️ ખર્ચ એન્ટ્રી ટ્રેશ બિનમાં ખસેડાઈ!`);
       }
     } else if (type === 'trash_item') {
+      const itemToDelete = trashList.find(t => t.id === id);
+      if (itemToDelete) {
+        if (itemToDelete.type === 'order' && itemToDelete.data) {
+          const ord = itemToDelete.data as OrderRecord;
+          if (ord.attachedFiles) {
+            ord.attachedFiles.forEach(af => {
+              if (af.id) markCloudFileAsDeleted(af.id);
+            });
+          }
+          if (ord.id) markCloudFileAsDeleted(ord.id);
+          if (ord.invoiceNo) markCloudFileAsDeleted(ord.invoiceNo);
+          const ordDeleted = getDeletedIds('prisha_orders_v4');
+          if (ord.id) ordDeleted.add(ord.id);
+          if (ord.invoiceNo) ordDeleted.add(ord.invoiceNo);
+          saveDeletedIds('prisha_orders_v4', ordDeleted);
+        }
+        const trashDeleted = getDeletedIds('prisha_trash_v4');
+        trashDeleted.add(itemToDelete.id);
+        saveDeletedIds('prisha_trash_v4', trashDeleted);
+      }
       setTrashList(prev => prev.filter(t => t.id !== id));
       showToast(`❌ આઇટમ કાયમી ધોરણે ડિલીટ થઈ ગઈ.`);
     } else if (type === 'all_trash') {
+      const ordDeleted = getDeletedIds('prisha_orders_v4');
+      const trashDeleted = getDeletedIds('prisha_trash_v4');
+      trashList.forEach(item => {
+        trashDeleted.add(item.id);
+        if (item.type === 'order' && item.data) {
+          const ord = item.data as OrderRecord;
+          if (ord.attachedFiles) {
+            ord.attachedFiles.forEach(af => {
+              if (af.id) markCloudFileAsDeleted(af.id);
+            });
+          }
+          if (ord.id) {
+            markCloudFileAsDeleted(ord.id);
+            ordDeleted.add(ord.id);
+          }
+          if (ord.invoiceNo) {
+            markCloudFileAsDeleted(ord.invoiceNo);
+            ordDeleted.add(ord.invoiceNo);
+          }
+        }
+      });
+      saveDeletedIds('prisha_orders_v4', ordDeleted);
+      saveDeletedIds('prisha_trash_v4', trashDeleted);
       setTrashList([]);
       showToast('🧹 ટ્રેશ બિન આખું ખાલી થઈ ગયું!');
     }
@@ -1193,6 +1272,7 @@ export default function App() {
   const handleUpdateOrderStatus = (orderId: string, newStatus: OrderRecord['orderStatus']) => {
     const now = new Date();
     const timeFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const matchedOrder = orders.find(o => o.id === orderId);
 
     setOrders(prev =>
       prev.map(o => {
@@ -1207,7 +1287,23 @@ export default function App() {
         return o;
       })
     );
-    showToast(`✅ ઓર્ડર સ્ટેટસ અપડેટ થઈ ગયું!`);
+
+    if (newStatus === 'delivered' && matchedOrder) {
+      const custMobile = (matchedOrder.mobile || '').replace(/\D/g, '');
+      const custName = matchedOrder.customerName || 'ગ્રાહક';
+      const thankYouMsg = `🙏 *પ્રિષા સ્ટેશનરી & ઝેરોક્ષ* તરફથી નમસ્તે!\n\nઆદરણીય *${custName}*,\nઆપનો ઓર્ડર *#${matchedOrder.invoiceNo}* (કુલ રકમ: *₹${matchedOrder.total}*) સફળતાપૂર્વક પૂર્ણ અને ડિલિવર થઈ ગયો છે. ✅\n\nઅમારી સેવા પસંદ કરવા બદલ આપનો ખૂબ ખૂબ આભાર! 🌟\nફરી પધારજો! 😊\n\n- પ્રિષા સ્ટેશનરી & ઝેરોક્ષ\nસંચાલક: BHARAT CHAUDHARY`;
+
+      if (custMobile && custMobile.length >= 10) {
+        const clean10 = custMobile.slice(-10);
+        const waUrl = `https://wa.me/91${clean10}?text=${encodeURIComponent(thankYouMsg)}`;
+        window.open(waUrl, '_blank');
+        showToast(`📲 ગ્રાહક ${custName} ને WhatsApp આભાર મેસેજ મોકલાયો!`);
+      } else {
+        showToast(`✅ ઓર્ડર પૂર્ણ થયો! (ગ્રાહક મોબાઈલ નં. નોંધાયેલ નથી)`);
+      }
+    } else {
+      showToast(`✅ ઓર્ડર સ્ટેટસ અપડેટ થઈ ગયું!`);
+    }
   };
 
   // DIRECT INVENTORY STOCK NUMBER UPDATE (e.g. typing 100 directly)
@@ -4521,12 +4617,18 @@ export default function App() {
           onClose={() => setShowPrintJobsModal(false)}
           printJobs={printJobs}
           storeSettings={storeSettings}
-          cloudFiles={cloudPrintFiles}
+          cloudFiles={cloudPrintFiles.filter(cf => !isPurgedOrDeletedCloudFile(cf))}
+          onClearAllCloudFiles={() => {
+            setCloudPrintFiles([]);
+            setPrintJobs([]);
+          }}
           onUpdateJob={(jobId, updates) => {
             setPrintJobs(prev => prev.map(j => j.id === jobId ? { ...j, ...updates } : j));
           }}
           onDeleteJob={(jobId) => {
+            markCloudFileAsDeleted(jobId);
             setPrintJobs(prev => prev.filter(j => j.id !== jobId));
+            setCloudPrintFiles(prev => prev.filter(cf => cf.id !== jobId && cf.jobId !== jobId));
             showToast('🗑️ પ્રિન્ટ જોબ ડિલીટ થઈ!');
           }}
           onConvertToInvoice={(job, billItems, total) => {

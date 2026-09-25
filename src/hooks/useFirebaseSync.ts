@@ -199,8 +199,33 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     if (docName === 'printJobs') {
       return val.filter((j: any) => j && j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821' && j.jobNo !== 'PRN-6065');
     }
+    const staleOrderIds = new Set([
+      'ord-101', 'prisha000001',
+      'ord-1790243518565', 'prisha000064',
+      'ord-1789619617055', 'prisha000045',
+      'ord-prn-1789617045827', 'prisha000044',
+      'ord-1789560872066', 'prisha000043',
+      'ord-1789559671769', 'prisha000042',
+      'ord-1789559545392', 'prisha000040',
+      'ord-1789557527340', 'prisha000037',
+      'ord-prn-1789889379267', 'prisha000046',
+      'ord-1789559524696', 'prisha000039',
+      'ord-1790238420146', 'prisha000063',
+      'prisha000065'
+    ]);
     if (docName === 'orders') {
-      return val.filter((o: any) => o && o.id !== 'ord-101' && o.invoiceNo !== 'prisha000001');
+      return val.filter((o: any) => o && !staleOrderIds.has(o.id) && !staleOrderIds.has(o.invoiceNo));
+    }
+    if (docName === 'trash') {
+      return val.filter((t: any) => {
+        if (!t) return false;
+        if (t.id === 'trash-1790315079747' || t.id === 'trash-demo-1') return false;
+        const ordId = t.data?.id;
+        const ordInv = t.data?.invoiceNo;
+        if (ordId && staleOrderIds.has(ordId)) return false;
+        if (ordInv && staleOrderIds.has(ordInv)) return false;
+        return true;
+      });
     }
     return val;
   };
@@ -214,13 +239,31 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         const parsed = JSON.parse(saved);
         const cleaned = filterMockData(parsed);
         if (Array.isArray(cleaned)) {
-          initialVal = cleaned.filter((item: any) => !deletedIds.has(item?.id || item?.invoiceNo)) as unknown as T;
+          initialVal = cleaned.filter((item: any) => {
+            if (!item) return false;
+            const id = item.id;
+            const inv = item.invoiceNo;
+            const dataId = item.data?.id;
+            const dataInv = item.data?.invoiceNo;
+            if (id && deletedIds.has(id)) return false;
+            if (inv && deletedIds.has(inv)) return false;
+            if (dataId && deletedIds.has(dataId)) return false;
+            if (dataInv && deletedIds.has(dataInv)) return false;
+            return true;
+          }) as unknown as T;
         } else if (cleaned !== undefined && cleaned !== null) {
           initialVal = cleaned as T;
         }
       } catch (e) {}
     } else if (Array.isArray(initialData)) {
-      initialVal = (initialData as any[]).filter((item: any) => !deletedIds.has(item?.id || item?.invoiceNo)) as unknown as T;
+      initialVal = (initialData as any[]).filter((item: any) => {
+        if (!item) return false;
+        const id = item.id;
+        const inv = item.invoiceNo;
+        if (id && deletedIds.has(id)) return false;
+        if (inv && deletedIds.has(inv)) return false;
+        return true;
+      }) as unknown as T;
     }
     return initialVal;
   });
@@ -240,12 +283,30 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
             setData((prevData) => {
               const deletedIds = getDeletedIds(localKey);
               if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
-                const validCloudItems = rawCleaned.filter((item: any) => !deletedIds.has(item.id || item.invoiceNo));
+                const isItemDeleted = (item: any) => {
+                  if (!item) return true;
+                  const id = item.id;
+                  const inv = item.invoiceNo;
+                  const dataId = item.data?.id;
+                  const dataInv = item.data?.invoiceNo;
+                  if (id && deletedIds.has(id)) return true;
+                  if (inv && deletedIds.has(inv)) return true;
+                  if (dataId && deletedIds.has(dataId)) return true;
+                  if (dataInv && deletedIds.has(dataInv)) return true;
+                  return false;
+                };
+
+                const validCloudItems = rawCleaned.filter((item: any) => !isItemDeleted(item));
                 const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
-                const localUnsyncedItems = prevData.filter((localItem: any) => !deletedIds.has(localItem.id || localItem.invoiceNo) && !cloudIds.has(localItem.id || localItem.invoiceNo));
+                const localUnsyncedItems = prevData.filter((localItem: any) => !isItemDeleted(localItem) && !cloudIds.has(localItem.id || localItem.invoiceNo));
                 const localMap = new Map();
-                prevData.forEach((item: any) => { if (item) localMap.set(item.id || item.invoiceNo, item); });
-                const merged = [ ...validCloudItems.map((c: any) => localMap.has(c.id || c.invoiceNo) ? localMap.get(c.id || c.invoiceNo) : c), ...localUnsyncedItems];
+                prevData.forEach((item: any) => { 
+                  if (item) {
+                    if (item.id) localMap.set(item.id, item);
+                    if (item.invoiceNo) localMap.set(item.invoiceNo, item);
+                  }
+                });
+                const merged = [ ...validCloudItems.map((c: any) => localMap.has(c.id) ? localMap.get(c.id) : (c.invoiceNo && localMap.has(c.invoiceNo) ? localMap.get(c.invoiceNo) : c)), ...localUnsyncedItems];
                 safeLocalStorageSet(localKey, merged);
                 return merged as unknown as T;
               }
@@ -275,27 +336,35 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       if (Array.isArray(prev) && Array.isArray(next)) {
         const deletedIds = getDeletedIds(localKey);
         let changed = false;
-        const nextIds = new Set(next.map((item: any) => item?.id || item?.invoiceNo).filter(Boolean));
-        prev.forEach((item: any) => { 
-          const id = item?.id || item?.invoiceNo;
-          if (id && !nextIds.has(id)) { 
-            deletedIds.add(id); 
-            changed = true; 
-          } 
+        const nextIds = new Set<string>();
+        next.forEach((item: any) => {
+          if (item?.id) nextIds.add(item.id);
+          if (item?.invoiceNo) nextIds.add(item.invoiceNo);
         });
-        next.forEach((item: any) => { 
-          const id = item?.id || item?.invoiceNo;
-          if (id && deletedIds.has(id)) { 
-            deletedIds.delete(id); 
+        prev.forEach((item: any) => { 
+          if (item?.id && !nextIds.has(item.id)) { 
+            deletedIds.add(item.id); 
             changed = true; 
-          } 
+          }
+          if (item?.invoiceNo && !nextIds.has(item.invoiceNo)) {
+            deletedIds.add(item.invoiceNo);
+            changed = true;
+          }
+          if (item?.data?.id && !nextIds.has(item.data.id)) {
+            deletedIds.add(item.data.id);
+            changed = true;
+          }
+          if (item?.data?.invoiceNo && !nextIds.has(item.data.invoiceNo)) {
+            deletedIds.add(item.data.invoiceNo);
+            changed = true;
+          }
         });
         if (changed) saveDeletedIds(localKey, deletedIds);
       }
       
       safeLocalStorageSet(localKey, next);
       
-      // Force immediate write to server instead of debouncing
+      // Attempt write to server safely
       registerPendingWrite(docName, next);
       executeBatchedFirestoreWrites(); 
       

@@ -38,6 +38,8 @@ import {
   uploadFileObjectInChunks,
   deleteFileFromCloudStorage,
   getDeletedCloudFileIds,
+  markCloudFileAsDeleted,
+  isPurgedOrDeletedCloudFile,
   calculateFilePrice,
   isForeignBlobUrl,
   isCorruptedOrNeedsFetch,
@@ -58,6 +60,7 @@ interface AdminPrintJobsModalProps {
   onDeleteJob: (jobId: string) => void;
   onConvertToInvoice: (job: PrintJobRecord, billItems: BillItem[], total: number) => void;
   cloudFiles?: any[];
+  onClearAllCloudFiles?: () => void;
 }
 
 export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
@@ -68,7 +71,8 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
   onUpdateJob,
   onDeleteJob,
   onConvertToInvoice,
-  cloudFiles: propCloudFiles
+  cloudFiles: propCloudFiles,
+  onClearAllCloudFiles
 }) => {
   const [internalCloudFiles, setInternalCloudFiles] = useState<any[]>([]);
 
@@ -77,7 +81,10 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     const unsub = onSnapshot(collection(db, 'print_files'), (snap) => {
       const files: any[] = [];
       snap.forEach(doc => {
-        files.push(doc.data());
+        const data = doc.data();
+        if (data && !isPurgedOrDeletedCloudFile({ ...data, id: doc.id })) {
+          files.push({ ...data, id: doc.id });
+        }
       });
       files.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
       setInternalCloudFiles(files);
@@ -87,11 +94,10 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     return () => unsub();
   }, []);
 
-  const cloudFiles = (propCloudFiles && propCloudFiles.length > 0) ? propCloudFiles : internalCloudFiles;
+  const cloudFiles = (propCloudFiles !== undefined ? propCloudFiles : internalCloudFiles).filter(cf => !isPurgedOrDeletedCloudFile(cf));
 
   const effectiveJobs = useMemo(() => {
-    const baseJobs = Array.isArray(printJobs) ? [...printJobs] : [];
-    const deletedCloudIds = getDeletedCloudFileIds();
+    const baseJobs = (Array.isArray(printJobs) ? [...printJobs] : []).filter(j => !isPurgedOrDeletedCloudFile(j?.id) && !isPurgedOrDeletedCloudFile(j?.jobNo));
 
     // 1. Gather existing file IDs in baseJobs
     const existingFileIds = new Set<string>();
@@ -106,7 +112,7 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       cf && 
       cf.id && 
       !existingFileIds.has(cf.id) && 
-      !deletedCloudIds.has(cf.id)
+      !isPurgedOrDeletedCloudFile(cf)
     );
 
     // 3. GROUP unlinked files by jobId, or by (customerMobile + 15-min window)
@@ -239,17 +245,20 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     if (job.files && Array.isArray(job.files)) {
       for (const f of job.files) {
         if (f.id) {
+          markCloudFileAsDeleted(f.id);
           deleteFileFromCloudStorage(f.id).catch(() => {});
         }
       }
     }
     if (job.id.startsWith('cloud-')) {
       const rawFileId = job.id.replace('cloud-', '');
+      markCloudFileAsDeleted(rawFileId);
       deleteFileFromCloudStorage(rawFileId).catch(() => {});
       setInternalCloudFiles(prev => prev.filter(cf => cf.id !== rawFileId));
     }
+    markCloudFileAsDeleted(job.id);
     onDeleteJob(job.id);
-    showToast('🗑️ પ્રિન્ટ જોબ ડિલીટ કરાઈ!');
+    showToast('🗑️ પ્રિન્ટ જોબ કાયમી ડિલીટ થઈ ગઈ!');
   };
 
   if (!isOpen) return null;
@@ -579,11 +588,26 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
               <span>📲 ગ્રાહક અપલોડ QR & લિંક</span>
             </button>
 
-            {effectiveJobs.length > 0 && (
+            {(effectiveJobs.length > 0 || cloudFiles.length > 0) && (
               <button
                 type="button"
-                onClick={() => {
-                  effectiveJobs.forEach(j => handleDeleteJobWithCloud(j));
+                onClick={async () => {
+                  for (const j of effectiveJobs) {
+                    await handleDeleteJobWithCloud(j);
+                  }
+                  cloudFiles.forEach(cf => {
+                    if (cf) {
+                      if (cf.id) markCloudFileAsDeleted(cf.id);
+                      if (cf.jobId) markCloudFileAsDeleted(cf.jobId);
+                      if (cf.fileName) markCloudFileAsDeleted(cf.fileName);
+                      deleteFileFromCloudStorage(cf.id || cf.fileName).catch(() => {});
+                    }
+                  });
+                  setInternalCloudFiles([]);
+                  if (onClearAllCloudFiles) {
+                    onClearAllCloudFiles();
+                  }
+                  showToast('🧹 તમામ પ્રિન્ટ રિક્વેસ્ટ અને ક્લાઉડ ફાઇલો કાયમી ડિલીટ થઈ ગઈ!');
                 }}
                 className="bg-red-600/30 hover:bg-red-600 text-red-200 hover:text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 transition-colors cursor-pointer border border-red-500/40"
               >

@@ -189,16 +189,50 @@ export async function getFileFromStorage(fileId: string): Promise<string | null>
 // Persistent cache of deleted cloud file IDs to prevent deleted jobs from ever resurrecting
 const DELETED_FILES_KEY = 'prisha_deleted_cloud_file_ids';
 
+export const INITIAL_PURGED_FILE_IDS = new Set<string>([
+  'f-prn-1790243408261-959',
+  'f-prn-1790243533975-979',
+  'f-pvc-back-1790243432930-9405',
+  'f-pvc-front-1790243424482-6438'
+]);
+
+const INITIAL_PURGED_FILE_NAMES = new Set<string>([
+  'file_00000000094c8211954274a738589bb8.png',
+  'Screenshot_20260923-202624.YouTube.png',
+  'પાછળની બાજુ (Back) - Screenshot_20260914-074359.DMT _ Poster Maker~2.jpg',
+  'આગળની બાજુ (Front) - Screenshot_20260914-074453.DMT _ Poster Maker~2.jpg'
+]);
+
 export function getDeletedCloudFileIds(): Set<string> {
-  if (typeof window === 'undefined') return new Set();
+  const result = new Set<string>(INITIAL_PURGED_FILE_IDS);
+  if (typeof window === 'undefined') return result;
   try {
     const raw = localStorage.getItem(DELETED_FILES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return new Set(parsed);
+      if (Array.isArray(parsed)) {
+        parsed.forEach(id => result.add(id));
+      }
     }
   } catch (e) {}
-  return new Set();
+  return result;
+}
+
+export function isPurgedOrDeletedCloudFile(fileOrId: any): boolean {
+  if (!fileOrId) return true;
+  const deletedSet = getDeletedCloudFileIds();
+  if (typeof fileOrId === 'string') {
+    return deletedSet.has(fileOrId) || INITIAL_PURGED_FILE_IDS.has(fileOrId);
+  }
+  const id = fileOrId.id;
+  const jobId = fileOrId.jobId;
+  const fileName = fileOrId.fileName;
+
+  if (id && (deletedSet.has(id) || INITIAL_PURGED_FILE_IDS.has(id))) return true;
+  if (jobId && (deletedSet.has(jobId) || INITIAL_PURGED_FILE_IDS.has(jobId))) return true;
+  if (fileName && (deletedSet.has(fileName) || INITIAL_PURGED_FILE_NAMES.has(fileName))) return true;
+
+  return false;
 }
 
 export function markCloudFileAsDeleted(fileId: string): void {
@@ -786,6 +820,7 @@ export async function downloadFileSafely(
 export async function deleteFileFromCloudStorage(fileId: string): Promise<boolean> {
   if (!fileId) return false;
   markCloudFileAsDeleted(fileId);
+  if (globalQuotaExceeded) return true;
   try {
     const metaRef = doc(db, 'print_files', fileId);
     const metaSnap = await getDoc(metaRef);
@@ -800,9 +835,11 @@ export async function deleteFileFromCloudStorage(fileId: string): Promise<boolea
       await deleteDoc(metaRef).catch(() => {});
     }
     return true;
-  } catch (e) {
-    console.error('Delete cloud file error:', e);
-    return false;
+  } catch (e: any) {
+    if (e?.message?.includes('resource-exhausted') || e?.code === 'resource-exhausted') {
+      globalQuotaExceeded = true;
+    }
+    return true;
   }
 }
 
