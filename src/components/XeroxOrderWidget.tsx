@@ -99,6 +99,7 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
 
   const [instructions, setInstructions] = useState<string>('');
   const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [successOrderInfo, setSuccessOrderInfo] = useState<{ jobNo: string; title: string; price: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Pricing configuration from store settings
@@ -485,7 +486,12 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   const handleAddToCartAndAddAnother = () => {
     const item = createServiceProductItem();
     onAddToCart(item);
-    showToast(`🛒 "${item.nameGu.slice(0, 35)}..." કાર્ટમાં ઉમેરાઈ ગયું! હવે બીજી ફાઇલ ઉમેરો.`);
+    setSuccessOrderInfo({
+      jobNo: sessionJobId,
+      title: item.nameGu,
+      price: totalAmount
+    });
+    showToast(`🛒 ઓર્ડર ઉમેરાયો! નંબર: ${sessionJobId}. હવે બીજી ફાઇલ ઉમેરો.`);
     // Reset file states so the customer can instantly add another document
     setFile(null);
     setFileId('');
@@ -511,14 +517,23 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
   const handleAddToCartClick = () => {
     const item = createServiceProductItem();
     onAddToCart(item);
-    showToast(`🛒 "${item.nameGu.slice(0, 35)}..." કાર્ટમાં ઉમેરાઈ ગયું! (₹${totalAmount})`);
-    setIsOpenModal(false);
+    setSuccessOrderInfo({
+      jobNo: sessionJobId,
+      title: item.nameGu,
+      price: totalAmount
+    });
+    showToast(`🛒 ઓર્ડર સફળ! નંબર: ${sessionJobId} (₹${totalAmount})`);
   };
 
   const handleDirectOrderClick = () => {
     const item = createServiceProductItem();
     onDirectOrder(item);
-    setIsOpenModal(false);
+    setSuccessOrderInfo({
+      jobNo: sessionJobId,
+      title: item.nameGu,
+      price: totalAmount
+    });
+    showToast(`⚡ ડાયરેક્ટ ઓર્ડર સફળ! નંબર: ${sessionJobId} (₹${totalAmount})`);
   };
 
   const getFileIcon = (fileName: string) => {
@@ -1285,6 +1300,70 @@ export const XeroxOrderWidget: React.FC<XeroxOrderWidgetProps> = ({
 
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {successOrderInfo && (
+        <div className="fixed inset-0 bg-black/85 z-[60] flex items-center justify-center p-4 animate-fade-in no-print">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 border-2 border-orange-500 shadow-2xl text-center space-y-4">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-neutral-900 mb-1">
+                🎉 ઓર્ડર સફળતાપૂર્વક નોંધાઈ ગયો!
+              </h3>
+              <p className="text-xs text-neutral-500">
+                તમારી પ્રિન્ટ/ઝેરોક્ષ ફાઇલ સુરક્ષિત રીતે રિસીવ થઈ ગઈ છે.
+              </p>
+            </div>
+
+            <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-4 space-y-1">
+              <span className="text-[11px] font-bold text-orange-900 uppercase tracking-wide block">
+                તમારો ઓર્ડર / પ્રિન્ટ નંબર (Order No)
+              </span>
+              <div className="text-2xl font-black text-orange-600 tracking-wider">
+                #{successOrderInfo.jobNo}
+              </div>
+              <p className="text-[11px] text-neutral-600 font-bold truncate">
+                {successOrderInfo.title}
+              </p>
+              <p className="text-xs font-black text-neutral-900 pt-1">
+                કુલ રકમ: ₹{successOrderInfo.price}
+              </p>
+            </div>
+
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 text-xs text-blue-900 font-bold leading-relaxed">
+              💡 <b>નોંધ:</b> આ ઓર્ડર નંબર <b>#{successOrderInfo.jobNo}</b> સાચવી રાખો અથવા દુકાન પર કાઉન્ટર પર જણાવો.
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setSuccessOrderInfo(null);
+                  setIsOpenModal(false);
+                  setSessionJobId(`PRN-${Math.floor(1000 + Math.random() * 9000)}`);
+                }}
+                className="flex-1 py-3 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-black cursor-pointer shadow-md transition-all"
+              >
+                ઓકે (બંધ કરો)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSuccessOrderInfo(null);
+                  setFile(null);
+                  setFileBase64('');
+                  setSessionJobId(`PRN-${Math.floor(1000 + Math.random() * 9000)}`);
+                }}
+                className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-black rounded-xl text-xs font-black cursor-pointer shadow-md transition-all"
+              >
+                + બીજી ફાઇલ ઉમેરો
+              </button>
+            </div>
           </div>
         </div>
       )}

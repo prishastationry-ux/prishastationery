@@ -50,7 +50,8 @@ import {
   ArrowDownUp,
   Calculator,
   Smartphone,
-  Building
+  Building,
+  RefreshCw
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
@@ -79,7 +80,7 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
-import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds } from './hooks/useFirebaseSync';
+import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites } from './hooks/useFirebaseSync';
 import {
   deleteFileFromCloudStorage,
   downloadFileSafely,
@@ -1941,6 +1942,21 @@ export default function App() {
               >
                 <Share2 className="w-3.5 h-3.5 text-amber-400" />
                 <span>🔗 લિંક શેર કરો</span>
+              </button>
+            )}
+
+            {/* REAL-TIME CLOUD SYNC BUTTON */}
+            {isAdminUnlocked && (
+              <button
+                onClick={() => {
+                  executeBatchedFirestoreWrites();
+                  setShowMultiPlatformSyncModal(true);
+                }}
+                className="bg-purple-900 hover:bg-purple-800 text-purple-200 border border-purple-600 px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+                title="મોબાઇલ અને પીસી વચ્ચે ડેટા તાત્કાલિક સિન્ક કરો (Sync Now)"
+              >
+                <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+                <span>🔄 સિન્ક</span>
               </button>
             )}
 

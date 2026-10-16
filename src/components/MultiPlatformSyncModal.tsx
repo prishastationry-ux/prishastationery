@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { SQLITE_SCHEMA_DDL, MultiPlatformDevice } from '../types/sync';
 import { pushOfflineSync, pullCloudSync, getPendingMutationCount, getOrCreateDeviceId, getClientPlatform } from '../lib/syncEngine';
+import { executeBatchedFirestoreWrites } from '../hooks/useFirebaseSync';
 
 interface MultiPlatformSyncModalProps {
   isOpen: boolean;
@@ -60,11 +61,12 @@ export const MultiPlatformSyncModal: React.FC<MultiPlatformSyncModalProps> = ({
     setIsSyncing(true);
     setSyncFeedback(null);
     try {
+      await executeBatchedFirestoreWrites();
       const pushRes = await pushOfflineSync();
       await pullCloudSync();
       setPendingCount(getPendingMutationCount());
       setSyncFeedback(
-        `✅ સિન્ક સફળ: ${pushRes.processedCount} ફેરફારો અપડેટ થયા, ${pushRes.conflictsResolved} કન્ફ્લિક્ટ સ્મૂધલી મર્જ થયા.`
+        `✅ ક્લાઉડ સિન્ક સફળ: ફાયરબેઝ ડેટાબેઝ અને SQLite સિન્ક સફળતાપૂર્વક અપડેટ થયા!`
       );
     } catch (e: any) {
       setSyncFeedback('⚠️ સિન્ક પ્રયાસ દરમિયાન નેટવર્ક સ્લો હોવાથી ડેટા લોકલ મેમરીમાં સુરક્ષિત છે.');

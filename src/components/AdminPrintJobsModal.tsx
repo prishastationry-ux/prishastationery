@@ -547,6 +547,37 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
     showToast('📄 ૧ પેજ ઇન્વોઇસ બિલ બની ગયું!');
   };
 
+  const handleConvertCombinedMobileJobsToInvoice = (job: PrintJobRecord) => {
+    const targetMobile = (job.mobile || '').trim().replace(/\D/g, '');
+    const matchingJobs = effectiveJobs.filter(j => (j.mobile || '').trim().replace(/\D/g, '') === targetMobile);
+
+    const allFiles: PrintJobFile[] = [];
+    matchingJobs.forEach(j => {
+      if (j.files) j.files.forEach(f => allFiles.push(f));
+    });
+
+    const combinedJob: PrintJobRecord = {
+      ...job,
+      jobNo: `${job.jobNo} (કમ્બાઈન્ડ)`,
+      files: allFiles
+    };
+
+    const billItems: BillItem[] = allFiles.map((f, i) => {
+      const price = editingPrices[f.id] !== undefined ? editingPrices[f.id] : (f.pricePerUnit || calculateFilePrice(f, storeSettings));
+      return {
+        id: `item-comb-${Date.now()}-${i}`,
+        name: `પ્રિન્ટ સર્વિસ: ${f.fileName} (${f.paperSize}, ${f.colorMode === 'black_white' ? 'B&W' : 'Color'}, ${f.sideOption})`,
+        qty: f.copies || 1,
+        price: price / (f.copies || 1),
+        total: price
+      };
+    });
+
+    const total = billItems.reduce((s, b) => s + b.total, 0);
+    onConvertToInvoice(combinedJob, billItems, total);
+    showToast(`📄 મોબાઈલ નં. ${job.mobile} ના તમામ ${matchingJobs.length} ઓર્ડર્સનું ભેગું કમ્બાઈન્ડ બિલ બની ગયું!`);
+  };
+
   // Generate WhatsApp Invoice Message to Send to Customer
   const handleConfirmPayment = (job: PrintJobRecord) => {
     if (!window.confirm('શું તમે ખરેખર આ ઓર્ડરનું પેમેન્ટ વેરિફાય કરી લીધું છે? આનાથી ઓર્ડર "કમ્પ્લીટ" ગણાશે.')) return;
@@ -1104,6 +1135,16 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
                   >
                     <Printer className="w-4 h-4" />
                     <span>૧ પેજ બિલ બનાવો</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleConvertCombinedMobileJobsToInvoice(activeJob)}
+                    className="flex-1 sm:flex-none bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md"
+                    title="આ મોબાઈલ નંબરના આજના તમામ ઓર્ડર્સ ભેગા કરીને કમ્બાઈન્ડ બિલ બનાવો"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>📱 આજના બધા ઓર્ડર ભેગા કરી કમ્બાઈન્ડ બિલ</span>
                   </button>
                 </div>
               </div>

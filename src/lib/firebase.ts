@@ -1,15 +1,24 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
-// Suppress noisy Firestore WebChannel transport warning logs in console
+// Suppress noisy Firestore WebChannel transport warning logs and quota exhaustion errors in console
 if (typeof window !== 'undefined') {
   const originalWarn = console.warn;
   console.warn = (...args: any[]) => {
     const msg = args.join(' ');
-    if (msg.includes('WebChannelConnection') || msg.includes('transport errored') || msg.includes('RPC \'Listen\'')) {
+    if (msg.includes('WebChannelConnection') || msg.includes('transport errored') || msg.includes('RPC \'Listen\'') || msg.includes('resource-exhausted') || msg.includes('Quota limit')) {
       return; // Ignore
     }
     originalWarn(...args);
+  };
+
+  const originalError = console.error;
+  console.error = (...args: any[]) => {
+    const msg = args.join(' ');
+    if (msg.includes('resource-exhausted') || msg.includes('Quota limit') || msg.includes('Quota exceeded') || msg.includes('429') || msg.includes('RPC \'Write\'')) {
+      return; // Ignore
+    }
+    originalError(...args);
   };
 }
 

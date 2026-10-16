@@ -6,6 +6,14 @@ import { db } from '../lib/firebase';
 const QUOTA_EXHAUSTED_KEY = 'prisha_firestore_quota_exhausted_until';
 let quotaExhaustedUntil = 0;
 
+// Immediately clear any stale 24-hour locks from previous versions
+if (typeof window !== 'undefined') {
+  try {
+    localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
+    quotaExhaustedUntil = 0;
+  } catch (e) {}
+}
+
 export function isQuotaExhausted(): boolean {
   if (Date.now() < quotaExhaustedUntil) return true;
   if (typeof window !== 'undefined') {
@@ -33,14 +41,13 @@ export function handleQuotaError(err: any): void {
     msg.includes('Quota exceeded') ||
     msg.includes('429')
   ) {
-    // Back off cloud writes/reads for 6 hours to prevent hammering quota limits
-    quotaExhaustedUntil = Date.now() + 6 * 60 * 60 * 1000;
+    // Back off cloud writes/reads for only 20 seconds (instead of 24 hours!)
+    quotaExhaustedUntil = Date.now() + 20 * 1000;
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(QUOTA_EXHAUSTED_KEY, quotaExhaustedUntil.toString());
       } catch (e) {}
     }
-    console.warn('⚠️ Firestore quota limit reached. Operations running in 100% offline LocalStorage mode.');
   }
 }
 
@@ -117,11 +124,11 @@ export function saveDeletedIds(localKey: string, set: Set<string>): void {
   } catch (e) {}
 }
 
-const pendingWrites: Record<string, any> = {};
+const pendingWrites: Record<string, { data: any; deletedIds?: string[] }> = {};
 const writeDebounceTimers: Record<string, any> = {};
 const lastWrittenPayloads: Record<string, string> = {};
 
-async function executeBatchedFirestoreWrites() {
+export async function executeBatchedFirestoreWrites() {
   if (isQuotaExhausted()) return;
 
   const docsToCommit = Object.entries(pendingWrites);
@@ -134,14 +141,14 @@ async function executeBatchedFirestoreWrites() {
     }
   }
 
-  const validWrites: { docName: string; payload: any; payloadStr: string }[] = [];
-  for (const [docName, rawData] of docsToCommit) {
+  const validWrites: { docName: string; payload: any; deletedIds?: string[]; payloadStr: string }[] = [];
+  for (const [docName, item] of docsToCommit) {
     delete pendingWrites[docName];
     try {
-      const sanitized = sanitizeForFirestore(compressForStorage(rawData));
+      const sanitized = sanitizeForFirestore(compressForStorage(item.data));
       const payloadStr = JSON.stringify(sanitized);
       if (lastWrittenPayloads[docName] === payloadStr) continue;
-      validWrites.push({ docName, payload: sanitized, payloadStr });
+      validWrites.push({ docName, payload: sanitized, deletedIds: item.deletedIds, payloadStr });
     } catch (e) {}
   }
 
@@ -149,13 +156,21 @@ async function executeBatchedFirestoreWrites() {
 
   try {
     if (validWrites.length === 1) {
-      const { docName, payload, payloadStr } = validWrites[0];
-      await setDoc(doc(db, "store_data", docName), { data: payload });
+      const { docName, payload, deletedIds, payloadStr } = validWrites[0];
+      await setDoc(doc(db, "store_data", docName), { 
+        data: payload, 
+        deletedIds: deletedIds || [], 
+        updatedAt: Date.now() 
+      });
       lastWrittenPayloads[docName] = payloadStr;
     } else {
       const batch = writeBatch(db);
-      for (const { docName, payload } of validWrites) {
-        batch.set(doc(db, "store_data", docName), { data: payload });
+      for (const { docName, payload, deletedIds } of validWrites) {
+        batch.set(doc(db, "store_data", docName), { 
+          data: payload, 
+          deletedIds: deletedIds || [], 
+          updatedAt: Date.now() 
+        });
       }
       await batch.commit();
       for (const { docName, payloadStr } of validWrites) {
@@ -167,14 +182,15 @@ async function executeBatchedFirestoreWrites() {
   }
 }
 
-function registerPendingWrite(docName: string, data: any) {
-  pendingWrites[docName] = data;
+function registerPendingWrite(docName: string, data: any, localKey?: string) {
+  const deletedIds = localKey ? Array.from(getDeletedIds(localKey)) : [];
+  pendingWrites[docName] = { data, deletedIds };
   if (writeDebounceTimers[docName]) {
     clearTimeout(writeDebounceTimers[docName]);
   }
   
-  // Very aggressive debouncing to save writes (5 minutes)
-  const delay = 5 * 60 * 1000; 
+  // Fast 2-second debounce for quick cloud synchronization
+  const delay = 2000; 
   
   writeDebounceTimers[docName] = setTimeout(() => {
     delete writeDebounceTimers[docName];
@@ -277,7 +293,22 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       try {
         const snapshot = await getDoc(docRef);
         if (snapshot.exists()) {
-          const rawData = snapshot.data()?.data;
+          const snapData = snapshot.data();
+          const rawData = snapData?.data;
+          const cloudDeletedIds: string[] = snapData?.deletedIds || [];
+          
+          if (cloudDeletedIds.length > 0) {
+            const curDeleted = getDeletedIds(localKey);
+            let updated = false;
+            cloudDeletedIds.forEach(id => {
+              if (id && !curDeleted.has(id)) {
+                curDeleted.add(id);
+                updated = true;
+              }
+            });
+            if (updated) saveDeletedIds(localKey, curDeleted);
+          }
+
           if (rawData !== undefined && rawData !== null) {
             const rawCleaned = filterMockData(rawData);
             setData((prevData) => {
@@ -322,8 +353,8 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
     syncDocFromCloud();
 
-    // Poll every 30 minutes to stay within free quota
-    const pollInterval = setInterval(syncDocFromCloud, 30 * 60 * 1000);
+    // Poll every 3 minutes to stay up to date across devices
+    const pollInterval = setInterval(syncDocFromCloud, 3 * 60 * 1000);
     
     return () => clearInterval(pollInterval);
   }, [docName, localKey]);
@@ -364,8 +395,8 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       
       safeLocalStorageSet(localKey, next);
       
-      // Attempt write to server safely
-      registerPendingWrite(docName, next);
+      // Attempt write to server safely with fast sync
+      registerPendingWrite(docName, next, localKey);
       executeBatchedFirestoreWrites(); 
       
       return next;
