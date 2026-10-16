@@ -596,7 +596,9 @@ export default function App() {
       imageUrl: newProdImage || undefined,
       badge: newProdBadge || undefined,
       hsnCode: finalHsn || undefined,
-      gstRate: finalGst
+      gstRate: finalGst,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
     };
 
     setPosItems(prev => [newItem, ...prev]);
@@ -634,7 +636,8 @@ export default function App() {
         costPrice: Math.max(0, Number(editingItem.costPrice) || 0),
         mrp: editingItem.mrp ? Math.max(0, Number(editingItem.mrp) || 0) : undefined,
         hsnCode: finalHsn || undefined,
-        gstRate: finalGst
+        gstRate: finalGst,
+        updatedAt: Date.now()
       };
 
       setPosItems(prev => prev.map(p => (p.id === updatedItem.id ? updatedItem : p)));
@@ -780,7 +783,7 @@ export default function App() {
       prev.map(p => {
         const inC = cart.find(c => c.product.id === p.id);
         if (inC && typeof p.stock === 'number') {
-          return { ...p, stock: Math.max(0, p.stock - inC.quantity) };
+          return { ...p, stock: Math.max(0, p.stock - inC.quantity), updatedAt: Date.now() };
         }
         return p;
       })
@@ -1020,7 +1023,7 @@ export default function App() {
         prev.map(p => {
           const matched = ord.items.find(i => i.name === p.nameGu || i.name === p.nameEn);
           if (matched && typeof p.stock === 'number') {
-            return { ...p, stock: Math.max(0, p.stock - matched.qty) };
+            return { ...p, stock: Math.max(0, p.stock - matched.qty), updatedAt: Date.now() };
           }
           return p;
         })
@@ -1141,7 +1144,7 @@ export default function App() {
               it => it.productId === p.id || it.name === p.nameGu || it.name === p.nameEn
             );
             if (matchedItem && typeof p.stock === 'number') {
-              return { ...p, stock: p.stock + matchedItem.qty };
+              return { ...p, stock: p.stock + matchedItem.qty, updatedAt: Date.now() };
             }
             return p;
           })
@@ -1583,7 +1586,7 @@ export default function App() {
       prev.map(p => {
         const inB = billItems.find(b => b.productId === p.id || b.name === p.nameGu || b.name === p.nameEn);
         if (inB && typeof p.stock === 'number') {
-          return { ...p, stock: Math.max(0, p.stock - inB.qty) };
+          return { ...p, stock: Math.max(0, p.stock - inB.qty), updatedAt: Date.now() };
         }
         return p;
       })

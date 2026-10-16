@@ -31,6 +31,7 @@ export interface ProductItem {
   gstRate?: number; // e.g. 0, 5, 12, 18, 28
   minStockAlert?: number;
   createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface CartItem {

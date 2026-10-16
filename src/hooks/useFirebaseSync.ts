@@ -337,7 +337,21 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
                     if (item.invoiceNo) localMap.set(item.invoiceNo, item);
                   }
                 });
-                const merged = [ ...validCloudItems.map((c: any) => localMap.has(c.id) ? localMap.get(c.id) : (c.invoiceNo && localMap.has(c.invoiceNo) ? localMap.get(c.invoiceNo) : c)), ...localUnsyncedItems];
+                const merged = [
+                  ...validCloudItems.map((c: any) => {
+                    const local = (c.id && localMap.get(c.id)) || (c.invoiceNo && localMap.get(c.invoiceNo));
+                    if (!local) return c;
+                    // Compare timestamps so latest stock/price changes win
+                    const localTs = local.updatedAt || local.lastModified || 0;
+                    const cloudTs = c.updatedAt || c.lastModified || 0;
+                    if (localTs > cloudTs && localTs > 0) {
+                      return local;
+                    }
+                    // Default to cloud item so stock deductions and sales from any device sync accurately
+                    return c;
+                  }),
+                  ...localUnsyncedItems
+                ];
                 safeLocalStorageSet(localKey, merged);
                 return merged as unknown as T;
               }

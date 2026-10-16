@@ -17,7 +17,11 @@ import {
   Film,
   Newspaper,
   Crop,
-  Printer
+  Printer,
+  Download,
+  Upload,
+  ShieldCheck,
+  Database
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { compressAndResizeImage } from '../lib/invoiceUtils';
@@ -434,6 +438,117 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                     className="w-full p-2.5 bg-neutral-50 border border-neutral-300 rounded-xl font-bold text-neutral-900 outline-none focus:border-blue-700 text-xs"
                     placeholder="💥 ધમાકા ઓફર: સ્કૂલ સ્ટેશનરી, નોટબુક હોલસેલ ભાવે..."
                   />
+                </div>
+
+                {/* 1-CLICK COMPLETE STORE BACKUP & DATA SAFETY */}
+                <div className="sm:col-span-2 bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-orange-300 rounded-2xl p-4 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-xl bg-orange-600 text-white flex items-center justify-center shadow">
+                        <Database className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-black text-neutral-900">
+                          🛡️ સ્ટોર ડેટા બેકઅપ & સેફ્ટી (Data Backup & Stock Protection)
+                        </h4>
+                        <p className="text-[11px] text-neutral-600 font-bold">
+                          તમારો તમામ સ્ટોક, પ્રોડક્ટ્સ, બિલો અને રોજમેળ ક્યારેય ન ખોવાય તે માટે ૧-ક્લિકમાં સુરક્ષિત બેકઅપ સાચવો.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          const backupKeys = [
+                            'prisha_products_v4',
+                            'prisha_orders_v4',
+                            'prisha_store_settings_v4',
+                            'prisha_expenses_v5',
+                            'prisha_purchases_v5',
+                            'prisha_rojmel_v1',
+                            'prisha_khata_accounts_v2',
+                            'prisha_khata_tx_v1',
+                            'prisha_trash_v4',
+                            'prisha_print_jobs_v1',
+                            'prisha_products_v4_deleted_ids'
+                          ];
+                          const backupData: Record<string, any> = {
+                            appName: 'PRISHA STATIONERY & ONLINE SERVICES',
+                            backupDate: new Date().toISOString(),
+                            data: {}
+                          };
+                          backupKeys.forEach(k => {
+                            const val = localStorage.getItem(k);
+                            if (val) {
+                              try {
+                                backupData.data[k] = JSON.parse(val);
+                              } catch {
+                                backupData.data[k] = val;
+                              }
+                            }
+                          });
+                          const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          const dateStr = new Date().toISOString().slice(0, 10);
+                          a.href = url;
+                          a.download = `prisha_stationery_full_backup_${dateStr}.json`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                          showToast('💾 સંપૂર્ણ ડેટા બેકઅપ ફાઇલ ડાઉનલોડ થઈ ગઈ!');
+                        } catch (err: any) {
+                          showToast('❌ બેકઅપ ડાઉનલોડ કરવામાં ખામી આવી: ' + (err?.message || 'Error'));
+                        }
+                      }}
+                      className="py-2.5 px-3 bg-neutral-900 hover:bg-neutral-800 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all"
+                    >
+                      <Download className="w-4 h-4 text-orange-400" />
+                      <span>સંપૂર્ણ બેકઅપ ડાઉનલોડ કરો (Export)</span>
+                    </button>
+
+                    <label className="py-2.5 px-3 bg-white hover:bg-neutral-100 text-neutral-900 border-2 border-neutral-300 rounded-xl text-xs font-black flex items-center justify-center gap-1.5 cursor-pointer shadow-sm transition-all">
+                      <Upload className="w-4 h-4 text-blue-600" />
+                      <span>બેકઅપ ફાઇલ રીસ્ટોર કરો (Restore)</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            try {
+                              const content = event.target?.result as string;
+                              const parsed = JSON.parse(content);
+                              if (parsed && parsed.data) {
+                                Object.entries(parsed.data).forEach(([key, val]) => {
+                                  if (typeof val === 'object') {
+                                    localStorage.setItem(key, JSON.stringify(val));
+                                  } else if (typeof val === 'string') {
+                                    localStorage.setItem(key, val);
+                                  }
+                                });
+                                showToast('✅ બેકઅપ સફળતાપૂર્વક રીસ્ટોર થઈ ગયું! પેજ રિફ્રેશ થઈ રહ્યું છે...');
+                                setTimeout(() => window.location.reload(), 1500);
+                              } else {
+                                showToast('❌ અમાન્ય બેકઅપ ફાઇલ!');
+                              }
+                            } catch {
+                              showToast('❌ બેકઅપ ફાઇલ વાંચવામાં ભૂલ થઈ!');
+                            }
+                          };
+                          reader.readAsText(file);
+                        }}
+                      />
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
