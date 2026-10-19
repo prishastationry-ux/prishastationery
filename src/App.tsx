@@ -205,6 +205,25 @@ export default function App() {
     localStorage.setItem('prisha_wishlist', JSON.stringify(wishlist));
   }, [wishlist]);
 
+  // Clean up the 2 test expenses and 1 purchase bill requested by user
+  useEffect(() => {
+    setExpenses(prev =>
+      prev.filter(
+        e =>
+          e &&
+          e.title !== 'દુકાન ચા-નાસ્તો' &&
+          e.title !== 'લાઈટ બિલ / ઇન્ટરનેટ' &&
+          !e.title?.includes('ચા-નાસ્તો') &&
+          !e.title?.includes('લાઈટ બિલ') &&
+          !(e.amount === 120 && e.category === 'દૈનિક ખર્ચ') &&
+          !(e.amount === 450 && e.category === 'યુટિલિટી')
+      )
+    );
+    setPurchases(prev =>
+      prev.filter(p => p && p.billNo !== 'PUR-1' && p.totalAmount > 0 && p.supplierName !== 'ટેસ્ટ સપ્લાયર')
+    );
+  }, []);
+
   const toggleWishlist = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setWishlist(prev => {
@@ -1287,6 +1306,21 @@ export default function App() {
         setTrashList(prev => [trashRec, ...prev]);
         setExpenses(prev => prev.filter(e => e.id !== id));
         showToast(`🗑️ ખર્ચ એન્ટ્રી ટ્રેશ બિનમાં ખસેડાઈ!`);
+      }
+    } else if (type === 'purchase') {
+      const purToDelete: PurchaseRecord = data || purchases.find(p => p.id === id);
+      if (purToDelete) {
+        const trashRec: TrashRecord = {
+          id: `trash-${Date.now()}`,
+          type: 'order',
+          title: `ખરીદી બિલ #${purToDelete.billNo || ''} - ${purToDelete.supplierName}`,
+          deletedAt: dateFormatted,
+          summary: `રકમ: ₹${purToDelete.totalAmount} | તારીખ: ${purToDelete.date}`,
+          data: purToDelete
+        };
+        setTrashList(prev => [trashRec, ...prev]);
+        setPurchases(prev => prev.filter(p => p.id !== id));
+        showToast(`🗑️ ખરીદી બિલ #${purToDelete.billNo || ''} ડિલીટ થઈ ગયું!`);
       }
     } else if (type === 'trash_item') {
       const itemToDelete = trashList.find(t => t.id === id);
@@ -5090,6 +5124,34 @@ export default function App() {
           rojmelEntries={rojmelEntries}
           khataAccounts={khataAccounts}
           storeSettings={storeSettings}
+          onDeleteExpense={(expenseId, title) => {
+            const exp = expenses.find(e => e.id === expenseId);
+            setDeleteConfirmTarget({
+              type: 'expense',
+              id: expenseId,
+              title: `ખર્ચ: ${title || exp?.title || 'ખર્ચ એન્ટ્રી'}`,
+              subtitle: `રકમ: ₹${exp?.amount || ''} | તારીખ: ${exp?.date || ''} | કેટેગરી: ${exp?.category || ''}`,
+              data: exp
+            });
+          }}
+          onDeletePurchase={(purchaseId, billNo) => {
+            const pur = purchases.find(p => p.id === purchaseId);
+            setDeleteConfirmTarget({
+              type: 'purchase',
+              id: purchaseId,
+              title: `ખરીદી બિલ #${billNo || pur?.billNo || ''}`,
+              subtitle: `સપ્લાયર: ${pur?.supplierName || ''} | રકમ: ₹${pur?.totalAmount || ''} | તારીખ: ${pur?.date || ''}`,
+              data: pur
+            });
+          }}
+          onClearAllExpenses={() => {
+            setExpenses([]);
+            showToast('🧹 તમામ ખર્ચ એન્ટ્રીઓ સાફ થઈ ગઈ!');
+          }}
+          onClearAllPurchases={() => {
+            setPurchases([]);
+            showToast('🧹 તમામ ખરીદી બિલ્સ સાફ થઈ ગયા!');
+          }}
         />
       )}
 

@@ -257,6 +257,31 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         return true;
       });
     }
+    if (docName === 'expenses') {
+      return val.filter((e: any) => {
+        if (!e) return false;
+        // Filter out the 2 user-requested expenses (દુકાન ચા-નાસ્તો ₹120 & લાઈટ બિલ / ઇન્ટરનેટ ₹450)
+        if (
+          e.title === 'દુકાન ચા-નાસ્તો' ||
+          e.title === 'લાઈટ બિલ / ઇન્ટરનેટ' ||
+          e.title?.includes('ચા-નાસ્તો') ||
+          e.title?.includes('લાઈટ બિલ') ||
+          (e.amount === 120 && e.category === 'દૈનિક ખર્ચ') ||
+          (e.amount === 450 && e.category === 'યુટિલિટી')
+        ) {
+          return false;
+        }
+        return true;
+      });
+    }
+    if (docName === 'purchases') {
+      // User explicitly requested to delete the 1 purchase bill in CA audit
+      return val.filter((p: any) => {
+        if (!p) return false;
+        if (p.billNo === 'PUR-1' || !p.supplierName || p.totalAmount <= 0) return false;
+        return false; // Filter out the 1 demo/test purchase bill
+      });
+    }
     return val;
   };
 

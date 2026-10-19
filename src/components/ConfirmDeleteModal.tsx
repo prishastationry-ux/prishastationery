@@ -2,7 +2,7 @@ import React from 'react';
 import { Trash2, AlertTriangle, X, ShieldAlert, ArrowLeft } from 'lucide-react';
 
 export interface DeleteTargetInfo {
-  type: 'product' | 'order' | 'expense' | 'all_trash' | 'trash_item';
+  type: 'product' | 'order' | 'expense' | 'purchase' | 'all_trash' | 'trash_item';
   id: string;
   title: string;
   subtitle?: string;
@@ -42,6 +42,7 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
                 {target.type === 'product' && 'પ્રોડક્ટ સ્ટોકમાંથી દૂર થશે'}
                 {target.type === 'order' && 'બિલ ડિલીટ થશે (માલ સ્ટોકમાં જમા થશે)'}
                 {target.type === 'expense' && 'ખર્ચ એન્ટ્રી દૂર થશે'}
+                {target.type === 'purchase' && 'ખરીદી બિલ રેકોર્ડ દૂર થશે'}
                 {target.type === 'trash_item' && 'કાયમી ધોરણે ડિલીટ થશે'}
                 {target.type === 'all_trash' && 'તમામ ડેટા કાયમી ધોરણે સાફ થઈ જશે'}
               </p>

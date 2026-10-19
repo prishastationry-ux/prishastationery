@@ -15,7 +15,8 @@ import {
   UserCheck,
   Building2,
   Filter,
-  FileDown
+  FileDown,
+  Trash2
 } from 'lucide-react';
 import {
   OrderRecord,
@@ -39,6 +40,10 @@ interface CaAuditModalProps {
   rojmelEntries?: RojmelEntry[];
   khataAccounts?: KhataAccount[];
   storeSettings: StoreSettings;
+  onDeleteExpense?: (expenseId: string, expenseTitle?: string) => void;
+  onDeletePurchase?: (purchaseId: string, billNo?: string) => void;
+  onClearAllExpenses?: () => void;
+  onClearAllPurchases?: () => void;
 }
 
 type PeriodFilter = 'current_month' | 'last_month' | 'fy_current' | 'all' | 'custom';
@@ -54,7 +59,11 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
   purchases = [],
   rojmelEntries = [],
   khataAccounts = [],
-  storeSettings
+  storeSettings,
+  onDeleteExpense,
+  onDeletePurchase,
+  onClearAllExpenses,
+  onClearAllPurchases
 }) => {
   const products = initialProducts.length > 0 ? initialProducts : posItems;
   const [period, setPeriod] = useState<PeriodFilter>('current_month');
@@ -1162,18 +1171,31 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
           {/* 3. PURCHASES REGISTER TAB */}
           {activeTab === 'purchases' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-black text-neutral-800">
                   ખરીદી રજિસ્ટર (GSTR-2 Format) • કુલ {filteredPurchases.length} ખરીદી બિલ્સ
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleExportCsv('purchases')}
-                  className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>ખરીદી Excel ડાઉનલોડ</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {onClearAllPurchases && filteredPurchases.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={onClearAllPurchases}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all"
+                      title="તમામ ખરીદી બિલ્સ ડિલીટ કરો"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                      <span>બધી ખરીદી ખાલી કરો</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleExportCsv('purchases')}
+                    className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>ખરીદી Excel ડાઉનલોડ</span>
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white rounded-xl border border-neutral-200 overflow-x-auto shadow-xs">
@@ -1187,12 +1209,13 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
                       <th className="p-2.5">કેટેગરી</th>
                       <th className="p-2.5">વિગત</th>
                       <th className="p-2.5 text-right">રકમ (₹)</th>
+                      <th className="p-2.5 text-center">એક્શન</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
                     {filteredPurchases.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-4 text-center text-neutral-500">
+                        <td colSpan={8} className="p-4 text-center text-neutral-500">
                           પસંદ કરેલ સમયગાળામાં કોઈ ખરીદી નોંધાયેલ નથી.
                         </td>
                       </tr>
@@ -1208,6 +1231,19 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
                           <td className="p-2.5 text-right font-black text-black">
                             ₹{Number(p.totalAmount).toFixed(2)}
                           </td>
+                          <td className="p-2.5 text-center">
+                            {onDeletePurchase && (
+                              <button
+                                type="button"
+                                onClick={() => onDeletePurchase(p.id, p.billNo || p.supplierName)}
+                                className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-md font-bold text-xs inline-flex items-center gap-1 border border-red-200 cursor-pointer transition-all"
+                                title="આ ખરીદી બિલ ડિલીટ કરો"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                                <span>ડિલીટ</span>
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -1217,6 +1253,7 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
                       <tr>
                         <td colSpan={6} className="p-2.5 text-right">કુલ ખરીદી સરવાળો:</td>
                         <td className="p-2.5 text-right text-purple-900">₹{totalPurchasesAmount.toFixed(2)}</td>
+                        <td></td>
                       </tr>
                     </tfoot>
                   )}
@@ -1228,18 +1265,31 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
           {/* 4. EXPENSES REGISTER TAB */}
           {activeTab === 'expenses' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-xs font-black text-neutral-800">
                   ખર્ચ રજિસ્ટર (Expense Ledger) • કુલ {filteredExpenses.length} વાઉચર્સ
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleExportCsv('expenses')}
-                  className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>ખર્ચ Excel ડાઉનલોડ</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  {onClearAllExpenses && filteredExpenses.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={onClearAllExpenses}
+                      className="bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 text-xs font-bold px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all"
+                      title="તમામ ખર્ચ એન્ટ્રીઓ ડિલીટ કરો"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                      <span>બધા ખર્ચ ખાલી કરો</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleExportCsv('expenses')}
+                    className="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-3 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>ખર્ચ Excel ડાઉનલોડ</span>
+                  </button>
+                </div>
               </div>
 
               <div className="bg-white rounded-xl border border-neutral-200 overflow-x-auto shadow-xs">
@@ -1252,12 +1302,13 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
                       <th className="p-2.5">વિગત / કારણ</th>
                       <th className="p-2.5">પેમેન્ટ</th>
                       <th className="p-2.5 text-right">રકમ (₹)</th>
+                      <th className="p-2.5 text-center">એક્શન</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200">
                     {filteredExpenses.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="p-4 text-center text-neutral-500">
+                        <td colSpan={7} className="p-4 text-center text-neutral-500">
                           પસંદ કરેલ સમયગાળામાં કોઈ ખર્ચ નોંધાયેલ નથી.
                         </td>
                       </tr>
@@ -1272,6 +1323,19 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
                           <td className="p-2.5 text-right font-black text-red-700">
                             ₹{Number(e.amount).toFixed(2)}
                           </td>
+                          <td className="p-2.5 text-center">
+                            {onDeleteExpense && (
+                              <button
+                                type="button"
+                                onClick={() => onDeleteExpense(e.id, e.title)}
+                                className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 rounded-md font-bold text-xs inline-flex items-center gap-1 border border-red-200 cursor-pointer transition-all"
+                                title="આ ખર્ચ એન્ટ્રી ડિલીટ કરો"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                                <span>ડિલીટ</span>
+                              </button>
+                            )}
+                          </td>
                         </tr>
                       ))
                     )}
@@ -1281,6 +1345,7 @@ export const CaAuditModal: React.FC<CaAuditModalProps> = ({
                       <tr>
                         <td colSpan={5} className="p-2.5 text-right">કુલ ખર્ચ સરવાળો:</td>
                         <td className="p-2.5 text-right text-red-700">₹{totalExpensesAmount.toFixed(2)}</td>
+                        <td></td>
                       </tr>
                     </tfoot>
                   )}
