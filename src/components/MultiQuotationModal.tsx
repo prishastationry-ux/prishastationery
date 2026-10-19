@@ -763,12 +763,22 @@ export default function MultiQuotationModal({
               <div className="sm:col-span-2">
                 <label className="block text-[10px] text-neutral-600 mb-0.5">એકમ (Unit):</label>
                 <input
+                  list="quotation-unit-list"
                   type="text"
-                  placeholder="નંગ/રિમ"
+                  placeholder="નંગ / પેકેટ / સેટ / રીમ"
                   value={newItemUnit}
                   onChange={e => setNewItemUnit(e.target.value)}
                   className="w-full text-xs font-bold p-1.5 border border-neutral-300 rounded-lg outline-none"
                 />
+                <datalist id="quotation-unit-list">
+                  <option value="નંગ">નંગ (Pcs)</option>
+                  <option value="પેકેટ">પેકેટ (Packet)</option>
+                  <option value="સેટ">સેટ (Set)</option>
+                  <option value="રીમ">રીમ (Ream)</option>
+                  <option value="બોક્સ">બોક્સ (Box)</option>
+                  <option value="ડઝન">ડઝન (Dozen)</option>
+                  <option value="કિલો">કિલો (Kg)</option>
+                </datalist>
               </div>
 
               <div className="sm:col-span-2">

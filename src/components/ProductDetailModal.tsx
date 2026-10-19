@@ -226,7 +226,7 @@ export const ProductDetailModal: React.FC<ProductDetailModalProps> = ({
           <div className="text-xs font-bold text-neutral-600">
             {cartQuantity > 0 ? (
               <span className="text-emerald-700 font-black">
-                ✓ કાર્ટમાં {cartQuantity} નંગ ઉમેરેલ છે
+                ✓ કાર્ટમાં {cartQuantity} {product.unit || 'નંગ'} ઉમેરેલ છે
               </span>
             ) : (
               <span>પ્રિષા સ્ટેશનરી થરાદ</span>

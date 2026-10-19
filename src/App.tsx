@@ -97,6 +97,21 @@ import { db } from './lib/firebase';
 import { getDefaultLeftLogoSvg, getDefaultRightLogoSvg } from './lib/invoiceUtils';
 import { detectHsnAndGst, HSN_SAC_DIRECTORY } from './lib/gstHsnMaster';
 
+export const STANDARD_PRODUCT_UNITS = [
+  { id: 'નંગ', label: '📦 નંગ (Pcs)', short: 'નંગ' },
+  { id: 'પેકેટ', label: '🛍️ પેકેટ (Pkt)', short: 'પેકેટ' },
+  { id: 'સેટ', label: '🎁 સેટ (Set)', short: 'સેટ' },
+  { id: 'રીમ', label: '📄 રીમ (Ream)', short: 'રીમ' },
+  { id: 'બોક્સ', label: '📦 બોક્સ (Box)', short: 'બોક્સ' },
+  { id: 'કિલો', label: '⚖️ કિલો (Kg)', short: 'કિલો' },
+  { id: 'ગ્રામ', label: '⚖️ ગ્રામ (Gm)', short: 'ગ્રામ' },
+  { id: 'ડઝન', label: '📏 ડઝન (Doz)', short: 'ડઝન' },
+  { id: 'લીટર', label: '💧 લીટર (Ltr)', short: 'લીટર' },
+  { id: 'મીટર', label: '📐 મીટર (Mtr)', short: 'મીટર' },
+  { id: 'પેજ', label: '📄 પેજ (Page)', short: 'પેજ' },
+  { id: 'સેવા', label: '⚡ સેવા (Job)', short: 'સેવા' }
+];
+
 export default function App() {
   // Global cloud print files uploaded by mobile/remote customers
   const [cloudPrintFiles, setCloudPrintFiles] = useState<any[]>([]);
@@ -328,6 +343,7 @@ export default function App() {
   const [customPosName, setCustomPosName] = useState<string>('');
   const [customPosPrice, setCustomPosPrice] = useState<string>('50');
   const [customPosQty, setCustomPosQty] = useState<string>('1');
+  const [customPosUnit, setCustomPosUnit] = useState<string>('નંગ');
 
   // Visitor Counter - increments realistically on each load / visit
   const [visitorCount, setVisitorCount] = useState<string>(() => {
@@ -591,7 +607,7 @@ export default function App() {
       bulkPricing: newProdBulkPricing || undefined,
       isHidden: newProdIsHidden,
       isService: newProdCategory === 'service',
-      unit: newProdUnit || 'નંગ',
+      unit: (newProdUnit || 'નંગ').trim(),
       icon: newProdIcon || '📦',
       imageUrl: newProdImage || undefined,
       badge: newProdBadge || undefined,
@@ -610,9 +626,25 @@ export default function App() {
     setNewProdGstRate(18);
     setNewProdMrp('');
     setNewProdBulkPricing('');
+    setNewProdUnit('નંગ');
     setNewProdIsHidden(false);
     setIsAddingNewItem(false);
-    showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (HSN: ${finalHsn || 'N/A'}, GST: ${finalGst}%)`);
+    showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
+  };
+
+  // Quick Unit Change (નંગ / પેકેટ / સેટ / રીમ / બોક્સ / વગેરે) safely without losing data
+  const handleQuickUnitChange = (productId: string, newUnit: string) => {
+    const cleanUnit = (newUnit || 'નંગ').trim();
+    setPosItems(prev =>
+      prev.map(p => {
+        if (p.id === productId) {
+          const updated: ProductItem = { ...p, unit: cleanUnit, updatedAt: Date.now() };
+          showToast(`🏷️ "${p.nameGu}" નો એકમ બદલાઈને "${cleanUnit}" થયો!`);
+          return updated;
+        }
+        return p;
+      })
+    );
   };
 
   // Save Item Modifications
@@ -630,6 +662,7 @@ export default function App() {
         nameGu: (editingItem.nameGu || '').trim(),
         nameEn: (editingItem.nameEn || '').trim(),
         category: ((editingItem.category as string) || 'stationery').trim(),
+        unit: (editingItem.unit || 'નંગ').trim(),
         isService,
         stock: parsedStock,
         price: Math.max(0, Number(editingItem.price) || 0),
@@ -641,7 +674,7 @@ export default function App() {
       };
 
       setPosItems(prev => prev.map(p => (p.id === updatedItem.id ? updatedItem : p)));
-      showToast(`✏️ "${updatedItem.nameGu}" (HSN: ${finalHsn || 'N/A'}, GST: ${finalGst}%) સેવ થઈ ગયું!`);
+      showToast(`✏️ "${updatedItem.nameGu}" (${updatedItem.unit}) સેવ થઈ ગયું!`);
       setEditingItem(null);
     }
   };
@@ -1539,13 +1572,14 @@ export default function App() {
         name: customPosName.trim(),
         qty,
         price,
-        unit: 'નંગ'
+        unit: (customPosUnit || 'નંગ').trim()
       }
     ]);
 
     setCustomPosName('');
     setCustomPosPrice('50');
     setCustomPosQty('1');
+    setCustomPosUnit('નંગ');
     setShowCustomPosInput(false);
     showToast(`➕ કસ્ટમ આઇટમ બિલમાં ઉમેરાઈ!`);
   };
@@ -2368,7 +2402,7 @@ export default function App() {
                         </div>
                       ) : (
                         <span className="text-neutral-800 bg-white/95 px-2 py-0.5 rounded-md border border-neutral-300 font-extrabold backdrop-blur-xs">
-                          સ્ટોક: {item.stock} {item.unit}
+                          સ્ટોક: {item.stock} {item.unit || 'નંગ'}
                         </span>
                       )}
                     </div>
@@ -2410,7 +2444,7 @@ export default function App() {
                           </span>
                         )}
                         <span className="text-[10px] text-neutral-500 font-bold ml-1">
-                          / {item.unit}
+                          / {item.unit || 'નંગ'}
                         </span>
                       </div>
 
@@ -2873,15 +2907,27 @@ export default function App() {
                         placeholder="ભાવ ₹"
                         value={customPosPrice}
                         onChange={e => setCustomPosPrice(e.target.value)}
-                        className="w-20 text-xs font-bold p-1.5 bg-white border border-neutral-300 rounded-lg outline-none"
+                        className="w-16 text-xs font-bold p-1.5 bg-white border border-neutral-300 rounded-lg outline-none"
                       />
                       <input
                         type="number"
                         placeholder="જથ્થો"
                         value={customPosQty}
                         onChange={e => setCustomPosQty(e.target.value)}
-                        className="w-16 text-xs font-bold p-1.5 bg-white border border-neutral-300 rounded-lg outline-none"
+                        className="w-14 text-xs font-bold p-1.5 bg-white border border-neutral-300 rounded-lg outline-none"
                       />
+                      <select
+                        value={customPosUnit}
+                        onChange={e => setCustomPosUnit(e.target.value)}
+                        className="text-xs font-black p-1.5 bg-amber-50 border border-amber-300 text-amber-950 rounded-lg cursor-pointer outline-none"
+                        title="એકમ પસંદ કરો (નંગ / પેકેટ / સેટ / રીમ...)"
+                      >
+                        {STANDARD_PRODUCT_UNITS.map(u => (
+                          <option key={u.id} value={u.id}>
+                            {u.short}
+                          </option>
+                        ))}
+                      </select>
                       <button
                         type="submit"
                         className="flex-1 bg-blue-800 hover:bg-blue-900 text-white text-xs font-black py-1.5 rounded-lg cursor-pointer"
@@ -3371,6 +3417,7 @@ export default function App() {
                     <th className="p-2">કેટેગરી</th>
                     <th className="p-2">વેચાણ ભાવ</th>
                     <th className="p-2">ખરીદ ભાવ</th>
+                    <th className="p-2 text-center">એકમ (Unit)</th>
                     <th className="p-2 text-center">હાજર સ્ટોક (ડાયરેક્ટ અપડેટ)</th>
                     <th className="p-2 text-right">એક્શન</th>
                   </tr>
@@ -3402,6 +3449,25 @@ export default function App() {
                       </td>
                       <td className="p-2 font-bold text-neutral-600">₹{item.costPrice}</td>
                       
+                      {/* QUICK UNIT SELECTOR (નંગ / પેકેટ / સેટ / રીમ / બોક્સ / વગેરે) */}
+                      <td className="p-2 text-center">
+                        <select
+                          value={item.unit || 'નંગ'}
+                          onChange={e => handleQuickUnitChange(item.id, e.target.value)}
+                          className="text-[11px] font-black px-2 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs cursor-pointer outline-none transition-colors"
+                          title="આ વસ્તુનો એકમ બદલો (સેટ / પેકેટ / નંગ / રીમ / વગેરે)"
+                        >
+                          {STANDARD_PRODUCT_UNITS.map(u => (
+                            <option key={u.id} value={u.id}>
+                              {u.short}
+                            </option>
+                          ))}
+                          {!STANDARD_PRODUCT_UNITS.some(u => u.id === (item.unit || 'નંગ')) && (
+                            <option value={item.unit}>{item.unit}</option>
+                          )}
+                        </select>
+                      </td>
+
                       {/* DIRECT STOCK NUMBER INPUT + QUICK +/- BUTTONS */}
                       <td className="p-2 text-center">
                         <div className="flex items-center justify-center gap-1.5">
@@ -3428,6 +3494,10 @@ export default function App() {
                             className="w-16 text-center font-black text-xs py-1 px-1.5 border-2 border-neutral-300 rounded-md focus:border-orange-500 outline-none bg-white text-neutral-900"
                             title="અહીં સીધો સ્ટોક નંબર લખો (દા.ત. 100)"
                           />
+
+                          <span className="text-[10px] font-black text-neutral-500 shrink-0">
+                            {item.unit || 'નંગ'}
+                          </span>
 
                           <button
                             type="button"
@@ -3592,13 +3662,71 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="font-bold block mb-1">સ્ટોક જથ્થો</label>
+                  <label className="font-bold block mb-1">
+                    સ્ટોક જથ્થો ({newProdUnit || 'નંગ'})
+                  </label>
                   <input
                     type="number"
                     value={newProdStock}
                     onChange={e => setNewProdStock(e.target.value)}
                     className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
                   />
+                </div>
+              </div>
+
+              {/* UNIT SELECTION - સેટ / પેકેટ / નંગ / રીમ / બોક્સ / વગેરે */}
+              <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-300 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
+                    <span>🏷️ વસ્તુનો એકમ (Unit) સેટ કરો *</span>
+                  </label>
+                  <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-400 text-black border border-amber-500 shadow-2xs">
+                    પસંદ કરેલ: {newProdUnit || 'નંગ'}
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-amber-900 font-bold">
+                  વસ્તુ મુજબ યોગ્ય એકમ પસંદ કરો (જેમ કે પેન સેટ હોય તો &apos;સેટ&apos;, નોટબુક પેકેટ હોય તો &apos;પેકેટ&apos;, છૂટક હોય તો &apos;નંગ&apos;):
+                </p>
+
+                {/* 1-Click Fast Buttons for All Common Units */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-0.5">
+                  {STANDARD_PRODUCT_UNITS.map(u => {
+                    const isSelected = (newProdUnit || 'નંગ') === u.id;
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => setNewProdUnit(u.id)}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1 text-center ${
+                          isSelected
+                            ? 'bg-amber-500 text-black border-amber-600 shadow-xs ring-2 ring-amber-400 font-black scale-[1.02]'
+                            : 'bg-white text-neutral-800 border-neutral-300 hover:bg-neutral-100 hover:border-neutral-400'
+                        }`}
+                      >
+                        {isSelected && <span className="text-black font-black">✓</span>}
+                        <span>{u.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom unit input fallback */}
+                <div className="pt-1 flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-neutral-600 shrink-0">અન્ય એકમ લખો:</span>
+                  <input
+                    list="new-unit-list"
+                    type="text"
+                    value={newProdUnit}
+                    onChange={e => setNewProdUnit(e.target.value)}
+                    placeholder="દા.ત. સેટ, પેકેટ, નંગ, બોક્સ, રીમ"
+                    className="flex-1 font-bold p-1.5 bg-white border border-amber-300 rounded-lg outline-none text-xs focus:ring-1 focus:ring-amber-500"
+                  />
+                  <datalist id="new-unit-list">
+                    {STANDARD_PRODUCT_UNITS.map(u => (
+                      <option key={u.id} value={u.id}>{u.label}</option>
+                    ))}
+                  </datalist>
                 </div>
               </div>
 
@@ -4011,7 +4139,7 @@ export default function App() {
                 </div>
                 <div>
                   <label className="font-bold block mb-1">
-                    {editingItem.category === 'service' || editingItem.isService ? 'સેવા પ્રકાર (Service)' : 'હાજર સ્ટોક જથ્થો'}
+                    {editingItem.category === 'service' || editingItem.isService ? 'સેવા પ્રકાર (Service)' : `હાજર સ્ટોક જથ્થો (${editingItem.unit || 'નંગ'})`}
                   </label>
                   {editingItem.category === 'service' || editingItem.isService ? (
                     <div className="p-2 border border-blue-200 bg-blue-50 text-blue-800 rounded-lg font-black text-xs flex items-center gap-1">
@@ -4073,6 +4201,62 @@ export default function App() {
                       )}
                     </div>
                   )}
+                </div>
+              </div>
+
+              {/* UNIT SELECTION - સેટ / પેકેટ / નંગ / રીમ / બોક્સ / વગેરે */}
+              <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-300 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-black text-amber-950 flex items-center gap-1.5 text-xs">
+                    <span>🏷️ વસ્તુનો એકમ (Unit) બદલો: સેટ / પેકેટ / નંગ *</span>
+                  </label>
+                  <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-amber-400 text-black border border-amber-500 shadow-2xs">
+                    હાલનો એકમ: {editingItem.unit || 'નંગ'}
+                  </span>
+                </div>
+
+                <p className="text-[10px] text-amber-900 font-bold">
+                  જો આ આઇટમમાં નંગ/પેકેટનો લોચો હોય, તો નીચેથી સાચો એકમ (સેટ, પેકેટ, નંગ વગેરે) સિલેક્ટ કરો:
+                </p>
+
+                {/* 1-Click Fast Buttons for All Common Units */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5 pt-0.5">
+                  {STANDARD_PRODUCT_UNITS.map(u => {
+                    const isSelected = (editingItem.unit || 'નંગ') === u.id;
+                    return (
+                      <button
+                        key={u.id}
+                        type="button"
+                        onClick={() => setEditingItem({ ...editingItem, unit: u.id })}
+                        className={`py-1.5 px-2 rounded-lg text-xs font-black border transition-all cursor-pointer flex items-center justify-center gap-1 text-center ${
+                          isSelected
+                            ? 'bg-amber-500 text-black border-amber-600 shadow-xs ring-2 ring-amber-400 font-black scale-[1.02]'
+                            : 'bg-white text-neutral-800 border-neutral-300 hover:bg-neutral-100 hover:border-neutral-400'
+                        }`}
+                      >
+                        {isSelected && <span className="text-black font-black">✓</span>}
+                        <span>{u.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Custom unit input fallback */}
+                <div className="pt-1 flex items-center gap-2">
+                  <span className="text-[10px] font-bold text-neutral-600 shrink-0">અન્ય એકમ લખો:</span>
+                  <input
+                    list="edit-unit-list"
+                    type="text"
+                    value={editingItem.unit || ''}
+                    onChange={e => setEditingItem({ ...editingItem, unit: e.target.value })}
+                    placeholder="દા.ત. સેટ, પેકેટ, નંગ, બોક્સ, રીમ"
+                    className="flex-1 font-bold p-1.5 bg-white border border-amber-300 rounded-lg outline-none text-xs focus:ring-1 focus:ring-amber-500"
+                  />
+                  <datalist id="edit-unit-list">
+                    {STANDARD_PRODUCT_UNITS.map(u => (
+                      <option key={u.id} value={u.id}>{u.label}</option>
+                    ))}
+                  </datalist>
                 </div>
               </div>
               

@@ -340,7 +340,7 @@ export default function GemBillGeneratorModal({
 
             {/* ADD ITEM INPUT BAR */}
             <div className="bg-white p-3 rounded-xl border border-neutral-300 grid grid-cols-1 sm:grid-cols-12 gap-2 items-end">
-              <div className="sm:col-span-4">
+              <div className="sm:col-span-3">
                 <label className="block text-[10px] text-neutral-600 mb-0.5">આઇટમ નામ (Description):</label>
                 <input
                   type="text"
@@ -363,7 +363,24 @@ export default function GemBillGeneratorModal({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="block text-[10px] text-neutral-600 mb-0.5">જથ્થો (Qty):</label>
+                <label className="block text-[10px] text-neutral-600 mb-0.5">એકમ (Unit):</label>
+                <select
+                  value={newItemUnit}
+                  onChange={e => setNewItemUnit(e.target.value)}
+                  className="w-full text-xs font-bold p-1.5 border border-neutral-300 rounded-lg outline-none bg-white"
+                >
+                  <option value="નંગ">📦 નંગ (Pcs)</option>
+                  <option value="પેકેટ">🛍️ પેકેટ (Pkt)</option>
+                  <option value="સેટ">🎁 સેટ (Set)</option>
+                  <option value="રીમ">📄 રીમ (Ream)</option>
+                  <option value="બોક્સ">📦 બોક્સ (Box)</option>
+                  <option value="ડઝન">📏 ડઝન (Doz)</option>
+                  <option value="કિલો">⚖️ કિલો (Kg)</option>
+                </select>
+              </div>
+
+              <div className="sm:col-span-1">
+                <label className="block text-[10px] text-neutral-600 mb-0.5">જથ્થો:</label>
                 <input
                   type="number"
                   min="1"
