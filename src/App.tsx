@@ -769,13 +769,32 @@ export default function App() {
     paymentScreenshot?: string;
     discount?: number;
     discountCode?: string;
+    subtotal?: number;
+    deliveryCharge?: number;
+    deliveryType?: 'cover' | 'parcel';
+    packageWeightKg?: number;
+    platformFee?: number;
+    packingCharge?: number;
+    otherFee?: number;
+    otherFeeLabel?: string;
+    total?: number;
+    transactionId?: string;
+    state?: string;
+    district?: string;
+    taluka?: string;
+    village?: string;
+    pincode?: string;
   }) => {
     const orderId = getNextOrderNumber();
     const now = new Date();
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+    const subtotal = orderDetails.subtotal !== undefined ? orderDetails.subtotal : cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
     const discountAmount = orderDetails.discount || 0;
-    const totalAmount = Math.max(0, subtotal - discountAmount);
+    const deliveryCharge = orderDetails.deliveryCharge || 0;
+    const platformFee = orderDetails.platformFee || 0;
+    const packingCharge = orderDetails.packingCharge || 0;
+    const otherFee = orderDetails.otherFee || 0;
+    const totalAmount = orderDetails.total !== undefined ? orderDetails.total : Math.max(0, subtotal + deliveryCharge + platformFee + packingCharge + otherFee - discountAmount);
     const totalProfit = cart.reduce((sum, item) => sum + (Math.max(0, item.product.price - item.product.costPrice) * item.quantity), 0);
 
     // Deduct stock
@@ -892,6 +911,22 @@ export default function App() {
       customerName: orderDetails.customerName,
       mobile: orderDetails.mobile,
       address: orderDetails.address,
+      state: orderDetails.state,
+      district: orderDetails.district,
+      taluka: orderDetails.taluka,
+      village: orderDetails.village,
+      pincode: orderDetails.pincode,
+      deliveryCharge: deliveryCharge,
+      deliveryType: orderDetails.deliveryType,
+      packageWeightKg: orderDetails.packageWeightKg,
+      platformFee: platformFee,
+      packingCharge: packingCharge,
+      otherFee: otherFee,
+      otherFeeLabel: orderDetails.otherFeeLabel,
+      paymentDetails: orderDetails.transactionId ? {
+        transactionId: orderDetails.transactionId,
+        referenceNo: orderDetails.transactionId
+      } : undefined,
       items: cart.map(c => {
         const fnMatch = c.product.nameGu.match(/\[(ફાઇલ|આગળ|પાછળ):\s*([^\]]+)\]/);
         const fileName = fnMatch ? fnMatch[2].trim() : undefined;
@@ -987,9 +1022,11 @@ export default function App() {
       netProfit: Number((s.netProfit + totalProfit).toFixed(2))
     }));
 
-    // Clear Cart and Close Drawer
+    // Clear Cart, Close Drawer & Show Instant Invoice
     setCart([]);
     setIsCartDrawerOpen(false);
+    setActiveInvoiceOrder(newOrder);
+    showToast(`🎉 ઓર્ડર #${newOrder.invoiceNo} સફળતાપૂર્વક નોંધાઈ ગયો! ડિલિવરી રસીદ તૈયાર છે.`);
 
   };
 

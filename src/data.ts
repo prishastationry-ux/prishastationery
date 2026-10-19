@@ -71,7 +71,19 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   callLetterRate: 0,
   callLetterOfferText: 'નવરાત્રી સ્પેશિયલ: કોલ લેટર ફ્રી!',
   googleReviewUrl: 'https://maps.google.com/?q=Prisha+Stationery+Tharad',
-  hideOutOfStock: false
+  hideOutOfStock: false,
+  // Delivery & Platform Fees (ઓનલાઇન ઓર્ડર ચાર્જીસ)
+  deliveryChargeEnabled: true,
+  deliveryChargePerKg: 100, // ₹100 પ્રતિ કિલો
+  deliveryCoverCharge: 50, // ₹50 કવર / એન્વલપ
+  deliveryFreeAbove: 0,
+  platformFeeEnabled: true,
+  platformFeeAmount: 15, // ₹15 પ્લેટફોર્મ ફી
+  packingChargeEnabled: true,
+  packingChargeAmount: 30, // ₹30 પેકિંગ ચાર્જ
+  otherFeeEnabled: false,
+  otherFeeLabel: 'અન્ય સર્વિસ ચાર્જ',
+  otherFeeAmount: 0
 };
 
 export const INITIAL_PRODUCTS: ProductItem[] = [

@@ -19,9 +19,39 @@ import {
   Sparkles,
   Camera,
   Upload,
-  AlertCircle
+  AlertCircle,
+  Truck,
+  Package,
+  Tag,
+  Info
 } from 'lucide-react';
 import { CartItem, StoreSettings } from '../types';
+import { GUJARAT_DISTRICTS, getVillagesForTaluka, getPincodeForTaluka } from '../lib/gujaratDistricts';
+
+export interface CustomerOrderPayload {
+  customerName: string;
+  mobile: string;
+  address: string;
+  paymentMode: 'UPI' | 'Cash' | 'Online';
+  paymentScreenshot?: string;
+  discount?: number;
+  discountCode?: string;
+  subtotal: number;
+  deliveryCharge: number;
+  deliveryType: 'cover' | 'parcel';
+  packageWeightKg: number;
+  platformFee: number;
+  packingCharge: number;
+  otherFee: number;
+  otherFeeLabel?: string;
+  total: number;
+  transactionId?: string;
+  state?: string;
+  district?: string;
+  taluka?: string;
+  village?: string;
+  pincode?: string;
+}
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -31,15 +61,7 @@ interface CartDrawerProps {
   onRemoveItem: (productId: string) => void;
   onClearCart: () => void;
   storeSettings: StoreSettings;
-  onConfirmOrder: (orderDetails: {
-    customerName: string;
-    mobile: string;
-    address: string;
-    paymentMode: 'UPI' | 'Cash' | 'Online';
-    paymentScreenshot?: string;
-    discount?: number;
-    discountCode?: string;
-  }) => void;
+  onConfirmOrder: (orderDetails: CustomerOrderPayload) => void;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -56,34 +78,119 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<{code: string, discount: number} | null>(null);
 
-  // Form Fields
+  // Delivery configuration state
+  const [deliveryType, setDeliveryType] = useState<'cover' | 'parcel'>('cover');
+  const [packageWeightKg, setPackageWeightKg] = useState<number>(1);
+
+  // Form Fields - Structured Address
   const [customerName, setCustomerName] = useState('');
   const [mobile, setMobile] = useState('');
-  const [address1, setAddress1] = useState('');
-  const [address2, setAddress2] = useState('');
-  const [address3, setAddress3] = useState('');
-  const [address4, setAddress4] = useState('');
-  const [address5, setAddress5] = useState('');
-  const isUpiAllowed = !storeSettings.hideUpiOnBill && storeSettings.billShowUpi !== false;
-  const paymentMode = 'UPI'; // Enforce UPI
+  const [stateSelection, setStateSelection] = useState<'Gujarat' | 'Other'>('Gujarat');
+  const [customStateName, setCustomStateName] = useState('');
+  
+  // Gujarat location fields
+  const [selectedDistrictId, setSelectedDistrictId] = useState<string>('banaskantha');
+  const [selectedTaluka, setSelectedTaluka] = useState<string>('થરાદ (Tharad)');
+  const [villageName, setVillageName] = useState<string>('');
+  const [houseStreet, setHouseStreet] = useState<string>('');
+  const [pincode, setPincode] = useState<string>('385565');
+  
+  // Other State fields
+  const [otherDistrict, setOtherDistrict] = useState<string>('');
+  const [otherCityTaluka, setOtherCityTaluka] = useState<string>('');
+  const [otherVillageStreet, setOtherVillageStreet] = useState<string>('');
+  const [otherPincode, setOtherPincode] = useState<string>('');
+
   const [paymentScreenshot, setPaymentScreenshot] = useState<string>('');
   const [transactionId, setTransactionId] = useState<string>('');
   const [upiQrUrl, setUpiQrUrl] = useState<string>('');
   const [copiedUpi, setCopiedUpi] = useState(false);
   const [formError, setFormError] = useState('');
 
+  // Cart subtotal
   const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const totalItemsCount = cart.reduce((sum, item) => sum + item.quantity, 0);
 
-  // Generate QR Code when UPI ID or Total changes
+  // Delivery & Platform Fee Calculations
+  const isFreeDelivery = Boolean(
+    storeSettings.deliveryFreeAbove &&
+    storeSettings.deliveryFreeAbove > 0 &&
+    cartTotal >= storeSettings.deliveryFreeAbove
+  );
+
+  const coverCharge = storeSettings.deliveryCoverCharge ?? 50;
+  const parcelPerKgCharge = storeSettings.deliveryChargePerKg ?? 100;
+  const rawDeliveryCharge = deliveryType === 'cover' ? coverCharge : (parcelPerKgCharge * Math.max(1, packageWeightKg));
+  const deliveryCharge = (storeSettings.deliveryChargeEnabled !== false && !isFreeDelivery) ? rawDeliveryCharge : 0;
+
+  const platformFee = storeSettings.platformFeeEnabled !== false ? (storeSettings.platformFeeAmount ?? 15) : 0;
+  const packingCharge = storeSettings.packingChargeEnabled !== false ? (storeSettings.packingChargeAmount ?? 30) : 0;
+  const otherFee = (storeSettings.otherFeeEnabled && (storeSettings.otherFeeAmount || 0) > 0) ? (storeSettings.otherFeeAmount || 0) : 0;
+  const discountAmount = appliedPromo ? appliedPromo.discount : 0;
+
+  // Final Payable Grand Total (Before Payment)
+  const finalPayableTotal = Math.max(0, cartTotal + deliveryCharge + platformFee + packingCharge + otherFee - discountAmount);
+
+  // Active District object
+  const activeDistrict = GUJARAT_DISTRICTS.find(d => d.id === selectedDistrictId) || GUJARAT_DISTRICTS[0];
+
+  // Available villages for current taluka
+  const suggestedVillages = getVillagesForTaluka(selectedTaluka);
+
+  // When District changes, update Taluka and Pincode
+  const handleDistrictChange = (districtId: string) => {
+    setSelectedDistrictId(districtId);
+    const districtObj = GUJARAT_DISTRICTS.find(d => d.id === districtId);
+    if (districtObj && districtObj.talukas.length > 0) {
+      const firstTaluka = districtObj.talukas[0];
+      setSelectedTaluka(firstTaluka);
+      const autoPin = getPincodeForTaluka(firstTaluka);
+      if (autoPin) setPincode(autoPin);
+    }
+  };
+
+  // When Taluka changes, update Pincode
+  const handleTalukaChange = (talukaName: string) => {
+    setSelectedTaluka(talukaName);
+    const autoPin = getPincodeForTaluka(talukaName);
+    if (autoPin) {
+      setPincode(autoPin);
+    }
+  };
+
+  // Auto-detect if cart contains heavier items or documents
   useEffect(() => {
-    if (storeSettings.upiId && cartTotal > 0) {
-      const upiLink = `upi://pay?pa=${storeSettings.upiId}&pn=PrishaStationery&am=${cartTotal}&cu=INR`;
+    if (cart.length > 0) {
+      const totalQuantity = cart.reduce((sum, it) => sum + it.quantity, 0);
+      const hasBulkyItems = cart.some(it => 
+        it.product.nameGu.includes('ચોપડા') ||
+        it.product.nameGu.includes('નોટબુક') ||
+        it.product.nameGu.includes('રીમ') ||
+        it.product.nameGu.includes('ફાઇલ') ||
+        it.product.nameGu.includes('ક્લે') ||
+        it.product.nameGu.includes('કંપાસ') ||
+        it.product.nameGu.includes('બેગ')
+      );
+      if (hasBulkyItems || totalQuantity >= 4) {
+        setDeliveryType('parcel');
+        const estimatedWeight = Math.max(1, Math.ceil(totalQuantity / 4));
+        setPackageWeightKg(estimatedWeight);
+      } else {
+        setDeliveryType('cover');
+      }
+    }
+  }, [cart.length]);
+
+  // Generate QR Code with FINAL PAYABLE TOTAL (including delivery & all fees)
+  useEffect(() => {
+    if (storeSettings.upiId && finalPayableTotal > 0) {
+      const payeeName = storeSettings.payeeName || storeSettings.storeNameEn || 'Prisha Stationery';
+      const upiLink = `upi://pay?pa=${storeSettings.upiId}&pn=${encodeURIComponent(payeeName)}&am=${finalPayableTotal}&cu=INR`;
       QRCode.toDataURL(upiLink, { width: 256, margin: 1 })
         .then(url => setUpiQrUrl(url))
         .catch(err => console.error(err));
     }
-  }, [storeSettings.upiId, cartTotal]);
+  }, [storeSettings.upiId, storeSettings.payeeName, storeSettings.storeNameEn, finalPayableTotal]);
 
   const handleCopyUpi = () => {
     navigator.clipboard.writeText(storeSettings.upiId);
@@ -103,6 +210,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   };
 
   const handleProceedToStep2 = () => {
+    setFormError('');
     setStep(2);
   };
 
@@ -116,24 +224,71 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       setFormError('⚠️ કૃપા કરીને માન્ય ૧૦ આંકડાનો મોબાઇલ નંબર દાખલ કરો.');
       return;
     }
-    if (!address1.trim() || !address2.trim() || !address3.trim() || !address4.trim() || !address5.trim()) {
-      setFormError('⚠️ કૃપા કરીને સરનામાની તમામ વિગતો (ઘર નંબર, ગામ, તાલુકો, જિલ્લો, પિનકોડ) દાખલ કરો.');
-      return;
+
+    let fullAddress = '';
+    let stateVal = 'ગુજરાત (Gujarat)';
+    let districtVal = activeDistrict.nameGu;
+    let talukaVal = selectedTaluka;
+    let villageVal = villageName.trim();
+    let pinVal = pincode.trim();
+
+    if (stateSelection === 'Gujarat') {
+      if (!houseStreet.trim()) {
+        setFormError('⚠️ કૃપા કરીને ઘર નંબર, સોસાયટી અથવા શેરીનું નામ દાખલ કરો.');
+        return;
+      }
+      if (!villageVal) {
+        setFormError('⚠️ કૃપા કરીને તમારું ગામ કે શહેર પસંદ કરો અથવા લખો.');
+        return;
+      }
+      if (!pinVal || pinVal.length < 6) {
+        setFormError('⚠️ કૃપા કરીને માન્ય ૬ આંકડાનો પિનકોડ દાખલ કરો.');
+        return;
+      }
+      fullAddress = `${houseStreet.trim()}, મુ/પો: ${villageVal}, તા: ${talukaVal}, જિ: ${districtVal}, ગુજરાત - ${pinVal}`;
+    } else {
+      stateVal = customStateName.trim() || 'અન્ય રાજ્ય';
+      districtVal = otherDistrict.trim();
+      talukaVal = otherCityTaluka.trim();
+      villageVal = otherVillageStreet.trim();
+      pinVal = otherPincode.trim();
+
+      if (!stateVal || !districtVal || !talukaVal || !villageVal || !pinVal) {
+        setFormError('⚠️ કૃપા કરીને સરનામાની તમામ વિગતો (રાજ્ય, જિલ્લો, શહેર/તાલુકો, સરનામું અને પિનકોડ) દાખલ કરો.');
+        return;
+      }
+      fullAddress = `${villageVal}, ${talukaVal}, જિ: ${districtVal}, ${stateVal} - ${pinVal}`;
     }
+
     if (!paymentScreenshot) {
       setFormError('⚠️ ઓર્ડર કન્ફર્મ કરવા માટે ઓનલાઇન પેમેન્ટ (QR સ્કેન) કરી સ્ક્રીનશોટ અપલોડ કરવો ફરજિયાત છે!');
       return;
     }
 
     setFormError('');
-    const fullAddress = `${address1.trim()}, મુ/પો: ${address2.trim()}, તા: ${address3.trim()}, જિ: ${address4.trim()}, પિનકોડ: ${address5.trim()}`;
-    
+
     onConfirmOrder({
       customerName: customerName.trim(),
       mobile: mobile.trim(),
       address: fullAddress,
+      state: stateVal,
+      district: districtVal,
+      taluka: talukaVal,
+      village: villageVal,
+      pincode: pinVal,
       paymentMode: 'Online',
-      paymentScreenshot: paymentScreenshot || undefined
+      paymentScreenshot: paymentScreenshot || undefined,
+      subtotal: cartTotal,
+      deliveryCharge: deliveryCharge,
+      deliveryType: deliveryType,
+      packageWeightKg: packageWeightKg,
+      platformFee: platformFee,
+      packingCharge: packingCharge,
+      otherFee: otherFee,
+      otherFeeLabel: storeSettings.otherFeeLabel || 'અન્ય સર્વિસ ચાર્જ',
+      discount: discountAmount,
+      total: finalPayableTotal,
+      transactionId: transactionId.trim() || undefined
     });
   };
 
@@ -148,10 +303,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       />
 
       {/* SIDE DRAWER CONTAINER */}
-      <aside className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250 border-l border-neutral-300">
+      <aside className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-250 border-l border-neutral-300">
         
         {/* DRAWER HEADER */}
-        <div className="p-3.5 sm:p-4 bg-[#0B1E48] text-white flex items-center justify-between border-b border-blue-900">
+        <div className="p-3.5 sm:p-4 bg-[#0B1E48] text-white flex items-center justify-between border-b border-blue-900 shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center font-black">
               <ShoppingCart className="w-4 h-4" />
@@ -161,28 +316,28 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 {step === 1 ? `તમારું શોપિંગ કાર્ટ (${totalItemsCount})` : 'ઓર્ડર અને પેમેન્ટ વિગતો'}
               </h2>
               <p className="text-[10px] text-neutral-300 font-bold">
-                {step === 1 ? 'પસંદ કરેલી વસ્તુઓ તપાસો' : 'પગલું ૨: સરનામું અને ચુકવણી'}
+                {step === 1 ? 'પસંદ કરેલી વસ્તુઓ & ચાર્જ વિગત' : 'પગલું ૨: સરનામું અને ઓનલાઇન પેમેન્ટ'}
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 text-neutral-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+            className="p-1.5 text-neutral-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* STEPPER PROGRESS */}
-        <div className="bg-neutral-100 px-4 py-2 border-b border-neutral-200 flex items-center justify-between text-xs font-black">
+        <div className="bg-neutral-100 px-4 py-2 border-b border-neutral-200 flex items-center justify-between text-xs font-black shrink-0">
           <div className={`flex items-center gap-1.5 ${step === 1 ? 'text-orange-600' : 'text-emerald-700'}`}>
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black ${
               step === 1 ? 'bg-orange-500 text-black' : 'bg-emerald-600 text-white'
             }`}>
               {step === 1 ? '1' : <Check className="w-3 h-3" />}
             </span>
-            <span>૧. વસ્તુઓની યાદી</span>
+            <span>૧. વસ્તુઓ & ચાર્જીસ</span>
           </div>
 
           <span className="text-neutral-300">━━━━━━━━</span>
@@ -193,12 +348,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             }`}>
               2
             </span>
-            <span>૨. ડિલિવરી & પેમેન્ટ</span>
+            <span>૨. સરનામું & પેમેન્ટ</span>
           </div>
         </div>
 
         {/* DRAWER CONTENT */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-4 space-y-4">
           {cart.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
               <div className="w-20 h-20 rounded-full bg-orange-50 border-2 border-dashed border-orange-200 flex items-center justify-center text-3xl">
@@ -217,9 +372,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
             </div>
           ) : step === 1 ? (
             /* ========================================================================= */
-            /* STEP 1: CART ITEMS LIST */
+            /* STEP 1: CART ITEMS LIST & LIVE CHARGES BREAKDOWN */
             /* ========================================================================= */
-            <div className="space-y-3">
+            <div className="space-y-3.5">
+              
+              {/* Product items list */}
               <div className="divide-y divide-neutral-200 border border-neutral-200 rounded-xl overflow-hidden bg-white shadow-2xs">
                 {cart.map(item => (
                   <div key={item.product.id} className="p-3 flex items-center justify-between gap-3 hover:bg-neutral-50 transition-colors">
@@ -275,7 +432,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </p>
                       <button
                         onClick={() => onRemoveItem(item.product.id)}
-                        className="text-neutral-400 hover:text-red-600 p-1 transition-colors mt-0.5"
+                        className="text-neutral-400 hover:text-red-600 p-1 transition-colors mt-0.5 cursor-pointer"
                         title="Delete item"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -286,25 +443,186 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 ))}
               </div>
 
-              {/* Quick Bill Summary Card */}
+              {/* DELIVERY TYPE SELECTION BOX */}
+              {storeSettings.deliveryChargeEnabled !== false && (
+                <div className="bg-blue-50/70 border border-blue-200 rounded-xl p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black text-blue-950 flex items-center gap-1.5">
+                      <Truck className="w-4 h-4 text-blue-700" />
+                      <span>ડિલિવરી પ્રકાર પસંદ કરો (Delivery Type):</span>
+                    </span>
+                    {isFreeDelivery && (
+                      <span className="bg-emerald-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                        🎉 ફ્રી ડિલિવરી ઓફર
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {/* Option 1: Cover / Envelope */}
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryType('cover')}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        deliveryType === 'cover'
+                          ? 'bg-white border-blue-600 ring-2 ring-blue-400 text-blue-950 font-black shadow-xs'
+                          : 'bg-white/70 border-neutral-300 text-neutral-700 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-xs">✉️ કવર / ડોક્યુમેન્ટ</span>
+                        <span className="text-blue-700 font-black">₹{coverCharge}</span>
+                      </div>
+                      <p className="text-[10px] text-neutral-500 font-normal mt-0.5">
+                        કાર્ડ, સિંગલ કાગળ, પ્રમાણપત્ર
+                      </p>
+                    </button>
+
+                    {/* Option 2: Parcel by Weight */}
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryType('parcel')}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        deliveryType === 'parcel'
+                          ? 'bg-white border-blue-600 ring-2 ring-blue-400 text-blue-950 font-black shadow-xs'
+                          : 'bg-white/70 border-neutral-300 text-neutral-700 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-xs">📦 પાર્સલ (પ્રતિ KG)</span>
+                        <span className="text-blue-700 font-black">₹{parcelPerKgCharge}/KG</span>
+                      </div>
+                      <p className="text-[10px] text-neutral-500 font-normal mt-0.5">
+                        નોટબુક, સ્ટેશનરી સામાન
+                      </p>
+                    </button>
+                  </div>
+
+                  {/* Parcel Weight Selector */}
+                  {deliveryType === 'parcel' && (
+                    <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-blue-200 text-xs">
+                      <span className="font-bold text-neutral-700">પાર્સલ વજન (Weight):</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPackageWeightKg(w => Math.max(1, w - 1))}
+                          className="w-6 h-6 rounded bg-neutral-100 hover:bg-neutral-200 font-black text-neutral-800 flex items-center justify-center cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <span className="font-black text-blue-900 min-w-12 text-center">
+                          {packageWeightKg} KG
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setPackageWeightKg(w => Math.min(20, w + 1))}
+                          className="w-6 h-6 rounded bg-neutral-100 hover:bg-neutral-200 font-black text-neutral-800 flex items-center justify-center cursor-pointer"
+                        >
+                          +
+                        </button>
+                        <span className="text-neutral-400 text-[11px] font-bold">
+                          = ₹{parcelPerKgCharge * packageWeightKg}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* COMPLETE CHARGES BREAKDOWN CARD */}
               <div className="bg-neutral-50 p-3.5 rounded-xl border border-neutral-200 space-y-2">
                 <div className="flex items-center justify-between text-xs font-bold text-neutral-600">
-                  <span>કુલ આઇટમ્સ:</span>
-                  <span>{totalItemsCount} નંગ</span>
+                  <span>સામાન કુલ (Cart Subtotal):</span>
+                  <span className="font-black text-neutral-900">₹{cartTotal.toFixed(2)}</span>
                 </div>
-                <div className="flex items-center justify-between text-xs font-bold text-neutral-600">
-                  <span>ડિલિવરી / પ્રોસેસિંગ ફી:</span>
-                  <span className="text-emerald-700 font-black">મફત (Free)</span>
-                </div>
-                <div className="border-t border-neutral-200 pt-2 flex items-center justify-between text-sm font-black text-neutral-900">
-                  <span>કુલ ચૂકવવાપાત્ર રકમ:</span>
-                  <span className="text-base font-black text-orange-700">₹{cartTotal}/-</span>
+
+                {/* Delivery Charge */}
+                {storeSettings.deliveryChargeEnabled !== false ? (
+                  <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
+                    <span className="flex items-center gap-1">
+                      <Truck className="w-3.5 h-3.5 text-blue-600" />
+                      <span>
+                        ડિલિવરી ચાર્જ ({deliveryType === 'cover' ? '✉️ કવર' : `📦 પાર્સલ ${packageWeightKg} KG`}):
+                      </span>
+                    </span>
+                    {isFreeDelivery ? (
+                      <span className="text-emerald-700 font-black">મફત (Free)</span>
+                    ) : (
+                      <span className="text-blue-900 font-black">+₹{deliveryCharge.toFixed(2)}</span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-700">
+                    <span>ડિલિવરી:</span>
+                    <span className="font-black">મફત (Free)</span>
+                  </div>
+                )}
+
+                {/* Platform Fee */}
+                {storeSettings.platformFeeEnabled !== false && platformFee > 0 && (
+                  <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
+                    <span className="flex items-center gap-1">
+                      <Banknote className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>પ્લેટફોર્મ સર્વિસ ફી (Platform Fee):</span>
+                    </span>
+                    <span className="text-indigo-900 font-black">+₹{platformFee.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* Safe Packing Charge */}
+                {storeSettings.packingChargeEnabled !== false && packingCharge > 0 && (
+                  <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
+                    <span className="flex items-center gap-1">
+                      <Package className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>સુરક્ષિત પેકિંગ ચાર્જ (Packing):</span>
+                    </span>
+                    <span className="text-emerald-900 font-black">+₹{packingCharge.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* Other Custom Fee */}
+                {storeSettings.otherFeeEnabled && otherFee > 0 && (
+                  <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3.5 h-3.5 text-purple-600" />
+                      <span>{storeSettings.otherFeeLabel || 'અન્ય ચાર્જ'}:</span>
+                    </span>
+                    <span className="text-purple-900 font-black">+₹{otherFee.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* Promo discount if any */}
+                {discountAmount > 0 && (
+                  <div className="flex items-center justify-between text-xs font-bold text-red-600">
+                    <span>ડિસ્કાઉન્ટ ({appliedPromo?.code}):</span>
+                    <span className="font-black">-₹{discountAmount.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* FINAL PAYABLE TOTAL */}
+                <div className="border-t-2 border-neutral-300 pt-2 flex items-center justify-between text-sm font-black text-neutral-900">
+                  <div>
+                    <span>કુલ ચૂકવવાપાત્ર રકમ (Grand Total):</span>
+                    <p className="text-[10px] text-neutral-500 font-normal">
+                      બધા ચાર્જિસ સહિત ચોખ્ખી રકમ
+                    </p>
+                  </div>
+                  <span className="text-lg font-black text-orange-700">₹{finalPayableTotal}/-</span>
                 </div>
               </div>
+
+              {/* Guarantees Note */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 flex items-start gap-2 text-emerald-900 text-[11px] font-bold">
+                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <span>
+                  ૧૦૦% સુરક્ષિત પેકિંગ સાથે બનાસકાંઠા / સમગ્ર ગુજરાતમાં ઝડપી ડિલિવરી.
+                </span>
+              </div>
+
             </div>
           ) : (
             /* ========================================================================= */
-            /* STEP 2: CUSTOMER DETAILS & PAYMENT SELECTION */
+            /* STEP 2: CUSTOMER DETAILS, GUJARAT AUTO ADDRESS & PAYMENT SELECTION */
             /* ========================================================================= */
             <form onSubmit={handleSubmitOrder} className="space-y-4">
               
@@ -312,21 +630,22 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
               <button
                 type="button"
                 onClick={() => setStep(1)}
-                className="text-xs font-bold text-neutral-600 hover:text-black flex items-center gap-1"
+                className="text-xs font-bold text-neutral-600 hover:text-black flex items-center gap-1 cursor-pointer"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>કાર્ટમાં ફેરફાર કરો</span>
+                <span>કાર્ટ & ચાર્જિસમાં ફેરફાર કરો</span>
               </button>
 
               {formError && (
-                <div className="bg-red-50 text-red-700 p-2.5 rounded-xl border border-red-200 text-xs font-black">
-                  {formError}
+                <div className="bg-red-50 text-red-700 p-2.5 rounded-xl border border-red-200 text-xs font-black flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{formError}</span>
                 </div>
               )}
 
-              {/* Customer Inputs */}
+              {/* Customer Info */}
               <div className="space-y-2.5 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
-                <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
+                <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5 border-b pb-1.5">
                   <User className="w-3.5 h-3.5 text-orange-600" />
                   <span>ગ્રાહકની માહિતી (Customer Details)</span>
                 </h4>
@@ -359,93 +678,302 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     required
                   />
                 </div>
-
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-neutral-700 block mb-1">
-                      ઘર નંબર / મહોલ્લો / શેરી (House No / Street) *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="દા.ત. ૧૦૧, પટેલ વાસ"
-                      value={address1}
-                      onChange={e => setAddress1(e.target.value)}
-                      className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-neutral-700 block mb-1">
-                      ગામ / શહેર (Village / City) *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="દા.ત. વાવ"
-                      value={address2}
-                      onChange={e => setAddress2(e.target.value)}
-                      className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                      required
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[11px] font-bold text-neutral-700 block mb-1">તાલુકો *</label>
-                      <input
-                        type="text"
-                        placeholder="દા.ત. થરાદ"
-                        value={address3}
-                        onChange={e => setAddress3(e.target.value)}
-                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[11px] font-bold text-neutral-700 block mb-1">જિલ્લો *</label>
-                      <input
-                        type="text"
-                        placeholder="દા.ત. બનાસકાંઠા"
-                        value={address4}
-                        onChange={e => setAddress4(e.target.value)}
-                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-[11px] font-bold text-neutral-700 block mb-1">
-                      પિનકોડ (Pincode) *
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="દા.ત. 385565"
-                      value={address5}
-                      maxLength={6}
-                      onChange={e => setAddress5(e.target.value.replace(/\D/g, ''))}
-                      className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                      required
-                    />
-                  </div>
-                </div>
               </div>
 
-              {/* Mandatory Payment Section */}
+              {/* STRUCTURED ADDRESS WITH GUJARAT DISTRICT, TALUKA & VILLAGE AUTO-OPTIONS */}
+              <div className="space-y-3 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
+                <div className="flex items-center justify-between border-b pb-1.5">
+                  <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-orange-600" />
+                    <span>ડિલિવરી સરનામું (Delivery Address)</span>
+                  </h4>
+
+                  {/* State selector toggle */}
+                  <div className="flex items-center gap-1 bg-white p-0.5 rounded-lg border border-neutral-300 text-[10px] font-black">
+                    <button
+                      type="button"
+                      onClick={() => setStateSelection('Gujarat')}
+                      className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
+                        stateSelection === 'Gujarat'
+                          ? 'bg-[#0B1E48] text-white shadow-2xs'
+                          : 'text-neutral-600 hover:text-black'
+                      }`}
+                    >
+                      ગુજરાત
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStateSelection('Other')}
+                      className={`px-2 py-1 rounded-md transition-all cursor-pointer ${
+                        stateSelection === 'Other'
+                          ? 'bg-[#0B1E48] text-white shadow-2xs'
+                          : 'text-neutral-600 hover:text-black'
+                      }`}
+                    >
+                      અન્ય રાજ્ય
+                    </button>
+                  </div>
+                </div>
+
+                {stateSelection === 'Gujarat' ? (
+                  /* ========================================================= */
+                  /* GUJARAT AUTO DISTRICT, TALUKA & VILLAGE DROPDOWN SECTION  */
+                  /* ========================================================= */
+                  <div className="space-y-2.5">
+                    
+                    {/* State is Gujarat badge */}
+                    <div className="flex items-center gap-2 bg-emerald-50 text-emerald-800 px-2.5 py-1.5 rounded-lg border border-emerald-200 text-[11px] font-bold">
+                      <span className="font-black">રાજ્ય:</span>
+                      <span>ગુજરાત (Gujarat) - ડિલિવરી ઉપલબ્ધ ✅</span>
+                    </div>
+
+                    {/* District & Taluka Selectors */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      
+                      {/* District Dropdown (All 33 districts of Gujarat) */}
+                      <div>
+                        <label className="text-[11px] font-black text-neutral-800 block mb-1">
+                          ૧. જિલ્લો (District) *
+                        </label>
+                        <select
+                          value={selectedDistrictId}
+                          onChange={e => handleDistrictChange(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none cursor-pointer"
+                        >
+                          {GUJARAT_DISTRICTS.map(d => (
+                            <option key={d.id} value={d.id}>
+                              {d.nameGu}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* Taluka Dropdown (Auto populated from selected district) */}
+                      <div>
+                        <label className="text-[11px] font-black text-neutral-800 block mb-1">
+                          ૨. તાલુકો (Taluka) *
+                        </label>
+                        <select
+                          value={selectedTaluka}
+                          onChange={e => handleTalukaChange(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none cursor-pointer"
+                        >
+                          {activeDistrict.talukas.map((t, idx) => (
+                            <option key={idx} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                    </div>
+
+                    {/* Village / City with Datalist & Quick Selection Pills */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-black text-neutral-800 block">
+                          ૩. ગામ / શહેર (Village / City) *
+                        </label>
+                        <span className="text-[10px] text-neutral-400 font-bold">
+                          ઓટો લિસ્ટમાંથી પસંદ કરો અથવા ટાઈપ કરો
+                        </span>
+                      </div>
+
+                      <input
+                        type="text"
+                        list="village-datalist-options"
+                        placeholder="દા.ત. વાવ, થરાદ, રાધનપુર, ડીસા કે તમારું ગામ..."
+                        value={villageName}
+                        onChange={e => setVillageName(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+
+                      {/* Datalist for automatic autocomplete suggestions */}
+                      <datalist id="village-datalist-options">
+                        {suggestedVillages.map((v, idx) => (
+                          <option key={idx} value={v} />
+                        ))}
+                      </datalist>
+
+                      {/* Quick click pills for popular villages */}
+                      {suggestedVillages.length > 0 && (
+                        <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+                          <span className="text-[10px] text-neutral-500 font-bold">ઝડપી પસંદગી:</span>
+                          {suggestedVillages.slice(0, 7).map((v, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setVillageName(v)}
+                              className={`text-[10px] px-2 py-0.5 rounded-md border transition-all cursor-pointer ${
+                                villageName === v
+                                  ? 'bg-blue-800 text-white border-blue-900 font-black'
+                                  : 'bg-white text-neutral-700 border-neutral-200 hover:bg-neutral-100'
+                              }`}
+                            >
+                              {v}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* House No / Street / Society */}
+                    <div>
+                      <label className="text-[11px] font-black text-neutral-800 block mb-1">
+                        ૪. ઘર નંબર / સોસાયટી / શેરી (House / Street / Area) *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="દા.ત. ૧૦૧, ખોડિયાર નગર, મેઇન બજાર"
+                        value={houseStreet}
+                        onChange={e => setHouseStreet(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+                    </div>
+
+                    {/* Pincode with Auto Suggestion */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[11px] font-black text-neutral-800 block">
+                          ૫. પિનકોડ (Pincode) *
+                        </label>
+                        <span className="text-[10px] text-blue-700 font-bold">
+                          તાલુકા મુજબ ઓટો પિનકોડ
+                        </span>
+                      </div>
+                      <input
+                        type="tel"
+                        placeholder="દા.ત. 385565"
+                        value={pincode}
+                        maxLength={6}
+                        onChange={e => setPincode(e.target.value.replace(/\D/g, ''))}
+                        className="w-full text-xs font-mono font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+                    </div>
+
+                  </div>
+                ) : (
+                  /* ========================================================= */
+                  /* OTHER STATE FORM                                          */
+                  /* ========================================================= */
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                        રાજ્યનું નામ (State) *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="દા.ત. રાજસ્થાન / મહારાષ્ટ્ર"
+                        value={customStateName}
+                        onChange={e => setCustomStateName(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                          જિલ્લો (District) *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="દા.ત. જાલોર / સાંચોર"
+                          value={otherDistrict}
+                          onChange={e => setOtherDistrict(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                          તાલુકો / શહેર (City / Tehsil) *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="દા.ત. સાંચોર"
+                          value={otherCityTaluka}
+                          onChange={e => setOtherCityTaluka(e.target.value)}
+                          className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                          required
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                        સરનામું / ગામ / સોસાયટી *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="મકાન નં, શેરી, વિસ્તાર"
+                        value={otherVillageStreet}
+                        onChange={e => setOtherVillageStreet(e.target.value)}
+                        className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-neutral-700 block mb-1">
+                        પિનકોડ (Pincode) *
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="દા.ત. 343040"
+                        value={otherPincode}
+                        maxLength={6}
+                        onChange={e => setOtherPincode(e.target.value.replace(/\D/g, ''))}
+                        className="w-full text-xs font-mono font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+
+              </div>
+
+              {/* Mandatory Online Payment Section */}
               <div className="space-y-2.5 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
-                <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
-                  <QrCode className="w-4 h-4 text-orange-600" />
-                  <span>ફરજિયાત ઓનલાઇન પેમેન્ટ (Online Payment)</span>
-                </h4>
+                <div className="flex items-center justify-between border-b pb-1.5">
+                  <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
+                    <QrCode className="w-4 h-4 text-orange-600" />
+                    <span>ઓનલાઇન પેમેન્ટ (Online Payment Before Order)</span>
+                  </h4>
+                  <span className="text-xs font-black text-orange-700">
+                    કુલ: ₹{finalPayableTotal}/-
+                  </span>
+                </div>
 
                 <div className="p-3 bg-red-50 rounded-xl border border-red-200 flex flex-col items-center text-center space-y-2.5">
                   <p className="text-[11px] font-black text-red-700">
-                    ⚠️ રોકડ (Cash on Delivery) સુવિધા ઉપલબ્ધ નથી. ઓર્ડર માટે ફરજિયાત પેમેન્ટ કરવાનું રહેશે.
+                    ⚠️ રોકડ (Cash on Delivery) સુવિધા ઉપલબ્ધ નથી. ઓર્ડર માટે નીચે મુજબ પેમેન્ટ કરવાનું રહેશે.
                   </p>
+                  
+                  {/* Detailed summary pill */}
+                  <div className="bg-white/90 p-2 rounded-lg border border-red-200 text-[10.5px] font-bold text-neutral-800 w-full text-left space-y-1">
+                    <div className="flex justify-between">
+                      <span>સામાન: ₹{cartTotal}</span>
+                      <span>{deliveryCharge > 0 ? `ડિલિવરી: ₹${deliveryCharge}` : 'ડિલિવરી: ફ્રી'}</span>
+                    </div>
+                    <div className="flex justify-between text-neutral-600">
+                      <span>પ્લેટફોર્મ: ₹{platformFee}</span>
+                      <span>પેકિંગ: ₹{packingCharge}</span>
+                      {otherFee > 0 && <span>અન્ય: ₹{otherFee}</span>}
+                    </div>
+                    <div className="border-t pt-1 flex justify-between font-black text-orange-700 text-xs">
+                      <span>ચુકવણી રકમ:</span>
+                      <span>₹{finalPayableTotal}/-</span>
+                    </div>
+                  </div>
+
                   <p className="text-[11px] font-black text-neutral-800">
-                    📱 નીચેનો QR કોડ સ્કેન કરીને <span className="text-orange-600">₹{cartTotal}/-</span> ચૂકવો
+                    📱 નીચેનો QR કોડ સ્કેન કરીને <span className="text-orange-600 text-sm">₹{finalPayableTotal}/-</span> ચૂકવો
                   </p>
                   
                   {upiQrUrl && (
                     <div className="p-2 bg-white rounded-lg border shadow-xs">
-                      <img src={upiQrUrl} alt="UPI QR" className="w-36 h-36 object-contain" />
+                      <img src={upiQrUrl} alt="UPI QR" className="w-40 h-40 object-contain" />
                     </div>
                   )}
 
@@ -513,7 +1041,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <button
                           type="button"
                           onClick={() => setPaymentScreenshot('')}
-                          className="p-1 text-neutral-400 hover:text-red-600"
+                          className="p-1 text-neutral-400 hover:text-red-600 cursor-pointer"
                           title="Remove Screenshot"
                         >
                           <X className="w-4 h-4" />
@@ -547,10 +1075,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
         {/* DRAWER FOOTER / ACTION BUTTON */}
         {cart.length > 0 && (
-          <div className="p-3.5 sm:p-4 bg-white border-t border-neutral-200 space-y-2">
+          <div className="p-3.5 sm:p-4 bg-white border-t border-neutral-200 space-y-2 shrink-0">
             <div className="flex items-center justify-between text-xs font-black">
-              <span className="text-neutral-600">ચૂકવવાપાત્ર રકમ:</span>
-              <span className="text-base text-orange-700 font-black">₹{cartTotal}/-</span>
+              <span className="text-neutral-600">
+                {step === 1 ? 'કુલ ચૂકવવાપાત્ર રકમ (ચાર્જીસ સહિત):' : 'ઓનલાઇન ચૂકવેલ રકમ:'}
+              </span>
+              <span className="text-base text-orange-700 font-black">₹{finalPayableTotal}/-</span>
             </div>
 
             {step === 1 ? (
@@ -559,7 +1089,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 onClick={handleProceedToStep2}
                 className="w-full bg-[#EA580C] hover:bg-orange-700 text-white font-black py-3 rounded-xl text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-98"
               >
-                <span>આગળ વધો (Proceed to Checkout)</span>
+                <span>સરનામું અને ઓનલાઇન પેમેન્ટ (Step 2)</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (

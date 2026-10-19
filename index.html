@@ -2,6 +2,32 @@
 <html lang="gu">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      (function() {
+        var isIgnored = function(msg) {
+          if (!msg) return false;
+          var s = String(msg);
+          return s.indexOf('WebSocket') !== -1 ||
+                 s.indexOf('backoff delay') !== -1 ||
+                 s.indexOf('@firebase/firestore') !== -1 ||
+                 s.indexOf('transport errored') !== -1;
+        };
+        window.addEventListener('error', function(e) {
+          if (isIgnored(e.message) || isIgnored(e.filename)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            return true;
+          }
+        }, true);
+        window.addEventListener('unhandledrejection', function(e) {
+          var r = e.reason ? (e.reason.message || e.reason) : '';
+          if (isIgnored(r)) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PRISHA STATIONERY & ONLINE SERVICES</title>
     <meta name="description" content="PRISHA STATIONERY & ONLINE SERVICES - સ્કૂલ સ્ટેશનરી, નોટબુક હોલસેલ ભાવે, આધાર-પાન કાર્ડ, ઝેરોક્ષ અને લેમિનેશન પર વિશેષ છૂટ ઉપલબ્ધ!" />

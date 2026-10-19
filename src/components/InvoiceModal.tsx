@@ -632,6 +632,26 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               : ''
           }
           ${
+            (order.deliveryCharge || 0) > 0
+              ? `<div>🚚 ડિલિવરી ચાર્જ (${order.deliveryType === 'cover' ? 'કવર' : `${order.packageWeightKg || 1} KG પાર્સલ`}): <b>+₹${Number(order.deliveryCharge).toFixed(2)}</b></div>`
+              : ''
+          }
+          ${
+            (order.platformFee || 0) > 0
+              ? `<div>📱 પ્લેટફોર્મ ફી: <b>+₹${Number(order.platformFee).toFixed(2)}</b></div>`
+              : ''
+          }
+          ${
+            (order.packingCharge || 0) > 0
+              ? `<div>📦 સુરક્ષિત પેકિંગ ચાર્જ: <b>+₹${Number(order.packingCharge).toFixed(2)}</b></div>`
+              : ''
+          }
+          ${
+            (order.otherFee || 0) > 0
+              ? `<div>🏷️ ${order.otherFeeLabel || 'અન્ય ચાર્જ'}: <b>+₹${Number(order.otherFee).toFixed(2)}</b></div>`
+              : ''
+          }
+          ${
             (isCorporateGstMode || isGemPortalMode)
               ? `
             <div style="font-size: 10px; color: #374151;">કરપાત્ર રકમ: ₹${gstBreakup.totalTaxableValue.toFixed(2)}</div>
@@ -876,6 +896,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
 
   <div class="meta-row"><span>સબટોટલ:</span><span>₹${Number(order.subtotal).toFixed(2)}</span></div>
   ${order.discount > 0 ? `<div class="meta-row" style="color: red;"><span>ડિસ્કાઉન્ટ:</span><span>-₹${Number(order.discount).toFixed(2)}</span></div>` : ''}
+  ${(order.deliveryCharge || 0) > 0 ? `<div class="meta-row"><span>ડિલિવરી:</span><span>+₹${Number(order.deliveryCharge).toFixed(2)}</span></div>` : ''}
+  ${(order.platformFee || 0) > 0 ? `<div class="meta-row"><span>પ્લેટફોર્મ ફી:</span><span>+₹${Number(order.platformFee).toFixed(2)}</span></div>` : ''}
+  ${(order.packingCharge || 0) > 0 ? `<div class="meta-row"><span>પેકિંગ ચાર્જ:</span><span>+₹${Number(order.packingCharge).toFixed(2)}</span></div>` : ''}
+  ${(order.otherFee || 0) > 0 ? `<div class="meta-row"><span>${order.otherFeeLabel || 'અન્ય ચાર્જ'}:</span><span>+₹${Number(order.otherFee).toFixed(2)}</span></div>` : ''}
 
   <div class="double-line"></div>
 
@@ -1183,6 +1207,10 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `💵 *સબટોટલ:* ₹${(order.subtotal || order.total).toFixed(2)}\n` +
       ((order.discount || 0) > 0 ? `🏷️ *ડિસ્કાઉન્ટ:* -₹${Number(order.discount).toFixed(2)}\n` : '') +
+      ((order.deliveryCharge || 0) > 0 ? `🚚 *ડિલિવરી ચાર્જ:* +₹${Number(order.deliveryCharge).toFixed(2)}\n` : '') +
+      ((order.platformFee || 0) > 0 ? `📱 *પ્લેટફોર્મ ફી:* +₹${Number(order.platformFee).toFixed(2)}\n` : '') +
+      ((order.packingCharge || 0) > 0 ? `📦 *પેકિંગ ચાર્જ:* +₹${Number(order.packingCharge).toFixed(2)}\n` : '') +
+      ((order.otherFee || 0) > 0 ? `🏷️ *${order.otherFeeLabel || 'અન્ય ચાર્જ'}:* +₹${Number(order.otherFee).toFixed(2)}\n` : '') +
       `🏛️ *કરપાત્ર રકમ (Taxable Value):* ₹${gstBreakup.totalTaxableValue.toFixed(2)}\n` +
       `🏛️ *CGST:* ₹${gstBreakup.totalCgst.toFixed(2)} | *SGST:* ₹${gstBreakup.totalSgst.toFixed(2)}\n` +
       `💰 *ચોખ્ખી રકમ (Total Payable):* ₹${order.total}/-\n` +
@@ -1447,6 +1475,30 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 <div className="flex justify-between text-[10.5px] text-red-600">
                   <span>ડિસ્કાઉન્ટ:</span>
                   <span>-₹{Number(order.discount).toFixed(2)}</span>
+                </div>
+              )}
+              {(order.deliveryCharge || 0) > 0 && (
+                <div className="flex justify-between text-[10px] text-blue-800">
+                  <span>ડિલિવરી ચાર્જ:</span>
+                  <span>+₹{Number(order.deliveryCharge).toFixed(2)}</span>
+                </div>
+              )}
+              {(order.platformFee || 0) > 0 && (
+                <div className="flex justify-between text-[10px] text-indigo-800">
+                  <span>પ્લેટફોર્મ ફી:</span>
+                  <span>+₹{Number(order.platformFee).toFixed(2)}</span>
+                </div>
+              )}
+              {(order.packingCharge || 0) > 0 && (
+                <div className="flex justify-between text-[10px] text-emerald-800">
+                  <span>પેકિંગ ચાર્જ:</span>
+                  <span>+₹{Number(order.packingCharge).toFixed(2)}</span>
+                </div>
+              )}
+              {(order.otherFee || 0) > 0 && (
+                <div className="flex justify-between text-[10px] text-purple-800">
+                  <span>{order.otherFeeLabel || 'અન્ય ચાર્જ'}:</span>
+                  <span>+₹{Number(order.otherFee).toFixed(2)}</span>
                 </div>
               )}
 
@@ -1835,6 +1887,26 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                 {order.discount > 0 && (
                   <div className="font-bold text-red-600">
                     ડિસ્કાઉન્ટ: -₹{Number(order.discount).toFixed(2)}
+                  </div>
+                )}
+                {(order.deliveryCharge || 0) > 0 && (
+                  <div className="text-[11px] font-bold text-blue-800">
+                    🚚 ડિલિવરી: +₹{Number(order.deliveryCharge).toFixed(2)}
+                  </div>
+                )}
+                {(order.platformFee || 0) > 0 && (
+                  <div className="text-[11px] font-bold text-indigo-800">
+                    📱 પ્લેટફોર્મ ફી: +₹{Number(order.platformFee).toFixed(2)}
+                  </div>
+                )}
+                {(order.packingCharge || 0) > 0 && (
+                  <div className="text-[11px] font-bold text-emerald-800">
+                    📦 પેકિંગ ચાર્જ: +₹{Number(order.packingCharge).toFixed(2)}
+                  </div>
+                )}
+                {(order.otherFee || 0) > 0 && (
+                  <div className="text-[11px] font-bold text-purple-800">
+                    🏷️ {order.otherFeeLabel || 'અન્ય ચાર્જ'}: +₹{Number(order.otherFee).toFixed(2)}
                   </div>
                 )}
                 {isCorporateGstMode && (

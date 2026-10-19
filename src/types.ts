@@ -96,6 +96,20 @@ export interface OrderRecord {
   gemContractDate?: string;
   consigneeDept?: string;
   consigneeGstin?: string;
+  // Delivery & Platform Charges Breakdown
+  deliveryCharge?: number;
+  deliveryType?: 'cover' | 'parcel';
+  packageWeightKg?: number;
+  platformFee?: number;
+  packingCharge?: number;
+  otherFee?: number;
+  otherFeeLabel?: string;
+  // Structured Address Fields
+  state?: string;
+  district?: string;
+  taluka?: string;
+  village?: string;
+  pincode?: string;
 }
 
 export interface StoryWidget {
@@ -222,6 +236,19 @@ export interface StoreSettings {
   callLetterOfferText?: string; // દા.ત. "નવરાત્રી સ્પેશિયલ: કોલ લેટર પ્રિન્ટ ફ્રી!"
   googleReviewUrl?: string; // ગૂગલ મેપ્સ રિવ્યૂ લિંક
   hideOutOfStock?: boolean; // સ્ટોક 0 હોય તે પ્રોડક્ટ્સ ગ્રાહકથી છુપાવવી
+
+  // DELIVERY & ONLINE CHARGES CONFIGURATION (ઓનલાઇન ઓર્ડર ચાર્જીસ & ફી)
+  deliveryChargeEnabled?: boolean; // Toggle ડિલિવરી ચાર્જ ચાલુ/બંધ
+  deliveryChargePerKg?: number; // ડિલિવરી ચાર્જ પ્રતિ કિલો (Default ₹100)
+  deliveryCoverCharge?: number; // કવર / એન્વલપ ડિલિવરી ચાર્જ (Default ₹50)
+  deliveryFreeAbove?: number; // ફ્રી ડિલિવરી લિમિટ (0 = no limit)
+  platformFeeEnabled?: boolean; // Toggle પ્લેટફોર્મ ફી ચાલુ/બંધ
+  platformFeeAmount?: number; // પ્લેટફોર્મ ફી રકમ (Default ₹15)
+  packingChargeEnabled?: boolean; // Toggle પેકિંગ ચાર્જ ચાલુ/બંધ
+  packingChargeAmount?: number; // સુરક્ષિત પેકિંગ ચાર્જ (Default ₹30)
+  otherFeeEnabled?: boolean; // Toggle અન્ય ચાર્જ ચાલુ/બંધ
+  otherFeeLabel?: string; // અન્ય ચાર્જ નામ (Default "અન્ય સર્વિસ ચાર્જ")
+  otherFeeAmount?: number; // અન્ય ચાર્જ રકમ (Default ₹0)
 }
 
 export interface RojmelEntry {

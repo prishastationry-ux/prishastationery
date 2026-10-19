@@ -447,7 +447,8 @@ app.get('/api/sqlite/schema', (req, res) => {
 // 6. VITE MIDDLEWARE (DEV) & STATIC SERVING (PROD)
 // =========================================================================
 async function start() {
-  const isProduction = process.env.NODE_ENV === 'production' || (!!process.env.PORT && process.env.PORT !== '3000');
+  const distPath = path.join(process.cwd(), 'dist');
+  const isProduction = process.env.NODE_ENV === 'production' && fs.existsSync(distPath);
   if (!isProduction) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({

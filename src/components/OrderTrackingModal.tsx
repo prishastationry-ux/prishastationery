@@ -282,6 +282,44 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                         </div>
                       ))}
                     </div>
+
+                    {/* Additional Charges Breakdown */}
+                    {((order.deliveryCharge || 0) > 0 || (order.platformFee || 0) > 0 || (order.packingCharge || 0) > 0 || (order.otherFee || 0) > 0) && (
+                      <div className="pt-1.5 border-t border-dashed border-neutral-300 space-y-1 text-[10.5px] font-bold text-neutral-600">
+                        <div className="flex justify-between">
+                          <span>સામાન સબટોટલ:</span>
+                          <span>₹{(order.subtotal || (order.total - (order.deliveryCharge || 0) - (order.platformFee || 0) - (order.packingCharge || 0) - (order.otherFee || 0))).toFixed(2)}</span>
+                        </div>
+                        {(order.deliveryCharge || 0) > 0 && (
+                          <div className="flex justify-between text-blue-800">
+                            <span>🚚 ડિલિવરી ચાર્જ ({order.deliveryType === 'cover' ? 'કવર' : `${order.packageWeightKg || 1} KG પાર્સલ`}):</span>
+                            <span>+₹{order.deliveryCharge}</span>
+                          </div>
+                        )}
+                        {(order.platformFee || 0) > 0 && (
+                          <div className="flex justify-between text-indigo-800">
+                            <span>📱 પ્લેટફોર્મ સર્વિસ ફી:</span>
+                            <span>+₹{order.platformFee}</span>
+                          </div>
+                        )}
+                        {(order.packingCharge || 0) > 0 && (
+                          <div className="flex justify-between text-emerald-800">
+                            <span>📦 સુરક્ષિત પેકિંગ ચાર્જ:</span>
+                            <span>+₹{order.packingCharge}</span>
+                          </div>
+                        )}
+                        {(order.otherFee || 0) > 0 && (
+                          <div className="flex justify-between text-purple-800">
+                            <span>🏷️ {order.otherFeeLabel || 'અન્ય ચાર્જ'}:</span>
+                            <span>+₹{order.otherFee}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs font-black text-neutral-900 border-t pt-1">
+                          <span>કુલ ચૂકવેલ રકમ:</span>
+                          <span className="text-orange-700">₹{order.total}/-</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* CUSTOMER ADDRESS & SHOP HELPLINE */}

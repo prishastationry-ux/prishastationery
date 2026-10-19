@@ -21,7 +21,11 @@ import {
   Download,
   Upload,
   ShieldCheck,
-  Database
+  Database,
+  Truck,
+  Package,
+  Banknote,
+  Tag
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { compressAndResizeImage } from '../lib/invoiceUtils';
@@ -88,10 +92,22 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
     xeroxColorSingleRate: settings.xeroxColorSingleRate ?? 10,
     xeroxColorDoubleRate: settings.xeroxColorDoubleRate ?? 15,
     xeroxLaminationRate: settings.xeroxLaminationRate ?? 20,
-    googleReviewUrl: settings.googleReviewUrl || 'https://maps.google.com/?q=Prisha+Stationery+Tharad'
+    googleReviewUrl: settings.googleReviewUrl || 'https://maps.google.com/?q=Prisha+Stationery+Tharad',
+    // Delivery & Platform Fees
+    deliveryChargeEnabled: settings.deliveryChargeEnabled !== false,
+    deliveryChargePerKg: settings.deliveryChargePerKg ?? 100,
+    deliveryCoverCharge: settings.deliveryCoverCharge ?? 50,
+    deliveryFreeAbove: settings.deliveryFreeAbove ?? 0,
+    platformFeeEnabled: settings.platformFeeEnabled !== false,
+    platformFeeAmount: settings.platformFeeAmount ?? 15,
+    packingChargeEnabled: settings.packingChargeEnabled !== false,
+    packingChargeAmount: settings.packingChargeAmount ?? 30,
+    otherFeeEnabled: settings.otherFeeEnabled ?? false,
+    otherFeeLabel: settings.otherFeeLabel || 'અન્ય સર્વિસ ચાર્જ',
+    otherFeeAmount: settings.otherFeeAmount ?? 0
   });
 
-  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'xerox' | 'banners' | 'stories' | 'posters' | 'news'>('store_info');
+  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'delivery_fees' | 'xerox' | 'banners' | 'stories' | 'posters' | 'news'>('store_info');
   const [newSlideTitle, setNewSlideTitle] = useState<string>('');
   const [newSlideSubtitle, setNewSlideSubtitle] = useState<string>('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState<string>('');
@@ -292,6 +308,19 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
           >
             <Sliders className="w-3.5 h-3.5 text-emerald-400" />
             <span>દુકાન પાવર સેટિંગ્સ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('delivery_fees')}
+            className={`px-3.5 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'delivery_fees'
+                ? 'bg-[#0B1E48] text-white shadow-xs'
+                : 'bg-white text-neutral-700 hover:bg-neutral-200 border border-neutral-300'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5 text-blue-400" />
+            <span>🚚 ડિલિવરી & પ્લેટફોર્મ ચાર્જ</span>
           </button>
 
           <button
@@ -877,6 +906,500 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                       />
                       <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
                     </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: ONLINE DELIVERY & PLATFORM CHARGES */}
+          {activeTab === 'delivery_fees' && (
+            <div className="space-y-4">
+              {/* Header Info */}
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-8 h-8 rounded-lg bg-blue-700 text-white flex items-center justify-center">
+                    <Truck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-blue-950 text-sm">
+                      🚚 ઓનલાઇન ઓર્ડર ડિલિવરી, પ્લેટફોર્મ & પેકિંગ ચાર્જ સેટિંગ્સ
+                    </h3>
+                    <p className="text-[11px] text-blue-800 font-bold">
+                      ગ્રાહક ઓનલાઇન ખરીદી કરે ત્યારે પેમેન્ટ પહેલાં કયા ચાર્જ ઉમેરવા અને કેટલા રાખવા તે અહીંથી સંપૂર્ણ કંટ્રોલ કરો.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 1. DELIVERY CHARGE CARD */}
+              <div className="bg-white p-4 rounded-xl border-2 border-neutral-300 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-black">
+                      <Truck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-neutral-900">૧. ડિલિવરી ચાર્જ (Delivery Charge)</h4>
+                      <p className="text-[10px] text-neutral-500 font-bold">કવર અને પાર્સલ માટે અલગ-અલગ દર</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${formData.deliveryChargeEnabled !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-neutral-200 text-neutral-600'}`}>
+                      {formData.deliveryChargeEnabled !== false ? '🟢 ગ્રાહકને દેખાશે' : '⚪ બંધ છે'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.deliveryChargeEnabled ?? true}
+                        onChange={e => setFormData({ ...formData, deliveryChargeEnabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {formData.deliveryChargeEnabled !== false ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    {/* Cover charge */}
+                    <div className="bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 space-y-1.5">
+                      <label className="block text-[11px] font-black text-neutral-800">
+                        ✉️ કવર / એન્વલપ ચાર્જ (ડોક્યુમેન્ટ):
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-neutral-500 text-xs">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.deliveryCoverCharge ?? 50}
+                          onChange={e => setFormData({ ...formData, deliveryCoverCharge: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full text-xs font-black pl-7 pr-3 py-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryCoverCharge: Math.max(0, (formData.deliveryCoverCharge ?? 50) - 10) })}
+                          className="flex-1 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-black text-neutral-700 cursor-pointer"
+                        >
+                          -10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryCoverCharge: Math.max(0, (formData.deliveryCoverCharge ?? 50) - 5) })}
+                          className="flex-1 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-black text-neutral-700 cursor-pointer"
+                        >
+                          -5
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryCoverCharge: (formData.deliveryCoverCharge ?? 50) + 5 })}
+                          className="flex-1 py-0.5 bg-orange-100 hover:bg-orange-200 rounded text-[10px] font-black text-orange-900 cursor-pointer"
+                        >
+                          +5
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryCoverCharge: (formData.deliveryCoverCharge ?? 50) + 10 })}
+                          className="flex-1 py-0.5 bg-orange-100 hover:bg-orange-200 rounded text-[10px] font-black text-orange-900 cursor-pointer"
+                        >
+                          +10
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-neutral-500">આધાર, પાન કાર્ડ, પ્રમાણપત્રો</p>
+                    </div>
+
+                    {/* Parcel per KG */}
+                    <div className="bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 space-y-1.5">
+                      <label className="block text-[11px] font-black text-neutral-800">
+                        📦 પાર્સલ પ્રતિ કિલો ચાર્જ (Per KG):
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-neutral-500 text-xs">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.deliveryChargePerKg ?? 100}
+                          onChange={e => setFormData({ ...formData, deliveryChargePerKg: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full text-xs font-black pl-7 pr-3 py-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryChargePerKg: Math.max(0, (formData.deliveryChargePerKg ?? 100) - 20) })}
+                          className="flex-1 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-black text-neutral-700 cursor-pointer"
+                        >
+                          -20
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryChargePerKg: Math.max(0, (formData.deliveryChargePerKg ?? 100) - 10) })}
+                          className="flex-1 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-black text-neutral-700 cursor-pointer"
+                        >
+                          -10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryChargePerKg: (formData.deliveryChargePerKg ?? 100) + 10 })}
+                          className="flex-1 py-0.5 bg-orange-100 hover:bg-orange-200 rounded text-[10px] font-black text-orange-900 cursor-pointer"
+                        >
+                          +10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryChargePerKg: (formData.deliveryChargePerKg ?? 100) + 20 })}
+                          className="flex-1 py-0.5 bg-orange-100 hover:bg-orange-200 rounded text-[10px] font-black text-orange-900 cursor-pointer"
+                        >
+                          +20
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-neutral-500">સ્ટેશનરી, નોટબુક, રીમ</p>
+                    </div>
+
+                    {/* Free above limit */}
+                    <div className="bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 space-y-1.5">
+                      <label className="block text-[11px] font-black text-neutral-800">
+                        🎉 ફ્રી ડિલિવરી લિમિટ (Free Above):
+                      </label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-neutral-500 text-xs">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.deliveryFreeAbove ?? 0}
+                          onChange={e => setFormData({ ...formData, deliveryFreeAbove: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full text-xs font-black pl-7 pr-3 py-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                          placeholder="0 = કોઈ ફ્રી લિમિટ નહિ"
+                        />
+                      </div>
+                      <div className="flex items-center gap-1 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryFreeAbove: 0 })}
+                          className="px-2 py-0.5 bg-neutral-200 hover:bg-neutral-300 rounded text-[10px] font-black text-neutral-700 cursor-pointer"
+                        >
+                          બંધ (0)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryFreeAbove: 500 })}
+                          className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 rounded text-[10px] font-black text-blue-900 cursor-pointer"
+                        >
+                          ₹500
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, deliveryFreeAbove: 1000 })}
+                          className="px-2 py-0.5 bg-blue-100 hover:bg-blue-200 rounded text-[10px] font-black text-blue-900 cursor-pointer"
+                        >
+                          ₹1000
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-neutral-500">0 = બંધ, અથવા નિર્ધારિત રકમથી ફ્રી</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-neutral-500 font-bold bg-neutral-50 p-2.5 rounded-lg border border-dashed">
+                    ⚠️ ડિલિવરી ચાર્જ બંધ છે. ગ્રાહકને ડિલિવરી મફત (Free) દેખાશે.
+                  </p>
+                )}
+              </div>
+
+              {/* 2. PLATFORM FEE CARD */}
+              <div className="bg-white p-4 rounded-xl border-2 border-neutral-300 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center font-black">
+                      <Banknote className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-neutral-900">૨. પ્લેટફોર્મ ફી (Platform Fee)</h4>
+                      <p className="text-[10px] text-neutral-500 font-bold">ઓનલાઇન સિસ્ટમ સર્વિસ ચાર્જ (સુધારો / વધારો / ઘટાડો)</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${formData.platformFeeEnabled !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-neutral-200 text-neutral-600'}`}>
+                      {formData.platformFeeEnabled !== false ? '🟢 ગ્રાહકને દેખાશે' : '⚪ બંધ છે'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.platformFeeEnabled ?? true}
+                        onChange={e => setFormData({ ...formData, platformFeeEnabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {formData.platformFeeEnabled !== false ? (
+                  <div className="max-w-sm bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 space-y-1.5">
+                    <label className="block text-[11px] font-black text-neutral-800">
+                      પ્લેટફોર્મ ફી રકમ (₹):
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-neutral-500 text-xs">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.platformFeeAmount ?? 15}
+                          onChange={e => setFormData({ ...formData, platformFeeAmount: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full text-xs font-black pl-7 pr-3 py-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, platformFeeAmount: Math.max(0, (formData.platformFeeAmount ?? 15) - 5) })}
+                        className="px-2.5 py-2 bg-neutral-200 hover:bg-neutral-300 rounded-lg text-xs font-black text-neutral-800 cursor-pointer"
+                        title="-₹5 ઘટાડો"
+                      >
+                        -5
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, platformFeeAmount: (formData.platformFeeAmount ?? 15) + 5 })}
+                        className="px-2.5 py-2 bg-indigo-100 hover:bg-indigo-200 rounded-lg text-xs font-black text-indigo-900 cursor-pointer"
+                        title="+₹5 વધારો"
+                      >
+                        +5
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-neutral-500">દરેક ઓનલાઇન ઓર્ડર પર ₹{formData.platformFeeAmount ?? 15} ઉમેરાશે</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-neutral-500 font-bold bg-neutral-50 p-2.5 rounded-lg border border-dashed">
+                    ⚠️ પ્લેટફોર્મ ફી બંધ છે.
+                  </p>
+                )}
+              </div>
+
+              {/* 3. SAFE PACKING CHARGE CARD */}
+              <div className="bg-white p-4 rounded-xl border-2 border-neutral-300 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-black">
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-neutral-900">૩. સુરક્ષિત પેકિંગ ચાર્જ (Packing Charge)</h4>
+                      <p className="text-[10px] text-neutral-500 font-bold">વોટરપ્રૂફ અને બબલ પેકિંગ ખર્ચ (સુધારો / વધારો / ઘટાડો)</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${formData.packingChargeEnabled !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-neutral-200 text-neutral-600'}`}>
+                      {formData.packingChargeEnabled !== false ? '🟢 ગ્રાહકને દેખાશે' : '⚪ બંધ છે'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.packingChargeEnabled ?? true}
+                        onChange={e => setFormData({ ...formData, packingChargeEnabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {formData.packingChargeEnabled !== false ? (
+                  <div className="max-w-sm bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 space-y-1.5">
+                    <label className="block text-[11px] font-black text-neutral-800">
+                      પેકિંગ ચાર્જ રકમ (₹):
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-neutral-500 text-xs">₹</span>
+                        <input
+                          type="number"
+                          min="0"
+                          value={formData.packingChargeAmount ?? 30}
+                          onChange={e => setFormData({ ...formData, packingChargeAmount: Math.max(0, Number(e.target.value) || 0) })}
+                          className="w-full text-xs font-black pl-7 pr-3 py-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, packingChargeAmount: Math.max(0, (formData.packingChargeAmount ?? 30) - 10) })}
+                        className="px-2.5 py-2 bg-neutral-200 hover:bg-neutral-300 rounded-lg text-xs font-black text-neutral-800 cursor-pointer"
+                        title="-₹10 ઘટાડો"
+                      >
+                        -10
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, packingChargeAmount: Math.max(0, (formData.packingChargeAmount ?? 30) - 5) })}
+                        className="px-2.5 py-2 bg-neutral-200 hover:bg-neutral-300 rounded-lg text-xs font-black text-neutral-800 cursor-pointer"
+                        title="-₹5 ઘટાડો"
+                      >
+                        -5
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, packingChargeAmount: (formData.packingChargeAmount ?? 30) + 5 })}
+                        className="px-2.5 py-2 bg-emerald-100 hover:bg-emerald-200 rounded-lg text-xs font-black text-emerald-900 cursor-pointer"
+                        title="+₹5 વધારો"
+                      >
+                        +5
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, packingChargeAmount: (formData.packingChargeAmount ?? 30) + 10 })}
+                        className="px-2.5 py-2 bg-emerald-100 hover:bg-emerald-200 rounded-lg text-xs font-black text-emerald-900 cursor-pointer"
+                        title="+₹10 વધારો"
+                      >
+                        +10
+                      </button>
+                    </div>
+                    <p className="text-[10px] text-neutral-500">દરેક ઓનલાઇન ઓર્ડર પર ₹{formData.packingChargeAmount ?? 30} પેકિંગ ફી લાગશે</p>
+                  </div>
+                ) : (
+                  <p className="text-xs text-neutral-500 font-bold bg-neutral-50 p-2.5 rounded-lg border border-dashed">
+                    ⚠️ પેકિંગ ચાર્જ બંધ છે.
+                  </p>
+                )}
+              </div>
+
+              {/* 4. OTHER / HANDLING CHARGE CARD */}
+              <div className="bg-white p-4 rounded-xl border-2 border-neutral-300 shadow-xs space-y-3">
+                <div className="flex items-center justify-between border-b pb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center font-black">
+                      <Tag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-neutral-900">૪. અન્ય વધારાનો ચાર્જ (Custom Other Fee)</h4>
+                      <p className="text-[10px] text-neutral-500 font-bold">તમારી મરજી મુજબ નામ અને રકમ એડિટ કરી શકો છો</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${formData.otherFeeEnabled ? 'bg-purple-100 text-purple-800' : 'bg-neutral-200 text-neutral-600'}`}>
+                      {formData.otherFeeEnabled ? '🟢 ગ્રાહકને દેખાશે' : '⚪ બંધ છે'}
+                    </span>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.otherFeeEnabled ?? false}
+                        onChange={e => setFormData({ ...formData, otherFeeEnabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-neutral-200 peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-orange-600"></div>
+                    </label>
+                  </div>
+                </div>
+
+                {formData.otherFeeEnabled ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 space-y-1.5">
+                      <label className="block text-[11px] font-black text-neutral-800">
+                        ચાર્જનું નામ (Label):
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.otherFeeLabel || ''}
+                        onChange={e => setFormData({ ...formData, otherFeeLabel: e.target.value })}
+                        className="w-full text-xs font-black p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                        placeholder="દા.ત. અન્ય સર્વિસ ચાર્જ / હેન્ડલિંગ ફી / સ્પેશિયલ ડિલિવરી"
+                      />
+                      <p className="text-[10px] text-neutral-500">ગ્રાહકને બિલમાં આ નામ દેખાશે</p>
+                    </div>
+                    <div className="bg-neutral-50 p-2.5 rounded-xl border border-neutral-200 space-y-1.5">
+                      <label className="block text-[11px] font-black text-neutral-800">
+                        ચાર્જ રકમ (₹):
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 font-black text-neutral-500 text-xs">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={formData.otherFeeAmount ?? 0}
+                            onChange={e => setFormData({ ...formData, otherFeeAmount: Math.max(0, Number(e.target.value) || 0) })}
+                            className="w-full text-xs font-black pl-7 pr-3 py-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-700"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, otherFeeAmount: Math.max(0, (formData.otherFeeAmount ?? 0) - 10) })}
+                          className="px-2.5 py-2 bg-neutral-200 hover:bg-neutral-300 rounded-lg text-xs font-black text-neutral-800 cursor-pointer"
+                        >
+                          -10
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, otherFeeAmount: (formData.otherFeeAmount ?? 0) + 10 })}
+                          className="px-2.5 py-2 bg-purple-100 hover:bg-purple-200 rounded-lg text-xs font-black text-purple-900 cursor-pointer"
+                        >
+                          +10
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-neutral-500">બિલમાં આ રકમ ઉમેરાશે</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-neutral-500 font-bold bg-neutral-50 p-2.5 rounded-lg border border-dashed">
+                    ⚠️ અન્ય ચાર્જ હાલ બંધ છે. ચાલુ કરવા ઉપર સ્વિચ દબાવો.
+                  </p>
+                )}
+              </div>
+
+              {/* 5. LIVE CHECKOUT PREVIEW BOX */}
+              <div className="bg-neutral-900 text-white p-4 rounded-xl space-y-2 border border-neutral-700">
+                <div className="flex items-center justify-between text-xs font-black text-orange-400 border-b border-neutral-800 pb-1.5">
+                  <span>👁️ ગ્રાહકના ચેકઆઉટ બિલમાં આ રીતે દેખાશે (Live Preview):</span>
+                  <span className="text-[10px] text-neutral-400">નમૂનો</span>
+                </div>
+                <div className="space-y-1.5 text-xs text-neutral-300 pt-1">
+                  <div className="flex justify-between">
+                    <span>સામાન કુલ (Cart Subtotal):</span>
+                    <span className="font-bold text-white">₹250.00</span>
+                  </div>
+                  {formData.deliveryChargeEnabled !== false && (
+                    <div className="flex justify-between text-blue-300">
+                      <span>🚚 ડિલિવરી ચાર્જ:</span>
+                      <span className="font-bold">
+                        ₹{formData.deliveryCoverCharge ?? 50} (કવર) / ₹{formData.deliveryChargePerKg ?? 100} (1 KG પાર્સલ)
+                      </span>
+                    </div>
+                  )}
+                  {formData.platformFeeEnabled !== false && (
+                    <div className="flex justify-between text-amber-300">
+                      <span>📱 પ્લેટફોર્મ ફી:</span>
+                      <span className="font-bold">+₹{formData.platformFeeAmount ?? 15}</span>
+                    </div>
+                  )}
+                  {formData.packingChargeEnabled !== false && (
+                    <div className="flex justify-between text-emerald-300">
+                      <span>📦 સુરક્ષિત પેકિંગ ચાર્જ:</span>
+                      <span className="font-bold">+₹{formData.packingChargeAmount ?? 30}</span>
+                    </div>
+                  )}
+                  {formData.otherFeeEnabled && (formData.otherFeeAmount || 0) > 0 && (
+                    <div className="flex justify-between text-purple-300">
+                      <span>🏷️ {formData.otherFeeLabel || 'અન્ય ચાર્જ'}:</span>
+                      <span className="font-bold">+₹{formData.otherFeeAmount}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-neutral-700 pt-2 flex justify-between text-sm font-black text-white">
+                    <span>કુલ ચૂકવવાપાત્ર રકમ:</span>
+                    <span className="text-orange-400 font-black">
+                      ₹{
+                        250 +
+                        (formData.deliveryChargeEnabled !== false ? (formData.deliveryCoverCharge ?? 50) : 0) +
+                        (formData.platformFeeEnabled !== false ? (formData.platformFeeAmount ?? 15) : 0) +
+                        (formData.packingChargeEnabled !== false ? (formData.packingChargeAmount ?? 30) : 0) +
+                        (formData.otherFeeEnabled ? (formData.otherFeeAmount ?? 0) : 0)
+                      } (કવર) / ₹{
+                        250 +
+                        (formData.deliveryChargeEnabled !== false ? (formData.deliveryChargePerKg ?? 100) : 0) +
+                        (formData.platformFeeEnabled !== false ? (formData.platformFeeAmount ?? 15) : 0) +
+                        (formData.packingChargeEnabled !== false ? (formData.packingChargeAmount ?? 30) : 0) +
+                        (formData.otherFeeEnabled ? (formData.otherFeeAmount ?? 0) : 0)
+                      } (પાર્સલ)
+                    </span>
                   </div>
                 </div>
               </div>
