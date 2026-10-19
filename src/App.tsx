@@ -80,7 +80,7 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
-import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites } from './hooks/useFirebaseSync';
+import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll } from './hooks/useFirebaseSync';
 import {
   deleteFileFromCloudStorage,
   downloadFileSafely,
@@ -2023,14 +2023,15 @@ export default function App() {
             {isAdminUnlocked && (
               <button
                 onClick={() => {
-                  executeBatchedFirestoreWrites();
+                  forceCloudSyncAll();
+                  showToast(`🔄 ફાયરબેઝ ક્લાઉડમાંથી તમામ ${posItems.length} વસ્તુઓ તાત્કાલિક સિન્ક થઈ રહી છે...`);
                   setShowMultiPlatformSyncModal(true);
                 }}
                 className="bg-purple-900 hover:bg-purple-800 text-purple-200 border border-purple-600 px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
                 title="મોબાઇલ અને પીસી વચ્ચે ડેટા તાત્કાલિક સિન્ક કરો (Sync Now)"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                <span>🔄 સિન્ક</span>
+                <span>🔄 સિન્ક ({posItems.length})</span>
               </button>
             )}
 
@@ -3399,14 +3400,28 @@ export default function App() {
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setIsAddingNewItem(true)}
-                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer"
-              >
-                <Plus className="w-3.5 h-3.5 text-orange-400" />
-                <span>નવી પ્રોડક્ટ ઉમેરો</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    forceCloudSyncAll();
+                    showToast(`🔄 ફાયરબેઝ ક્લાઉડ સાથે સિંક ચાલુ છે... હાલ ${posItems.length} આઇટમ્સ સુરક્ષિત છે!`);
+                  }}
+                  className="bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer transition-all"
+                  title="Vercel અને ફાયરબેઝમાંથી તાજેતરની તમામ વસ્તુઓ તાત્કાલિક લોડ કરો"
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-purple-700" />
+                  <span>ક્લાઉડ સિંક ({posItems.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewItem(true)}
+                  className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5 text-orange-400" />
+                  <span>નવી પ્રોડક્ટ ઉમેરો</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">

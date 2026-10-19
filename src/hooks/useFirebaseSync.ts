@@ -206,9 +206,23 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', flushAll);
 }
 
+export function forceCloudSyncAll(): void {
+  if (typeof window !== 'undefined') {
+    executeBatchedFirestoreWrites();
+    window.dispatchEvent(new CustomEvent('prisha_force_cloud_sync'));
+  }
+}
+
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
+
+  // Clear any accidental deletedIds for products to ensure zero items are ever lost
+  if (docName === 'products' && typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(localKey + '_deleted_ids');
+    } catch (e) {}
+  }
 
   const filterMockData = (val: any): any => {
     if (!Array.isArray(val)) return val;
@@ -247,7 +261,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   };
 
   const [data, setData] = useState<T>(() => {
-    const deletedIds = getDeletedIds(localKey);
+    const deletedIds = docName === 'products' ? new Set<string>() : getDeletedIds(localKey);
     let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
     let initialVal = initialData;
     if (saved) {
@@ -257,6 +271,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         if (Array.isArray(cleaned)) {
           initialVal = cleaned.filter((item: any) => {
             if (!item) return false;
+            if (docName === 'products') return true; // Never filter out products by deletedIds
             const id = item.id;
             const inv = item.invoiceNo;
             const dataId = item.data?.id;
@@ -274,6 +289,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     } else if (Array.isArray(initialData)) {
       initialVal = (initialData as any[]).filter((item: any) => {
         if (!item) return false;
+        if (docName === 'products') return true; // Keep all products intact
         const id = item.id;
         const inv = item.invoiceNo;
         if (id && deletedIds.has(id)) return false;
@@ -287,7 +303,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   useEffect(() => {
     const docRef = doc(db, "store_data", docName);
     
-    // Polling function instead of real-time listener
+    // Real-time polling & synchronization function
     const syncDocFromCloud = async () => {
       if (isQuotaExhausted()) return;
       try {
@@ -297,7 +313,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           const rawData = snapData?.data;
           const cloudDeletedIds: string[] = snapData?.deletedIds || [];
           
-          if (cloudDeletedIds.length > 0) {
+          if (docName !== 'products' && cloudDeletedIds.length > 0) {
             const curDeleted = getDeletedIds(localKey);
             let updated = false;
             cloudDeletedIds.forEach(id => {
@@ -312,10 +328,12 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           if (rawData !== undefined && rawData !== null) {
             const rawCleaned = filterMockData(rawData);
             setData((prevData) => {
-              const deletedIds = getDeletedIds(localKey);
+              const deletedIds = docName === 'products' ? new Set<string>() : getDeletedIds(localKey);
               if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
                 const isItemDeleted = (item: any) => {
                   if (!item) return true;
+                  // Products are inventory items - NEVER filter them out as deleted!
+                  if (docName === 'products') return false;
                   const id = item.id;
                   const inv = item.invoiceNo;
                   const dataId = item.data?.id;
@@ -337,6 +355,9 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
                     if (item.invoiceNo) localMap.set(item.invoiceNo, item);
                   }
                 });
+                
+                // Union merge: Keeps all items from cloud (e.g. all 58 items from Vercel)
+                // plus any local items, merging non-destructively so zero items are lost
                 const merged = [
                   ...validCloudItems.map((c: any) => {
                     const local = (c.id && localMap.get(c.id)) || (c.invoiceNo && localMap.get(c.invoiceNo));
@@ -367,18 +388,38 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
     syncDocFromCloud();
 
-    // Poll every 3 minutes to stay up to date across devices
-    const pollInterval = setInterval(syncDocFromCloud, 3 * 60 * 1000);
+    // Fast polling every 45 seconds to keep all devices & Vercel in real-time sync
+    const pollInterval = setInterval(syncDocFromCloud, 45 * 1000);
+
+    // Instant sync on tab focus or visibility change (switching back to app)
+    const handleFocusOrVisible = () => {
+      syncDocFromCloud();
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    window.addEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
     
-    return () => clearInterval(pollInterval);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncDocFromCloud();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('focus', handleFocusOrVisible);
+      window.removeEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [docName, localKey]);
 
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
       
-      // Force immediate deletion tracking
-      if (Array.isArray(prev) && Array.isArray(next)) {
+      // Force immediate deletion tracking (ONLY for orders/trash, NEVER for products)
+      if (docName !== 'products' && Array.isArray(prev) && Array.isArray(next)) {
         const deletedIds = getDeletedIds(localKey);
         let changed = false;
         const nextIds = new Set<string>();
