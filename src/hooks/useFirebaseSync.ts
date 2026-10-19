@@ -372,9 +372,10 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
                 const validCloudItems = rawCleaned.filter((item: any) => !isItemDeleted(item));
                 const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
-                const localUnsyncedItems = prevData.filter((localItem: any) => !isItemDeleted(localItem) && !cloudIds.has(localItem.id || localItem.invoiceNo));
+                const cleanedPrev = filterMockData(prevData);
+                const localUnsyncedItems = cleanedPrev.filter((localItem: any) => !isItemDeleted(localItem) && !cloudIds.has(localItem.id || localItem.invoiceNo));
                 const localMap = new Map();
-                prevData.forEach((item: any) => { 
+                cleanedPrev.forEach((item: any) => { 
                   if (item) {
                     if (item.id) localMap.set(item.id, item);
                     if (item.invoiceNo) localMap.set(item.invoiceNo, item);

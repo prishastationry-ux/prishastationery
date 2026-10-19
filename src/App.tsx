@@ -48,6 +48,8 @@ import {
   Newspaper,
   Heart,
   ArrowDownUp,
+  ArrowUp,
+  ArrowDown,
   Calculator,
   Smartphone,
   Building,
@@ -561,30 +563,68 @@ export default function App() {
     }
   };
 
-  // Reorder Item (Up/Down)
+  // Reorder Item (Up/Down) with full persistence and user feedback
   const handleMoveItem = (itemId: string, direction: 'up' | 'down', e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     
-    // Create a working copy and ensure orderIdx is initialized
+    // Create sorted copy based on current orderIdx
     let itemsCopy = [...posItems].sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
-    itemsCopy = itemsCopy.map((item, index) => ({ ...item, orderIdx: item.orderIdx ?? index }));
-
     const currentIndex = itemsCopy.findIndex(p => p.id === itemId);
     if (currentIndex === -1) return;
 
-    if (direction === 'up' && currentIndex > 0) {
+    const item = itemsCopy[currentIndex];
+
+    if (direction === 'up') {
+      if (currentIndex === 0) {
+        showToast(`ℹ️ "${item.nameGu}" પહેલેથી જ સૌથી ઉપર છે!`);
+        return;
+      }
       // Swap with previous
-      const temp = itemsCopy[currentIndex].orderIdx;
-      itemsCopy[currentIndex].orderIdx = itemsCopy[currentIndex - 1].orderIdx;
-      itemsCopy[currentIndex - 1].orderIdx = temp;
-    } else if (direction === 'down' && currentIndex < itemsCopy.length - 1) {
+      const prev = itemsCopy[currentIndex - 1];
+      itemsCopy[currentIndex - 1] = item;
+      itemsCopy[currentIndex] = prev;
+      showToast(`⬆️ "${item.nameGu}" ઉપર ખસેડાઈ (ક્રમ: ${currentIndex})`);
+    } else if (direction === 'down') {
+      if (currentIndex === itemsCopy.length - 1) {
+        showToast(`ℹ️ "${item.nameGu}" પહેલેથી જ સૌથી નીચે છે!`);
+        return;
+      }
       // Swap with next
-      const temp = itemsCopy[currentIndex].orderIdx;
-      itemsCopy[currentIndex].orderIdx = itemsCopy[currentIndex + 1].orderIdx;
-      itemsCopy[currentIndex + 1].orderIdx = temp;
+      const next = itemsCopy[currentIndex + 1];
+      itemsCopy[currentIndex + 1] = item;
+      itemsCopy[currentIndex] = next;
+      showToast(`⬇️ "${item.nameGu}" નીચે ખસેડાઈ (ક્રમ: ${currentIndex + 2})`);
     }
 
-    setPosItems(itemsCopy);
+    // Re-index all items sequentially from 0, 1, 2...
+    const reindexed = itemsCopy.map((it, idx) => ({
+      ...it,
+      orderIdx: idx,
+      updatedAt: Date.now()
+    }));
+
+    setPosItems(reindexed);
+  };
+
+  // Direct numeric position setter (e.g. move directly to #1 or #5)
+  const handleSetItemOrder = (itemId: string, newPositionNumber: number) => {
+    if (isNaN(newPositionNumber) || newPositionNumber < 1) return;
+    let itemsCopy = [...posItems].sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
+    const currentIndex = itemsCopy.findIndex(p => p.id === itemId);
+    if (currentIndex === -1) return;
+
+    const targetItem = itemsCopy.splice(currentIndex, 1)[0];
+    const targetIdx = Math.min(itemsCopy.length, Math.max(0, newPositionNumber - 1));
+    itemsCopy.splice(targetIdx, 0, targetItem);
+
+    const reindexed = itemsCopy.map((it, idx) => ({
+      ...it,
+      orderIdx: idx,
+      updatedAt: Date.now()
+    }));
+
+    setPosItems(reindexed);
+    showToast(`🔢 "${targetItem.nameGu}" ક્રમ ${newPositionNumber} પર ગોઠવાઈ!`);
   };
 
   // Delete an Item completely -> Opens In-App Confirm Modal -> Moves to Trash Bin (Recycle Bin)
@@ -2341,17 +2381,17 @@ export default function App() {
                       <div className="flex items-center gap-1 bg-white/95 backdrop-blur-xs p-1 rounded-lg border border-neutral-300 shadow-sm">
                         <button
                           onClick={e => handleMoveItem(item.id, 'up', e)}
-                          className="text-neutral-500 hover:text-black p-1 rounded hover:bg-neutral-200 cursor-pointer"
-                          title="ઉપર ખસેડો"
+                          className="text-blue-700 hover:text-white hover:bg-blue-600 p-1 rounded-md transition-all cursor-pointer"
+                          title="આ વસ્તુ ૧ સ્થાન ઉપર ખસેડો"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+                          <ArrowUp className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={e => handleMoveItem(item.id, 'down', e)}
-                          className="text-neutral-500 hover:text-black p-1 rounded hover:bg-neutral-200 cursor-pointer"
-                          title="નીચે ખસેડો"
+                          className="text-blue-700 hover:text-white hover:bg-blue-600 p-1 rounded-md transition-all cursor-pointer"
+                          title="આ વસ્તુ ૧ સ્થાન નીચે ખસેડો"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                          <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => setEditingItem(item)}
@@ -3462,6 +3502,7 @@ export default function App() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-neutral-100 text-neutral-700 border-b font-black">
+                    <th className="p-2 text-center w-28">ક્રમ (ઉપર/નીચે)</th>
                     <th className="p-2">પ્રોડક્ટ</th>
                     <th className="p-2">કેટેગરી</th>
                     <th className="p-2">વેચાણ ભાવ</th>
@@ -3472,8 +3513,63 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-200">
-                  {posItems.map(item => (
-                    <tr key={item.id} className="hover:bg-neutral-50">
+                  {posItems
+                    .slice()
+                    .sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999))
+                    .map((item, posIndex, sortedArr) => (
+                    <tr key={item.id} className="hover:bg-neutral-50 transition-colors">
+                      {/* ORDER / UP-DOWN BUTTONS */}
+                      <td className="p-2 text-center">
+                        <div className="flex items-center justify-center gap-1 bg-white/80 p-1 rounded-lg border border-neutral-200 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={e => handleMoveItem(item.id, 'up', e)}
+                            disabled={posIndex === 0}
+                            className={`w-6 h-6 rounded-md font-black text-xs flex items-center justify-center transition-all ${
+                              posIndex === 0
+                                ? 'text-neutral-300 bg-neutral-100 cursor-not-allowed'
+                                : 'text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 cursor-pointer shadow-2xs active:scale-95'
+                            }`}
+                            title="આ વસ્તુને ૧ સ્થાન ઉપર ખસેડો"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+
+                          <input
+                            type="number"
+                            min="1"
+                            key={posIndex}
+                            defaultValue={posIndex + 1}
+                            onBlur={e => {
+                              const val = parseInt(e.target.value, 10);
+                              if (!isNaN(val)) handleSetItemOrder(item.id, val);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') {
+                                const val = parseInt((e.target as HTMLInputElement).value, 10);
+                                if (!isNaN(val)) handleSetItemOrder(item.id, val);
+                                (e.target as HTMLInputElement).blur();
+                              }
+                            }}
+                            className="w-11 font-mono font-black text-xs text-center py-1 px-1 bg-white border border-blue-400 rounded-md focus:border-blue-600 outline-none shadow-2xs text-blue-950"
+                            title="અહીં સીધો નંબર (દા.ત. 1, 2, 5) લખીને એન્ટર દબાવો જેથી વસ્તુ તરત તે ક્રમ પર ગોઠવાઈ જાય"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={e => handleMoveItem(item.id, 'down', e)}
+                            disabled={posIndex === sortedArr.length - 1}
+                            className={`w-6 h-6 rounded-md font-black text-xs flex items-center justify-center transition-all ${
+                              posIndex === sortedArr.length - 1
+                                ? 'text-neutral-300 bg-neutral-100 cursor-not-allowed'
+                                : 'text-blue-700 bg-blue-50 hover:bg-blue-600 hover:text-white border border-blue-200 cursor-pointer shadow-2xs active:scale-95'
+                            }`}
+                            title="આ વસ્તુને ૧ સ્થાન નીચે ખસેડો"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
                       <td className="p-2 font-black text-neutral-900 flex items-center gap-2">
                         {item.imageUrl ? (
                           <img
