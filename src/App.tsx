@@ -13,6 +13,7 @@ import {
   LogOut,
   Image as ImageIcon,
   Settings,
+  Bell,
   Edit3,
   X,
   Eye,
@@ -202,6 +203,19 @@ export default function App() {
       return stored ? JSON.parse(stored) : [];
     } catch { return []; }
   });
+
+  const [adminUnreadOrdersCount, setAdminUnreadOrdersCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('prisha_admin_unread_count');
+      return saved ? Number(saved) : 0;
+    } catch { return 0; }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('prisha_admin_unread_count', String(adminUnreadOrdersCount));
+    } catch {}
+  }, [adminUnreadOrdersCount]);
 
   useEffect(() => {
     localStorage.setItem('prisha_wishlist', JSON.stringify(wishlist));
@@ -500,6 +514,53 @@ export default function App() {
       reader.onload = () => resolve(reader.result as string);
       reader.onerror = error => reject(error);
     });
+  };
+
+  const handleExportBackupJson = () => {
+    const backup = {
+      products: posItems,
+      orders,
+      expenses,
+      purchases,
+      rojmelEntries,
+      khataAccounts,
+      khataTransactions,
+      printJobs,
+      storeSettings,
+      timestamp: Date.now()
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `prisha_stationery_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    showToast('📤 બેકઅપ ફાઇલ સફળતાપૂર્વક ડાઉનલોડ થઈ ગઈ!');
+  };
+
+  const handleImportBackupJson = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.products && Array.isArray(data.products)) {
+          setPosItems(data.products);
+          try { localStorage.setItem('prisha_products_v4', JSON.stringify(data.products)); } catch {}
+        }
+        if (data.orders && Array.isArray(data.orders)) setOrders(data.orders);
+        if (data.expenses && Array.isArray(data.expenses)) setExpenses(data.expenses);
+        if (data.purchases && Array.isArray(data.purchases)) setPurchases(data.purchases);
+        if (data.rojmelEntries && Array.isArray(data.rojmelEntries)) setRojmelEntries(data.rojmelEntries);
+        if (data.storeSettings) setStoreSettings(prev => ({ ...prev, ...data.storeSettings }));
+        showToast('📥 બેકઅપ સફળતાપૂર્વક ઇમ્પોર્ટ થઈ ગયો! બધી જ વસ્તુઓ આવી ગઈ.');
+        forceCloudSyncAll();
+      } catch (err) {
+        alert('બેકઅપ ફાઇલ વાંચવામાં ભૂલ છે. યોગ્ય JSON ફાઇલ પસંદ કરો.');
+      }
+    };
+    reader.readAsText(file);
   };
 
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -1060,6 +1121,8 @@ export default function App() {
     };
 
     setOrders(prev => [newOrder, ...prev]);
+    setAdminUnreadOrdersCount(prev => prev + 1);
+    showToast(`🔔 નવો ઑર્ડર મળ્યો! ગ્રાહક: ${newOrder.customerName} (₹${newOrder.total})`);
 
     // Also register in Print Jobs collection if files or print services are attached
     if (collectedAttachedFiles.length > 0) {
@@ -2027,6 +2090,24 @@ export default function App() {
             ) : (
               <div className="flex items-center gap-1 sm:gap-1.5">
                 <button
+                  onClick={() => {
+                    setAdminUnreadOrdersCount(0);
+                    setActiveTab('admin');
+                    showToast(`🔔 કુલ ${orders.length} ઑર્ડર્સ છે.`);
+                  }}
+                  className="relative bg-amber-500 hover:bg-amber-600 text-black px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer"
+                  title="નવા ગ્રાહક ઑર્ડર નોટિફિકેશન"
+                >
+                  <Bell className="w-3.5 h-3.5 text-black shrink-0 animate-bounce" />
+                  <span className="hidden md:inline">ઓર્ડર</span>
+                  {adminUnreadOrdersCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4 text-center animate-ping">
+                      {adminUnreadOrdersCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
                   onClick={() => setActiveTab(activeTab === 'customer' ? 'admin' : 'customer')}
                   className={`px-2 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-black flex items-center gap-1 border shadow-2xs transition-all cursor-pointer ${
                     activeTab === 'customer'
@@ -2729,6 +2810,30 @@ export default function App() {
                 <Download className="w-4 h-4" />
                 <span>Excel રિપોર્ટ</span>
               </button>
+
+              <button
+                type="button"
+                onClick={handleExportBackupJson}
+                className="bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="તમારો તમામ ડેટા (બધી વસ્તુઓ, બિલ, ખર્ચ) બેકઅપ JSON ફાઇલ તરીકે ડાઉનલોડ કરો"
+              >
+                <Download className="w-4 h-4 text-amber-300" />
+                <span>📤 બેકઅપ ડાઉનલોડ</span>
+              </button>
+
+              <label
+                className="bg-purple-700 hover:bg-purple-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                title="Vercel કે અન્ય જગ્યાનો બેકઅપ JSON ફાઇલ અહીં અપલોડ કરીને મર્જ કરો"
+              >
+                <Upload className="w-4 h-4 text-amber-300" />
+                <span>📥 બેકઅપ ઇમ્પોર્ટ</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  onChange={handleImportBackupJson}
+                />
+              </label>
 
               <button
                 type="button"
