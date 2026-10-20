@@ -2250,31 +2250,6 @@ export default function App() {
 
           
 
-          {/* 🔥 TRENDING & HOT DEALS SHOWCASE BAR */}
-          <div className="bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-600 p-3 sm:p-3.5 rounded-2xl shadow-md text-white flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl animate-bounce">🔥</span>
-              <div>
-                <h3 className="text-xs font-black uppercase tracking-wider text-amber-100">આજના ટ્રેન્ડિંગ અને હોટ ડીલ્સ (Trending Showcase)</h3>
-                <p className="text-[11px] font-bold text-white">થરાદમાં ગ્રાહકોની પહેલી પસંદ - બેસ્ટ સેલર સ્ટેશનરી & ઓનલાઇન સેવાઓ!</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-full">
-              {posItems.filter(p => p.badge || (typeof p.stock === 'number' && p.stock > 0)).slice(0, 4).map(item => (
-                <button
-                  key={`trend-${item.id}`}
-                  onClick={() => setSelectedProductForModal(item)}
-                  className="bg-white/15 hover:bg-white/30 border border-white/30 px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer backdrop-blur-xs shadow-2xs active:scale-95"
-                  title="ક્લિક કરીને વિગત જુઓ"
-                >
-                  <span className="text-sm">{item.icon || '📦'}</span>
-                  <span className="text-white font-black">{item.nameGu.length > 22 ? item.nameGu.substring(0, 20) + '...' : item.nameGu}</span>
-                  <span className="bg-white/20 px-1.5 py-0.5 rounded text-amber-200 font-black">₹{item.price}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* SEARCH & CATEGORY FILTER BAR */}
           <div className="bg-white p-3 sm:p-4 rounded-xl border border-neutral-300 shadow-2xs space-y-3">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
