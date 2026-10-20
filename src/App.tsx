@@ -341,6 +341,7 @@ export default function App() {
   const [newProdCategory, setNewProdCategory] = useState<string>('પેન & સ્ટેશનરી');
   const [newProdBadge, setNewProdBadge] = useState('');
   const [newProdHsn, setNewProdHsn] = useState('');
+  const [newProdBarcode, setNewProdBarcode] = useState('');
   const [newProdGstRate, setNewProdGstRate] = useState<number>(18);
 
   // POS Direct Counter Billing Form & In-Bill Item Selection
@@ -671,6 +672,7 @@ export default function App() {
       imageUrl: newProdImage || undefined,
       badge: newProdBadge || undefined,
       hsnCode: finalHsn || undefined,
+      barcode: newProdBarcode.trim() || undefined,
       gstRate: finalGst,
       createdAt: Date.now(),
       updatedAt: Date.now()
@@ -682,6 +684,7 @@ export default function App() {
     setNewProdImage('');
     setNewProdBadge('');
     setNewProdHsn('');
+    setNewProdBarcode('');
     setNewProdGstRate(18);
     setNewProdMrp('');
     setNewProdBulkPricing('');
@@ -2953,8 +2956,40 @@ export default function App() {
                 </div>
 
                 {!showCustomPosInput ? (
-                  /* Standard Product Dropdown Selector */
-                  <div className="space-y-1.5">
+                  /* Standard Product Dropdown Selector & Barcode Scanner */
+                  <div className="space-y-2">
+                    {/* BARCODE SCANNER QUICK INPUT BOX */}
+                    <div className="bg-amber-50 p-2 rounded-lg border border-amber-300 flex items-center gap-2">
+                      <span className="text-sm">📷</span>
+                      <input
+                        type="text"
+                        placeholder="બારકોડ સ્કેન કરો / ટાઈપ કરો (Scan Barcode)..."
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') {
+                            const code = (e.target as HTMLInputElement).value.trim();
+                            if (code) {
+                              const found = posItems.find(p => p.barcode === code || p.id === code || p.nameGu.toLowerCase().includes(code.toLowerCase()));
+                              if (found) {
+                                setPosBillItems(prev => {
+                                  const existing = prev.find(i => i.product?.id === found.id || i.id === found.id);
+                                  if (existing) {
+                                    return prev.map(i => i.product?.id === found.id || i.id === found.id ? { ...i, qty: i.qty + 1 } : i);
+                                  }
+                                  return [...prev, { id: found.id, product: found, name: found.nameGu, qty: 1, price: found.price, unit: found.unit }];
+                                });
+                                showToast(`✅ બારકોડથી ઉમેરાયું: ${found.nameGu} (₹{found.price})`);
+                                (e.target as HTMLInputElement).value = '';
+                              } else {
+                                showToast(`❌ બારકોડ કે આઇટમ '${code}' મળી નથી!`);
+                              }
+                            }
+                          }
+                        }}
+                        className="w-full text-xs font-mono font-bold p-1.5 bg-white border border-amber-400 rounded-md outline-none text-amber-950"
+                        title="બારકોડ સ્કેનર ગનથી સ્કેન કરો અને એન્ટર દબાવો"
+                      />
+                    </div>
+
                     <select
                       id="pos-product-select"
                       value={posSelectedProdId}
@@ -3844,6 +3879,17 @@ export default function App() {
                 </div>
               </div>
 
+              <div>
+                <label className="font-bold block mb-1 text-neutral-800">📷 બારકોડ નંબર (Barcode / Scan ID)</label>
+                <input
+                  type="text"
+                  placeholder="દા.ત. 8901030... અથવા ગનથી સ્કેન કરો"
+                  value={newProdBarcode}
+                  onChange={e => setNewProdBarcode(e.target.value)}
+                  className="w-full font-mono font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-neutral-50"
+                />
+              </div>
+
               {/* UNIT SELECTION - સેટ / પેકેટ / નંગ / રીમ / બોક્સ / વગેરે */}
               <div className="p-3 bg-amber-50/80 rounded-xl border-2 border-amber-300 space-y-2">
                 <div className="flex items-center justify-between">
@@ -4204,6 +4250,17 @@ export default function App() {
                     <option key={cat} value={cat} />
                   ))}
                 </datalist>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1 text-neutral-800">📷 બારકોડ નંબર (Barcode / Scan ID)</label>
+                <input
+                  type="text"
+                  value={editingItem.barcode || ''}
+                  onChange={e => setEditingItem({ ...editingItem, barcode: e.target.value })}
+                  placeholder="દા.ત. 8901030... અથવા ગનથી સ્કેન કરો"
+                  className="w-full font-mono font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-neutral-50 text-xs"
+                />
               </div>
 
               {/* GST & HSN Tax Master Configuration */}

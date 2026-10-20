@@ -27,6 +27,7 @@ export interface ProductItem {
   mrp?: number; // છાપેલી કિંમત (Cross-out)
   bulkPricing?: string; // હોલસેલ ભાવ (e.g. "5 નંગ: ₹200")
   orderIdx?: number; // For admin reordering
+  barcode?: string; // Barcode number for scanner guns / camera scanning
   hsnCode?: string;
   gstRate?: number; // e.g. 0, 5, 12, 18, 28
   minStockAlert?: number;
