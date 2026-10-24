@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, RotateCcw, X, AlertTriangle, Package, Receipt, DollarSign, CheckCircle2, ShieldAlert, BookOpen, Users } from 'lucide-react';
+import { Trash2, RotateCcw, X, AlertTriangle, Package, Receipt, DollarSign, CheckCircle2, ShieldAlert, BookOpen, Users, Landmark } from 'lucide-react';
 import { TrashRecord } from '../types';
 
 interface TrashModalProps {
@@ -19,7 +19,7 @@ export const TrashModal: React.FC<TrashModalProps> = ({
   onPermanentDelete,
   onEmptyTrash
 }) => {
-  const [filterType, setFilterType] = useState<'all' | 'khata' | 'rojmel' | 'product' | 'order' | 'expense'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'khata' | 'rojmel' | 'product' | 'order' | 'expense' | 'bank_entry'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   if (!isOpen) return null;
@@ -77,7 +77,8 @@ export const TrashModal: React.FC<TrashModalProps> = ({
               { id: 'rojmel', label: 'રોજમેળ', count: trashList.filter(t => t.type === 'rojmel').length },
               { id: 'product', label: 'પ્રોડક્ટ્સ', count: trashList.filter(t => t.type === 'product').length },
               { id: 'order', label: 'બિલ / ઓર્ડર્સ', count: trashList.filter(t => t.type === 'order').length },
-              { id: 'expense', label: 'ખર્ચ', count: trashList.filter(t => t.type === 'expense').length }
+              { id: 'expense', label: 'ખર્ચ', count: trashList.filter(t => t.type === 'expense').length },
+              { id: 'bank_entry', label: 'બેંક એન્ટ્રી', count: trashList.filter(t => t.type === 'bank_entry').length }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -142,6 +143,7 @@ export const TrashModal: React.FC<TrashModalProps> = ({
                     {item.type === 'product' && <Package className="w-5 h-5" />}
                     {item.type === 'order' && <Receipt className="w-5 h-5" />}
                     {item.type === 'expense' && <DollarSign className="w-5 h-5" />}
+                    {item.type === 'bank_entry' && <Landmark className="w-5 h-5" />}
                   </div>
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -157,6 +159,8 @@ export const TrashModal: React.FC<TrashModalProps> = ({
                           ? 'પ્રોડક્ટ આઇટમ'
                           : item.type === 'order'
                           ? 'વેચાણ બિલ'
+                          : item.type === 'bank_entry'
+                          ? 'બેંક એન્ટ્રી'
                           : 'ખર્ચ'}
                       </span>
                     </div>

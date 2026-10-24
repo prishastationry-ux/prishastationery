@@ -112,7 +112,11 @@ export const AdminPrintJobsModal: React.FC<AdminPrintJobsModalProps> = ({
       cf && 
       cf.id && 
       !existingFileIds.has(cf.id) && 
-      !isPurgedOrDeletedCloudFile(cf)
+      !isPurgedOrDeletedCloudFile(cf) &&
+      !cf.isCatalogProduct &&
+      !cf.fileName?.includes('pwa-') &&
+      !cf.fileName?.includes('apple-touch') &&
+      !cf.fileName?.startsWith('default_')
     );
 
     // 3. GROUP unlinked files by jobId, or by (customerMobile + 15-min window)

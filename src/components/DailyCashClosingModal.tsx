@@ -101,6 +101,26 @@ export const DailyCashClosingModal: React.FC<DailyCashClosingModalProps> = ({
 
   const totalSales = cashSales + upiSales + creditSales;
 
+  // 4-Way Segregated Streams Calculation (વસ્તુ, ડોક્યુમેન્ટ, કાઉન્ટર, બેંક)
+  const isDocOrder = (ord: OrderRecord) => {
+    if (ord.attachedFiles && ord.attachedFiles.length > 0) return true;
+    return ord.items.some(it => {
+      const name = (it.name || '').toLowerCase();
+      return name.includes('ઝેરોક્ષ') || name.includes('xerox') || name.includes('પ્રિન્ટ') || name.includes('print') ||
+             name.includes('લેમિનેશન') || name.includes('lamination') || name.includes('pvc') ||
+             name.includes('પાસપોર્ટ') || name.includes('passport') || name.includes('ડોક્યુમેન્ટ') ||
+             name.includes('document') || name.includes('ફાઇલ') || name.includes('file');
+    });
+  };
+
+  const dayStationeryOrders = dayOrders.filter(o => o.orderType !== 'counter' && !isDocOrder(o));
+  const dayDocOrders = dayOrders.filter(o => isDocOrder(o));
+  const dayCounterOrders = dayOrders.filter(o => o.orderType === 'counter' || (!o.invoiceNo.startsWith('ORD-') && !isDocOrder(o)));
+
+  const dayStationerySales = dayStationeryOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const dayDocSales = dayDocOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const dayCounterSales = dayCounterOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
   // Calculations for Rojmel & Khata Cash Receipts
   const rojmelCashIn = dayRojmel
     .filter(r => r.type === 'aavak' && (r.paymentMode === 'Cash' || !r.paymentMode))
@@ -173,6 +193,13 @@ export const DailyCashClosingModal: React.FC<DailyCashClosingModalProps> = ({
       `  • રોકડા વેચાણ (Cash): ₹${cashSales.toFixed(2)}\n` +
       `  • ઓનલાઇન / UPI: ₹${upiSales.toFixed(2)}\n` +
       `  • ઉધાર વેચાણ (Credit): ₹${creditSales.toFixed(2)}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `📊 *૪-તરફી હિસાબ વિભાજન (Segregated Streams):*\n` +
+      `  📦 વસ્તુ વેચાણ (Stationery): ₹${dayStationerySales.toFixed(2)} (${dayStationeryOrders.length} ઓર્ડર્સ)\n` +
+      `  📄 ડૉક્યુમેન્ટ પ્રિન્ટ (Print/Xerox): ₹${dayDocSales.toFixed(2)} (${dayDocOrders.length} ઓર્ડર્સ)\n` +
+      `  🏪 કાઉન્ટર બિલિંગ (Counter POS): ₹${dayCounterSales.toFixed(2)} (${dayCounterOrders.length} બિલ્સ)\n` +
+      `  🏦 બેંક કરન્ટ એકાઉન્ટ જમા (UPI): ₹${upiSales.toFixed(2)}\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
       `📥 *અન્ય આવક (Rojmel):* ₹${rojmelCashIn.toFixed(2)}\n` +
       `💸 *દુકાન ખર્ચ / જાવક:* ₹${(totalCashExpenses + rojmelCashOut).toFixed(2)}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -304,6 +331,56 @@ export const DailyCashClosingModal: React.FC<DailyCashClosingModalProps> = ({
               <div className="text-[11px] text-red-200 font-bold">💸 રોકડ ખર્ચ / જાવક</div>
               <div className="text-lg sm:text-xl font-black text-red-300 mt-1">₹{(totalCashExpenses + rojmelCashOut).toFixed(2)}</div>
               <div className="text-[10px] text-red-300/80 mt-0.5">{dayExpenses.length} ખર્ચ નોંધાયા</div>
+            </div>
+          </div>
+
+          {/* 4-Way Segregated Streams Panel */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-3.5 rounded-2xl border border-indigo-900/60 text-white">
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-black text-amber-300 flex items-center gap-1.5">
+                <span>📊 ૪-તરફી વેચાણ & બેંક હિસાબ વિભાજન (Segregated Streams)</span>
+              </span>
+              <span className="text-[10px] bg-indigo-800/80 text-indigo-200 px-2 py-0.5 rounded-full font-bold">
+                આજનો ચોખ્ખો હિસાબ
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {/* Stationery Goods */}
+              <div className="bg-amber-950/50 p-2.5 rounded-xl border border-amber-800/60">
+                <div className="text-[11px] text-amber-200 font-bold flex items-center gap-1">
+                  <span>📦 વસ્તુ વેચાણ</span>
+                </div>
+                <div className="text-base font-black text-amber-300 mt-0.5">₹{dayStationerySales.toFixed(2)}</div>
+                <div className="text-[10px] text-amber-200/70">{dayStationeryOrders.length} ઓનલાઇન ઓર્ડર</div>
+              </div>
+
+              {/* Document Print/Xerox */}
+              <div className="bg-blue-950/60 p-2.5 rounded-xl border border-blue-800/60">
+                <div className="text-[11px] text-blue-200 font-bold flex items-center gap-1">
+                  <span>📄 ડૉક્યુમેન્ટ પ્રિન્ટ</span>
+                </div>
+                <div className="text-base font-black text-cyan-300 mt-0.5">₹{dayDocSales.toFixed(2)}</div>
+                <div className="text-[10px] text-blue-200/70">{dayDocOrders.length} ઝેરોક્ષ/પ્રિન્ટ</div>
+              </div>
+
+              {/* Counter POS Billing */}
+              <div className="bg-emerald-950/50 p-2.5 rounded-xl border border-emerald-800/60">
+                <div className="text-[11px] text-emerald-200 font-bold flex items-center gap-1">
+                  <span>🏪 કાઉન્ટર બિલિંગ</span>
+                </div>
+                <div className="text-base font-black text-emerald-300 mt-0.5">₹{dayCounterSales.toFixed(2)}</div>
+                <div className="text-[10px] text-emerald-200/70">{dayCounterOrders.length} દુકાન બિલ્સ</div>
+              </div>
+
+              {/* Bank Current Account UPI */}
+              <div className="bg-purple-950/60 p-2.5 rounded-xl border border-purple-800/60">
+                <div className="text-[11px] text-purple-200 font-bold flex items-center gap-1">
+                  <span>🏦 બેંક / કરન્ટ ખાતું</span>
+                </div>
+                <div className="text-base font-black text-purple-300 mt-0.5">₹{upiSales.toFixed(2)}</div>
+                <div className="text-[10px] text-purple-200/70">UPI / ઓનલાઇન જમા</div>
+              </div>
             </div>
           </div>
 

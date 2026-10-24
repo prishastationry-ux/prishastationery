@@ -54,10 +54,14 @@ import {
   Calculator,
   Smartphone,
   Building,
-  RefreshCw
+  Building2,
+  RefreshCw,
+  ShoppingBag,
+  Landmark,
+  Database
 } from 'lucide-react';
 
-import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem } from './types';
+import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem, BankAccountEntry, ShopBillRecord } from './types';
 import { DEFAULT_STORE_SETTINGS, INITIAL_PRODUCTS, INITIAL_STATS, INITIAL_ORDERS, INITIAL_PRINT_JOBS } from './data';
 import { InvoiceModal } from './components/InvoiceModal';
 import { CartDrawer } from './components/CartDrawer';
@@ -74,6 +78,9 @@ import { DailyCashClosingModal } from './components/DailyCashClosingModal';
 import { StoreSettingsModal } from './components/StoreSettingsModal';
 import { XeroxOrderWidget } from './components/XeroxOrderWidget';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
+import { OnlineOrdersModal } from './components/OnlineOrdersModal';
+import { BankCurrentAccountModal } from './components/BankCurrentAccountModal';
+import { ShopRentAndBillsModal } from './components/ShopRentAndBillsModal';
 import { CustomerUploadQrModal } from './components/CustomerUploadQrModal';
 import GemBillGeneratorModal from './components/GemBillGeneratorModal';
 import MultiQuotationModal from './components/MultiQuotationModal';
@@ -83,7 +90,7 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
-import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll } from './hooks/useFirebaseSync';
+import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll, clearAllDeletedIds } from './hooks/useFirebaseSync';
 import {
   deleteFileFromCloudStorage,
   downloadFileSafely,
@@ -140,6 +147,71 @@ export default function App() {
   const [enteredPassword, setEnteredPassword] = useState<string>('');
   const [showPasswordText, setShowPasswordText] = useState<boolean>(false);
   const [passwordError, setPasswordError] = useState<string>('');
+  const [showCostPrices, setShowCostPrices] = useState<boolean>(false);
+  const [pendingImportData, setPendingImportData] = useState<any | null>(null);
+
+  // Dedicated In-App Secondary Password Security Verification Modal
+  const [securityModalState, setSecurityModalState] = useState<{
+    isOpen: boolean;
+    title: string;
+    subtitle?: string;
+    onSuccess: () => void;
+  } | null>(null);
+  const [securityPasswordInput, setSecurityPasswordInput] = useState<string>('');
+  const [securityPasswordShow, setSecurityPasswordShow] = useState<boolean>(false);
+  const [securityPasswordError, setSecurityPasswordError] = useState<string>('');
+
+  const verifySecondaryPassword = (input: string) => {
+    if (!input) return false;
+    const trimmed = input.trim();
+    const mainPass = (storeSettings.adminPassword || 'Bharat@1994').trim();
+    // Passwords requested by user: main login password, 0123, 2626, Prisha@2024, plus custom
+    const defaultAllowed = ['0123', '2626', 'Prisha@2024'];
+    const customAllowed = (storeSettings.secondaryPasswords || []).map(p => String(p).trim());
+    const allowed = [mainPass, ...defaultAllowed, ...customAllowed];
+    return allowed.includes(trimmed);
+  };
+
+  const promptSecurityPassword = (title: string, subtitle: string, onSuccess: () => void) => {
+    setSecurityPasswordInput('');
+    setSecurityPasswordShow(false);
+    setSecurityPasswordError('');
+    setSecurityModalState({
+      isOpen: true,
+      title,
+      subtitle,
+      onSuccess
+    });
+  };
+
+  const handleSecurityPasswordSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (verifySecondaryPassword(securityPasswordInput)) {
+      const callback = securityModalState?.onSuccess;
+      setSecurityModalState(null);
+      setSecurityPasswordInput('');
+      setSecurityPasswordError('');
+      if (callback) callback();
+    } else {
+      setSecurityPasswordError('❌ ખોટો પાસવર્ડ! કૃપા કરીને સાચો પાસવર્ડ દાખલ કરો (દા.ત. 0123, 2626, Prisha@2024).');
+    }
+  };
+
+  const handleToggleCostPrices = () => {
+    if (showCostPrices) {
+      setShowCostPrices(false);
+      showToast('🔒 ખરીદ ભાવ છુપાવ્યા');
+    } else {
+      promptSecurityPassword(
+        'ખરીદ ભાવ જોવા માટે પાસવર્ડ',
+        'દરેક પ્રોડક્ટના ખરીદ ભાવ (Cost Price) અનલૉક કરવા પાસવર્ડ દાખલ કરો',
+        () => {
+          setShowCostPrices(true);
+          showToast('🔓 ખરીદ ભાવ હવે દેખાય છે');
+        }
+      );
+    }
+  };
 
   // Multi-Platform Sync State
   const [showMultiPlatformSyncModal, setShowMultiPlatformSyncModal] = useState<boolean>(false);
@@ -163,25 +235,100 @@ export default function App() {
   // Store Settings (Full editable from Admin)
   const [storeSettings, setStoreSettings] = useFirebaseSync<StoreSettings>('storeSettings', 'prisha_store_settings_v4', DEFAULT_STORE_SETTINGS);
 
-  // Products & Inventory state
+  // SHOP & STORE MODE: 'general' (General Store) vs 'professional' ('Prisha' Professional Shop Copy with separate inventory & hisab)
+  const [activeShopMode, setActiveShopMode] = useState<'general' | 'professional'>('general');
+  const [showPrishaLoginModal, setShowPrishaLoginModal] = useState<boolean>(false);
+  const [prishaLoginPassword, setPrishaLoginPassword] = useState<string>('');
+  const [prishaLoginError, setPrishaLoginError] = useState<string>('');
+
+  const [activeStoreMode, setActiveStoreMode] = useState<'regular' | 'gst'>('regular');
+
+  // General Store Products & GST Store Products
   const [posItems, setPosItems] = useFirebaseSync<ProductItem[]>('products', 'prisha_products_v4', INITIAL_PRODUCTS);
+  const [gstPosItems, setGstPosItems] = useFirebaseSync<ProductItem[]>('gst_products', 'prisha_gst_products_v1', []);
+  
+  // Professional "Prisha" Shop Independent Store Products & Inventory Copy
+  const [professionalPosItems, setProfessionalPosItems] = useFirebaseSync<ProductItem[]>('prof_products', 'prisha_prof_products_v1', INITIAL_PRODUCTS);
+  const [professionalGstPosItems, setProfessionalGstPosItems] = useFirebaseSync<ProductItem[]>('prof_gst_products', 'prisha_prof_gst_products_v1', []);
 
   // Business Statistics State
+  // Business Statistics State
   const [stats, setStats] = useFirebaseSync<BusinessStats>('stats', 'prisha_stats_v4', INITIAL_STATS);
+  const [professionalStats, setProfessionalStats] = useFirebaseSync<BusinessStats>('prof_stats', 'prisha_prof_stats_v1', INITIAL_STATS);
+  const currentStats = (activeShopMode === 'professional' ? professionalStats : stats) || INITIAL_STATS;
+  const getActiveStatsSetter = () => activeShopMode === 'professional' ? setProfessionalStats : setStats;
 
-  // Orders & Invoices State
+  // Orders & Invoices State (General vs Professional vs GST)
   const [orders, setOrders] = useFirebaseSync<OrderRecord[]>('orders', 'prisha_orders_v4', INITIAL_ORDERS);
+  const [gstOrders, setGstOrders] = useFirebaseSync<OrderRecord[]>('gst_orders', 'prisha_gst_orders_v1', []);
+  const [professionalOrders, setProfessionalOrders] = useFirebaseSync<OrderRecord[]>('prof_orders', 'prisha_prof_orders_v1', INITIAL_ORDERS);
+  const [professionalGstOrders, setProfessionalGstOrders] = useFirebaseSync<OrderRecord[]>('prof_gst_orders', 'prisha_prof_gst_orders_v1', []);
+
+  // Active Getters & Setters for Admin & POS Actions
+  const currentPosItems = (activeShopMode === 'professional' 
+    ? (activeStoreMode === 'gst' ? professionalGstPosItems : professionalPosItems) 
+    : (activeStoreMode === 'gst' ? gstPosItems : posItems)) || [];
+  
+  const currentOrders = (activeShopMode === 'professional' 
+    ? (activeStoreMode === 'gst' ? professionalGstOrders : professionalOrders) 
+    : (activeStoreMode === 'gst' ? gstOrders : orders)) || [];
+
+  const currentOrderCollection = activeShopMode === 'professional' 
+    ? (activeStoreMode === 'gst' ? 'prof_gst_orders' : 'prof_orders') 
+    : (activeStoreMode === 'gst' ? 'gst_orders' : 'prisha_orders_v4');
+    
+  const currentProductCollection = activeShopMode === 'professional'
+    ? (activeStoreMode === 'gst' ? 'prof_gst_products' : 'prof_products')
+    : (activeStoreMode === 'gst' ? 'gst_products' : 'prisha_products_v4');
+
+  const getActivePosSetter = () => {
+    if (activeShopMode === 'professional') {
+      return activeStoreMode === 'gst' ? setProfessionalGstPosItems : setProfessionalPosItems;
+    }
+    return activeStoreMode === 'gst' ? setGstPosItems : setPosItems;
+  };
+
+  const getActiveOrdersSetter = () => {
+    if (activeShopMode === 'professional') {
+      return activeStoreMode === 'gst' ? setProfessionalGstOrders : setProfessionalOrders;
+    }
+    return activeStoreMode === 'gst' ? setGstOrders : setOrders;
+  };
 
   // Online Print Jobs & Customer Uploaded Documents
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
+  const [professionalPrintJobs, setProfessionalPrintJobs] = useFirebaseSync<PrintJobRecord[]>('prof_print_jobs', 'prisha_prof_print_jobs_v1', INITIAL_PRINT_JOBS);
+  const currentPrintJobs = (activeShopMode === 'professional' ? professionalPrintJobs : printJobs) || [];
+  const getActivePrintJobsSetter = () => activeShopMode === 'professional' ? setProfessionalPrintJobs : setPrintJobs;
+
   const [showPrintJobsModal, setShowPrintJobsModal] = useState<boolean>(false);
+  const [showOnlineOrdersModal, setShowOnlineOrdersModal] = useState<boolean>(false);
   const [showCustomerUploadQrModal, setShowCustomerUploadQrModal] = useState<boolean>(false);
+  const [showBankCurrentAccountModal, setShowBankCurrentAccountModal] = useState<boolean>(false);
 
-  // Expenses & Purchases
+  // Shop Rent, Light Bill, Staff Salary & Overhead Ledger
+  const [shopBills, setShopBills] = useFirebaseSync<ShopBillRecord[]>('shop_bills', 'prisha_shop_bills_v1', []);
+  const [professionalShopBills, setProfessionalShopBills] = useFirebaseSync<ShopBillRecord[]>('prof_shop_bills', 'prisha_prof_shop_bills_v1', []);
+  const currentShopBills = (activeShopMode === 'professional' ? professionalShopBills : shopBills) || [];
+  const getActiveShopBillsSetter = () => activeShopMode === 'professional' ? setProfessionalShopBills : setShopBills;
+  const [showShopRentModal, setShowShopRentModal] = useState<boolean>(false);
+
+  // Bank & Current Account Ledger (કરન્ટ એકાઉન્ટ પાસબુક & UPI વ્યવહાર)
+  const [bankEntries, setBankEntries] = useFirebaseSync<BankAccountEntry[]>('bank_entries', 'prisha_bank_entries_v1', []);
+  const [professionalBankEntries, setProfessionalBankEntries] = useFirebaseSync<BankAccountEntry[]>('prof_bank_entries', 'prisha_prof_bank_entries_v1', []);
+
+  // Expenses & Purchases (General vs Professional)
   const [expenses, setExpenses] = useFirebaseSync<ExpenseRecord[]>('expenses', 'prisha_expenses_v5', []);
-  const [purchases, setPurchases] = useFirebaseSync<PurchaseRecord[]>('purchases', 'prisha_purchases_v5', []);
+  const [professionalExpenses, setProfessionalExpenses] = useFirebaseSync<ExpenseRecord[]>('prof_expenses', 'prisha_prof_expenses_v1', []);
+  const currentExpenses = (activeShopMode === 'professional' ? professionalExpenses : expenses) || [];
+  const getActiveExpensesSetter = () => activeShopMode === 'professional' ? setProfessionalExpenses : setExpenses;
 
-  // Rojmel (Daily Income/Expense) & Khata (Customer & Supplier Ledger) ERP States
+  const [purchases, setPurchases] = useFirebaseSync<PurchaseRecord[]>('purchases', 'prisha_purchases_v5', []);
+  const [professionalPurchases, setProfessionalPurchases] = useFirebaseSync<PurchaseRecord[]>('prof_purchases', 'prisha_prof_purchases_v1', []);
+  const currentPurchases = (activeShopMode === 'professional' ? professionalPurchases : purchases) || [];
+  const getActivePurchasesSetter = () => activeShopMode === 'professional' ? setProfessionalPurchases : setPurchases;
+
+  // Rojmel (Daily Income/Expense) & Khata (Customer & Supplier Ledger) ERP States (General vs Professional)
   const [showRojmelModal, setShowRojmelModal] = useState<boolean>(false);
   const [showCaAuditModal, setShowCaAuditModal] = useState<boolean>(false);
   const [showDailyCashClosingModal, setShowDailyCashClosingModal] = useState<boolean>(false);
@@ -189,9 +336,25 @@ export default function App() {
   const [showGemBillModal, setShowGemBillModal] = useState<boolean>(false);
   const [showMultiQuotationModal, setShowMultiQuotationModal] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
+  
   const [rojmelEntries, setRojmelEntries] = useFirebaseSync<RojmelEntry[]>('rojmel', 'prisha_rojmel_v1', []);
+  const [professionalRojmelEntries, setProfessionalRojmelEntries] = useFirebaseSync<RojmelEntry[]>('prof_rojmel', 'prisha_prof_rojmel_v1', []);
+  const currentRojmel = (activeShopMode === 'professional' ? professionalRojmelEntries : rojmelEntries) || [];
+  const getActiveRojmelSetter = () => activeShopMode === 'professional' ? setProfessionalRojmelEntries : setRojmelEntries;
+  const currentBankEntries = (activeShopMode === 'professional' ? professionalBankEntries : bankEntries) || [];
+  const getActiveBankEntriesSetter = () => activeShopMode === 'professional' ? setProfessionalBankEntries : setBankEntries;
   const [khataAccounts, setKhataAccounts] = useFirebaseSync<KhataAccount[]>('khata_accounts', 'prisha_khata_accounts_v2', []);
   const [khataTransactions, setKhataTransactions] = useFirebaseSync<KhataTransaction[]>('khata_tx', 'prisha_khata_tx_v1', []);
+  const [professionalKhataAccounts, setProfessionalKhataAccounts] = useFirebaseSync<KhataAccount[]>('prof_khata_accounts', 'prisha_prof_khata_accounts_v1', []);
+  const [professionalKhataTransactions, setProfessionalKhataTransactions] = useFirebaseSync<KhataTransaction[]>('prof_khata_tx', 'prisha_prof_khata_tx_v1', []);
+
+  const currentKhataAccounts = (activeShopMode === 'professional' ? professionalKhataAccounts : khataAccounts) || [];
+  const currentKhataTransactions = (activeShopMode === 'professional' ? professionalKhataTransactions : khataTransactions) || [];
+
+  const getActiveKhataAccountsSetter = () => activeShopMode === 'professional' ? setProfessionalKhataAccounts : setKhataAccounts;
+  const getActiveKhataTransactionsSetter = () => activeShopMode === 'professional' ? setProfessionalKhataTransactions : setKhataTransactions;
+  
+  const [showAdminMenuDropdown, setShowAdminMenuDropdown] = useState<boolean>(false);
 
   // Search & Filter Category
   const [searchQuery, setSearchQuery] = useState('');
@@ -224,7 +387,7 @@ export default function App() {
   // Clean up the 2 test expenses and 1 purchase bill requested by user
   useEffect(() => {
     setExpenses(prev =>
-      prev.filter(
+      (prev || []).filter(
         e =>
           e &&
           e.title !== 'દુકાન ચા-નાસ્તો' &&
@@ -236,7 +399,7 @@ export default function App() {
       )
     );
     setPurchases(prev =>
-      prev.filter(p => p && p.billNo !== 'PUR-1' && p.totalAmount > 0 && p.supplierName !== 'ટેસ્ટ સપ્લાયર')
+      (prev || []).filter(p => p && p.billNo !== 'PUR-1' && p.totalAmount > 0 && p.supplierName !== 'ટેસ્ટ સપ્લાયર')
     );
   }, []);
 
@@ -265,7 +428,8 @@ export default function App() {
   let calcMonthSales = 0;
   let calcYearSales = 0;
 
-  orders.forEach(o => {
+  (currentOrders || []).forEach(o => {
+    if (!o) return;
     let time = 0;
     if (o && o.id && typeof o.id === 'string' && o.id.startsWith('ord-')) {
       const parts = o.id.split('-');
@@ -283,28 +447,31 @@ export default function App() {
   });
 
   // Purchase/Cost Stock Value (ખરીદ મૂલ્ય) & Selling Stock Value (વેચાણ મૂલ્ય / MRP)
-  const calcCostStockValue = posItems.reduce((acc, item) => {
+  const calcCostStockValue = (currentPosItems || []).reduce((acc, item) => {
+    if (!item) return acc;
     const stock = Number(item.stock || 0);
     const cost = Number(item.costPrice || 0);
     return acc + (isNaN(stock) || isNaN(cost) ? 0 : stock * cost);
   }, 0);
 
-  const calcSellingStockValue = posItems.reduce((acc, item) => {
+  const calcSellingStockValue = (currentPosItems || []).reduce((acc, item) => {
+    if (!item) return acc;
     const stock = Number(item.stock || 0);
     const price = Number(item.price || item.mrp || 0);
     return acc + (isNaN(stock) || isNaN(price) ? 0 : stock * price);
   }, 0);
 
-  const calcTotalStockUnits = posItems.reduce((acc, item) => {
+  const calcTotalStockUnits = (currentPosItems || []).reduce((acc, item) => {
+    if (!item) return acc;
     const stock = Number(item.stock || 0);
     return acc + (isNaN(stock) ? 0 : stock);
   }, 0);
 
-  const displayTodaySales = (isNaN(calcTodaySales) ? 0 : calcTodaySales) + (Number(stats?.correctionDaily) || 0);
-  const displayWeekSales = (isNaN(calcWeekSales) ? 0 : calcWeekSales) + (Number(stats?.correctionWeekly) || 0);
-  const displayMonthSales = (isNaN(calcMonthSales) ? 0 : calcMonthSales) + (Number(stats?.correctionMonthly) || 0);
-  const displayYearSales = (isNaN(calcYearSales) ? 0 : calcYearSales) + (Number(stats?.correctionYearly) || 0);
-  const displayCostStockValue = (isNaN(calcCostStockValue) ? 0 : calcCostStockValue) + (Number(stats?.correctionStockVal) || 0);
+  const displayTodaySales = (isNaN(calcTodaySales) ? 0 : calcTodaySales) + (Number(currentStats?.correctionDaily) || 0);
+  const displayWeekSales = (isNaN(calcWeekSales) ? 0 : calcWeekSales) + (Number(currentStats?.correctionWeekly) || 0);
+  const displayMonthSales = (isNaN(calcMonthSales) ? 0 : calcMonthSales) + (Number(currentStats?.correctionMonthly) || 0);
+  const displayYearSales = (isNaN(calcYearSales) ? 0 : calcYearSales) + (Number(currentStats?.correctionYearly) || 0);
+  const displayCostStockValue = (isNaN(calcCostStockValue) ? 0 : calcCostStockValue) + (Number(currentStats?.correctionStockVal) || 0);
   const displaySellingStockValue = isNaN(calcSellingStockValue) ? 0 : calcSellingStockValue;
 
 
@@ -357,6 +524,7 @@ export default function App() {
   const [newProdHsn, setNewProdHsn] = useState('');
   const [newProdBarcode, setNewProdBarcode] = useState('');
   const [newProdGstRate, setNewProdGstRate] = useState<number>(18);
+  const [newProdDiscount, setNewProdDiscount] = useState('0');
 
   // POS Direct Counter Billing Form & In-Bill Item Selection
   const [posCustomerName, setPosCustomerName] = useState('');
@@ -399,14 +567,15 @@ export default function App() {
 
   // Recalculate out of stock / low stock count
   useEffect(() => {
-    const outCount = posItems.filter(p => typeof p.stock === 'number' && p.stock <= 0).length;
-    const lowCount = posItems.filter(p => typeof p.stock === 'number' && p.stock > 0 && p.stock <= 5).length;
-    setStats(prev => ({
+    const items = currentPosItems || [];
+    const outCount = items.filter(p => p && typeof p.stock === 'number' && p.stock <= 0).length;
+    const lowCount = items.filter(p => p && typeof p.stock === 'number' && p.stock > 0 && p.stock <= 5).length;
+    getActiveStatsSetter()(prev => ({
       ...prev,
       outOfStock: outCount,
       lowStock: lowCount
     }));
-  }, [posItems]);
+  }, [currentPosItems]);
 
   // Continuous listener for customer print files uploaded via mobile link QR
   useEffect(() => {
@@ -450,7 +619,7 @@ export default function App() {
 
   const { totalPrintCount, unlinkedCloudFilesCount } = React.useMemo(() => {
     const existingJobFileIds = new Set<string>();
-    (printJobs || []).forEach(j => {
+    (currentPrintJobs || []).forEach(j => {
       if (j && !isPurgedOrDeletedCloudFile(j.id)) {
         (j.files || []).forEach(f => {
           if (f && f.id) existingJobFileIds.add(f.id);
@@ -460,12 +629,12 @@ export default function App() {
     const unlinked = (cloudPrintFiles || []).filter(
       cf => cf && cf.id && !existingJobFileIds.has(cf.id) && !isPurgedOrDeletedCloudFile(cf)
     );
-    const validPrintJobs = (printJobs || []).filter(j => j && !isPurgedOrDeletedCloudFile(j.id));
+    const validPrintJobs = (currentPrintJobs || []).filter(j => j && !isPurgedOrDeletedCloudFile(j.id));
     return {
       totalPrintCount: validPrintJobs.length + unlinked.length,
       unlinkedCloudFilesCount: unlinked.length
     };
-  }, [printJobs, cloudPrintFiles]);
+  }, [currentPrintJobs, cloudPrintFiles]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -496,7 +665,10 @@ export default function App() {
         if (showDailyCashClosingModal) setShowDailyCashClosingModal(false);
         else if (showCaAuditModal) setShowCaAuditModal(false);
         else if (showRojmelModal) setShowRojmelModal(false);
+        else if (showOnlineOrdersModal) setShowOnlineOrdersModal(false);
         else if (showPrintJobsModal) setShowPrintJobsModal(false);
+        else if (showBankCurrentAccountModal) setShowBankCurrentAccountModal(false);
+        else if (showShopRentModal) setShowShopRentModal(false);
         else if (activeInvoiceOrder) setActiveInvoiceOrder(null);
         else if (isCartDrawerOpen) setIsCartDrawerOpen(false);
       }
@@ -504,7 +676,7 @@ export default function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showDailyCashClosingModal, showCaAuditModal, showRojmelModal, showPrintJobsModal, activeInvoiceOrder, isCartDrawerOpen]);
+  }, [showDailyCashClosingModal, showCaAuditModal, showRojmelModal, showOnlineOrdersModal, showPrintJobsModal, showBankCurrentAccountModal, showShopRentModal, activeInvoiceOrder, isCartDrawerOpen]);
 
   // Convert File to Base64
   const fileToBase64 = (file: File): Promise<string> => {
@@ -518,15 +690,18 @@ export default function App() {
 
   const handleExportBackupJson = () => {
     const backup = {
-      products: posItems,
-      orders,
-      expenses,
-      purchases,
-      rojmelEntries,
-      khataAccounts,
-      khataTransactions,
-      printJobs,
+      products: currentPosItems,
+      currentOrders: currentOrders,
+      expenses: currentExpenses,
+      purchases: currentPurchases,
+      rojmelEntries: currentRojmel,
+      khataAccounts: currentKhataAccounts,
+      khataTransactions: currentKhataTransactions,
+      bankEntries: currentBankEntries,
+      shopBills: currentShopBills,
+      printJobs: currentPrintJobs,
       storeSettings,
+      shopMode: activeShopMode,
       timestamp: Date.now()
     };
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
@@ -545,22 +720,67 @@ export default function App() {
     reader.onload = (event) => {
       try {
         const data = JSON.parse(event.target?.result as string);
-        if (data.products && Array.isArray(data.products)) {
-          setPosItems(data.products);
-          try { localStorage.setItem('prisha_products_v4', JSON.stringify(data.products)); } catch {}
+        if (data && (data.products || data.data)) {
+          // Detect if it's a "full backup" with nested .data or a flat backup
+          const importData = data.data || data;
+          setPendingImportData(importData);
+        } else {
+          alert('❌ અમાન્ય બેકઅપ ફાઇલ!');
         }
-        if (data.orders && Array.isArray(data.orders)) setOrders(data.orders);
-        if (data.expenses && Array.isArray(data.expenses)) setExpenses(data.expenses);
-        if (data.purchases && Array.isArray(data.purchases)) setPurchases(data.purchases);
-        if (data.rojmelEntries && Array.isArray(data.rojmelEntries)) setRojmelEntries(data.rojmelEntries);
-        if (data.storeSettings) setStoreSettings(prev => ({ ...prev, ...data.storeSettings }));
-        showToast('📥 બેકઅપ સફળતાપૂર્વક ઇમ્પોર્ટ થઈ ગયો! બધી જ વસ્તુઓ આવી ગઈ.');
-        forceCloudSyncAll();
       } catch (err) {
-        alert('બેકઅપ ફાઇલ વાંચવામાં ભૂલ છે. યોગ્ય JSON ફાઇલ પસંદ કરો.');
+        alert('❌ બેકઅપ ફાઇલ વાંચવામાં ભૂલ છે.');
       }
     };
     reader.readAsText(file);
+    e.target.value = ''; // Reset input
+  };
+
+  const processImport = (mode: 'overwrite' | 'merge') => {
+    if (!pendingImportData) return;
+    const data = pendingImportData;
+
+    const applyData = (setter: any, backupArr: any[], currentArr: any[]) => {
+      if (!backupArr || !Array.isArray(backupArr)) return;
+      if (mode === 'overwrite') {
+        setter(backupArr);
+      } else {
+        // Merge Logic: Keep current items + add new ones from backup
+        const currentIds = new Set(currentArr.map(i => i.id || i.invoiceNo));
+        const newItems = backupArr.filter(i => !currentIds.has(i.id || i.invoiceNo));
+        setter([...currentArr, ...newItems]);
+      }
+    };
+
+    // Product collections
+    const prodKey = activeShopMode === 'professional' 
+      ? (activeStoreMode === 'gst' ? 'prof_gst_products' : 'prof_products')
+      : (activeStoreMode === 'gst' ? 'gst_products' : 'products');
+    
+    // The backup file might use different keys or the standard ones
+    // We try to find products in various possible keys
+    const backupProducts = data.products || data.prisha_products_v4 || data.prisha_gst_products_v1 || data.prof_products || data.prof_gst_products || [];
+    applyData(getActivePosSetter(), backupProducts, currentPosItems);
+
+    // Orders
+    const backupOrders = data.currentOrders || data.orders || data.prisha_orders_v4 || data.prisha_gst_orders_v1 || [];
+    applyData(getActiveOrdersSetter(), backupOrders, currentOrders);
+
+    // Rojmel, Expenses, etc.
+    if (data.expenses) applyData(getActiveExpensesSetter(), data.expenses, currentExpenses);
+    if (data.purchases) applyData(getActivePurchasesSetter(), data.purchases, currentPurchases);
+    if (data.rojmelEntries) applyData(getActiveRojmelSetter(), data.rojmelEntries, currentRojmel);
+    if (data.khataAccounts) applyData(getActiveKhataAccountsSetter(), data.khataAccounts, currentKhataAccounts);
+    if (data.khataTransactions) applyData(getActiveKhataTransactionsSetter(), data.khataTransactions, currentKhataTransactions);
+    if (data.bankEntries) applyData(getActiveBankEntriesSetter(), data.bankEntries, currentBankEntries);
+    if (data.shopBills) applyData(getActiveShopBillsSetter(), data.shopBills, currentShopBills);
+    
+    if (data.storeSettings) {
+      setStoreSettings(prev => ({ ...prev, ...data.storeSettings }));
+    }
+
+    setPendingImportData(null);
+    showToast(mode === 'overwrite' ? '✅ બેકઅપ સંપૂર્ણ ઓવરરાઇટ થઈ ગયો!' : '✅ બેકઅપ અને તમારી વસ્તુઓ સફળતાપૂર્વક ભેગી (Merge) થઈ ગઈ!');
+    forceCloudSyncAll();
   };
 
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -597,21 +817,24 @@ export default function App() {
   // Stock modification by Admin
   const modifyStock = (itemId: string, delta: number, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setPosItems(prev =>
+    const updateFn = (prev: ProductItem[]) =>
       prev.map(item => {
         if (item.id === itemId) {
           const currentStock = typeof item.stock === 'number' ? item.stock : (Number(item.stock) || 0);
           const updated = Math.max(0, currentStock + delta);
-          return { ...item, stock: updated };
+          return { ...item, stock: updated, updatedAt: Date.now() };
         }
         return item;
-      })
-    );
+      });
+
+    getActivePosSetter()(updateFn);
+    setPosItems(updateFn);
+    setProfessionalPosItems(updateFn);
 
     if (delta < 0) {
-      const it = posItems.find(p => p.id === itemId);
+      const it = currentPosItems.find(p => p.id === itemId);
       if (it) {
-        setStats(s => ({
+        getActiveStatsSetter()(s => ({
           ...s,
           dailySales: Number((s.dailySales + it.price).toFixed(2)),
           itemsSold: s.itemsSold + 1,
@@ -630,7 +853,7 @@ export default function App() {
     if (e) e.stopPropagation();
     
     // Create sorted copy based on current orderIdx
-    let itemsCopy = [...posItems].sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
+    let itemsCopy = [...currentPosItems].sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
     const currentIndex = itemsCopy.findIndex(p => p.id === itemId);
     if (currentIndex === -1) return;
 
@@ -665,13 +888,15 @@ export default function App() {
       updatedAt: Date.now()
     }));
 
+    getActivePosSetter()(reindexed);
     setPosItems(reindexed);
+    setProfessionalPosItems(reindexed);
   };
 
   // Direct numeric position setter (e.g. move directly to #1 or #5)
   const handleSetItemOrder = (itemId: string, newPositionNumber: number) => {
     if (isNaN(newPositionNumber) || newPositionNumber < 1) return;
-    let itemsCopy = [...posItems].sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
+    let itemsCopy = [...currentPosItems].sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999));
     const currentIndex = itemsCopy.findIndex(p => p.id === itemId);
     if (currentIndex === -1) return;
 
@@ -685,14 +910,16 @@ export default function App() {
       updatedAt: Date.now()
     }));
 
+    getActivePosSetter()(reindexed);
     setPosItems(reindexed);
+    setProfessionalPosItems(reindexed);
     showToast(`🔢 "${targetItem.nameGu}" ક્રમ ${newPositionNumber} પર ગોઠવાઈ!`);
   };
 
   // Delete an Item completely -> Opens In-App Confirm Modal -> Moves to Trash Bin (Recycle Bin)
   const handleDeleteItem = (itemId: string, itemName: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const itemToDelete = posItems.find(p => p.id === itemId);
+    const itemToDelete = currentPosItems.find(p => p.id === itemId);
     if (!itemToDelete) return;
 
     setDeleteConfirmTarget({
@@ -717,7 +944,7 @@ export default function App() {
     const finalGst = newProdGstRate !== undefined ? Number(newProdGstRate) : detected.gstRate;
 
     const newItem: ProductItem = {
-      id: `prod-${Date.now()}`,
+      id: activeStoreMode === 'gst' ? `gst-prod-${Date.now()}` : `prod-${Date.now()}`,
       nameGu: newProdName,
       nameEn: newProdEnName || newProdName,
       category: newProdCategory as any,
@@ -725,6 +952,7 @@ export default function App() {
       costPrice: Number(newProdCost) || 0,
       stock: newProdCategory === 'service' ? 'સેવા' : Number(newProdStock) || 0,
       mrp: newProdMrp ? Number(newProdMrp) : undefined,
+      discountPercent: Number(newProdDiscount) || 0,
       bulkPricing: newProdBulkPricing || undefined,
       isHidden: newProdIsHidden,
       isService: newProdCategory === 'service',
@@ -739,7 +967,24 @@ export default function App() {
       updatedAt: Date.now()
     };
 
-    setPosItems(prev => [newItem, ...prev]);
+    if (activeShopMode === 'professional') {
+      if (activeStoreMode === 'gst') {
+        setProfessionalGstPosItems(prev => [newItem, ...prev]);
+        showToast(`🏛️ Professional GST સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
+      } else {
+        setProfessionalPosItems(prev => [newItem, ...prev]);
+        showToast(`🏢 Professional સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
+      }
+    } else {
+      if (activeStoreMode === 'gst') {
+        setGstPosItems(prev => [newItem, ...prev]);
+        showToast(`🏛️ GST સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
+      } else {
+        setPosItems(prev => [newItem, ...prev]);
+        showToast(`✅ સાદા સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
+      }
+    }
+
     setNewProdName('');
     setNewProdEnName('');
     setNewProdImage('');
@@ -748,26 +993,51 @@ export default function App() {
     setNewProdBarcode('');
     setNewProdGstRate(18);
     setNewProdMrp('');
+    setNewProdDiscount('0');
     setNewProdBulkPricing('');
     setNewProdUnit('નંગ');
     setNewProdIsHidden(false);
     setIsAddingNewItem(false);
-    showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
+  };
+
+  // Copy product from Non-GST store into GST store with 1-click
+  const handleCopyItemToGstStore = (item: ProductItem) => {
+    const detected = detectHsnAndGst(item.nameGu, item.category);
+    const gstItem: ProductItem = {
+      ...item,
+      id: `gst-prod-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      hsnCode: item.hsnCode || detected.hsnCode,
+      gstRate: item.gstRate !== undefined ? item.gstRate : detected.gstRate,
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    };
+    if (activeShopMode === 'professional') {
+      setProfessionalGstPosItems(prev => [gstItem, ...prev]);
+    } else {
+      setGstPosItems(prev => [gstItem, ...prev]);
+    }
+    showToast(`🏛️ "${item.nameGu}" સફળતાપૂર્વક GST સ્ટોરમાં કૉપી થઈ ગઈ!`);
   };
 
   // Quick Unit Change (નંગ / પેકેટ / સેટ / રીમ / બોક્સ / વગેરે) safely without losing data
   const handleQuickUnitChange = (productId: string, newUnit: string) => {
     const cleanUnit = (newUnit || 'નંગ').trim();
-    setPosItems(prev =>
+    const updateUnitFn = (prev: ProductItem[]) =>
       prev.map(p => {
         if (p.id === productId) {
-          const updated: ProductItem = { ...p, unit: cleanUnit, updatedAt: Date.now() };
-          showToast(`🏷️ "${p.nameGu}" નો એકમ બદલાઈને "${cleanUnit}" થયો!`);
-          return updated;
+          return { ...p, unit: cleanUnit, updatedAt: Date.now() };
         }
         return p;
-      })
-    );
+      });
+
+    getActivePosSetter()(updateUnitFn);
+    setPosItems(updateUnitFn);
+    setProfessionalPosItems(updateUnitFn);
+    if (activeStoreMode === 'gst') {
+      setGstPosItems(updateUnitFn);
+      setProfessionalGstPosItems(updateUnitFn);
+    }
+    showToast(`🏷️ એકમ બદલાઈને "${cleanUnit}" થયો!`);
   };
 
   // Save Item Modifications
@@ -791,12 +1061,21 @@ export default function App() {
         price: Math.max(0, Number(editingItem.price) || 0),
         costPrice: Math.max(0, Number(editingItem.costPrice) || 0),
         mrp: editingItem.mrp ? Math.max(0, Number(editingItem.mrp) || 0) : undefined,
+        discountPercent: editingItem.discountPercent !== undefined ? Number(editingItem.discountPercent) : 0,
+        bulkPricing: editingItem.bulkPricing,
         hsnCode: finalHsn || undefined,
         gstRate: finalGst,
         updatedAt: Date.now()
       };
 
-      setPosItems(prev => prev.map(p => (p.id === updatedItem.id ? updatedItem : p)));
+      const updateAllFn = (prev: ProductItem[]) => prev.map(p => (p.id === updatedItem.id ? updatedItem : p));
+      getActivePosSetter()(updateAllFn);
+      setPosItems(updateAllFn);
+      setProfessionalPosItems(updateAllFn);
+      if (activeStoreMode === 'gst') {
+        setGstPosItems(updateAllFn);
+        setProfessionalGstPosItems(updateAllFn);
+      }
       showToast(`✏️ "${updatedItem.nameGu}" (${updatedItem.unit}) સેવ થઈ ગયું!`);
       setEditingItem(null);
     }
@@ -852,7 +1131,7 @@ export default function App() {
       showToast('✅ જાહેરાત બેનર ફોટો અપડેટ થયો!');
     } else if (target === 'customQr') {
       setStoreSettings(prev => ({ ...prev, customQrUrl: croppedBase64 }));
-      showToast('✅ કસ્ટમ QR કોડ અપડેટ થયો!');
+      showToast('✅ કસ્ટમ UPI QR કોડ અપડેટ થયો!');
     } else if (target === 'signature') {
       setStoreSettings(prev => ({ ...prev, signatureUrl: croppedBase64 }));
       showToast('✅ અધિકૃત સહી / સ્ટેમ્પ અપડેટ થયો!');
@@ -867,14 +1146,42 @@ export default function App() {
     setCropModalData(prev => ({ ...prev, isOpen: false }));
   };
 
-  // Customer Cart Operations
-  const addToCart = (product: ProductItem) => {
-    setCart(prev => {
-      const exist = prev.find(i => i.product.id === product.id);
-      if (exist) {
-        return prev.map(i => (i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i));
+  const handleEditItemRequest = (item: ProductItem) => {
+    promptSecurityPassword(
+      `પ્રોડક્ટ એડિટ: ${item.nameGu}`,
+      'પ્રોડક્ટની વિગતો, ભાવ કે સ્ટોક બદલવા પાસવર્ડ દાખલ કરો',
+      () => {
+        setEditingItem(item);
       }
-      return [...prev, { product, quantity: 1 }];
+    );
+  };
+
+  // Customer Cart Operations
+  const getFinalPrice = (product: ProductItem) => {
+    if (!product) return 0;
+    const mrp = Number(product.mrp) || 0;
+    const normalPrice = Number(product.price) || 0;
+    const itemDiscount = Number(product.discountPercent) || 0;
+    const catDiscount = storeSettings.categoryDiscounts?.[product.category] || 0;
+    const globDiscount = storeSettings.globalDiscount || 0;
+    const totalDiscount = Math.max(itemDiscount, catDiscount, globDiscount);
+    
+    if (totalDiscount > 0) {
+      const base = mrp > normalPrice ? mrp : normalPrice;
+      return Math.max(0, Math.round(base * (1 - totalDiscount / 100)));
+    }
+    return normalPrice;
+  };
+
+  const addToCart = (product: ProductItem) => {
+    const finalPrice = getFinalPrice(product);
+    const discountedProduct = { ...product, price: finalPrice };
+    setCart(prev => {
+      const exist = prev.find(i => i.product.id === discountedProduct.id);
+      if (exist) {
+        return prev.map(i => (i.product.id === discountedProduct.id ? { ...i, quantity: i.quantity + 1 } : i));
+      }
+      return [...prev, { product: discountedProduct, quantity: 1 }];
     });
     // Friendly feedback without obstructing screen
     showToast(`🛒 "${product.nameGu}" કાર્ટમાં ઉમેરાયું!`);
@@ -904,7 +1211,7 @@ export default function App() {
     const seqKey = 'prisha_order_seq_v4';
     let currentSeq = Number(localStorage.getItem(seqKey));
     if (!currentSeq || isNaN(currentSeq) || currentSeq < 1) {
-      currentSeq = storeSettings.nextInvoiceSeq || Math.max(orders.length + 1, 1);
+      currentSeq = storeSettings.nextInvoiceSeq || Math.max(currentOrders.length + 1, 1);
     }
     const nextSeq = currentSeq + 1;
     localStorage.setItem(seqKey, String(nextSeq));
@@ -980,6 +1287,13 @@ export default function App() {
     }> = [];
 
     cart.forEach(c => {
+      // Check if this item is a genuine custom upload / xerox / print service
+      const isCustomPrintService = Boolean(
+        c.product.isCustomUpload ||
+        c.product.category === 'printing' ||
+        (c.product.isService && (c.product.nameGu.includes('ઝેરોક્ષ') || c.product.nameGu.includes('પ્રિન્ટ') || c.product.nameGu.includes('PVC') || c.product.nameGu.includes('લેમિનેશન') || c.product.nameGu.includes('ફાઇલ')))
+      );
+
       const isPvc = c.product.nameGu.includes('PVC');
       const isColor = c.product.nameGu.includes('કલર');
       const isDouble = c.product.nameGu.includes('બંને બાજુ');
@@ -987,6 +1301,7 @@ export default function App() {
       const pageMatch = c.product.nameGu.match(/(\d+)\s*પેજ/);
       const parsedPages = pageMatch ? parseInt(pageMatch[1], 10) : 1;
 
+      // 1. Customer uploaded files via Xerox/Print widget
       if (c.product.attachedFiles && c.product.attachedFiles.length > 0) {
         c.product.attachedFiles.forEach((af, idx) => {
           const fileId = af.id || `f-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`;
@@ -1014,50 +1329,54 @@ export default function App() {
             ).catch(() => {});
           }
         });
-      } else if (c.product.galleryImages && c.product.galleryImages.length > 0) {
-        c.product.galleryImages.forEach((img, idx) => {
-          const fileId = `f-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`;
-          const sideName = idx === 0 ? 'આગળની બાજુ (Front)' : 'પાછળની બાજુ (Back)';
-          const fName = isPvc ? `${sideName} - ${c.product.nameGu.slice(0, 25)}.jpg` : `ફોટો-${idx + 1}.jpg`;
+      } else if (isCustomPrintService) {
+        // 2. Only if item is an explicit custom print service with customer-uploaded files
+        if (c.product.galleryImages && c.product.galleryImages.length > 0) {
+          c.product.galleryImages.forEach((img, idx) => {
+            const fileId = `f-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`;
+            const sideName = idx === 0 ? 'આગળની બાજુ (Front)' : 'પાછળની બાજુ (Back)';
+            const fName = isPvc ? `${sideName} - ${c.product.nameGu.slice(0, 25)}.jpg` : `ફોટો-${idx + 1}.jpg`;
+            collectedAttachedFiles.push({
+              id: fileId,
+              fileName: fName,
+              fileDataUrl: img,
+              fileSize: Math.round(img.length * 0.75),
+              itemName: c.product.nameGu,
+              copies: c.quantity || 1,
+              pages: 1,
+              colorMode: isPvc ? 'pvc_card' : 'color',
+              sideOption: isDouble ? 'double_side' : 'single_side',
+              paperSize: isPvc ? 'PVC Card' : 'A4',
+              lamination: isLam
+            });
+            saveFileToCloudStorage(fileId, img, fName, 'image/jpeg').catch(() => {});
+          });
+        } else if (c.product.imageUrl && (c.product.imageUrl.startsWith('data:') || c.product.imageUrl.startsWith('blob:'))) {
+          const fileId = `f-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+          const fnMatch = c.product.nameGu.match(/\[([^\]]+)\]/);
+          const fName = fnMatch ? fnMatch[1].trim() : `${c.product.nameGu.slice(0, 30)}.pdf`;
           collectedAttachedFiles.push({
             id: fileId,
             fileName: fName,
-            fileDataUrl: img,
-            fileSize: Math.round(img.length * 0.75),
+            fileDataUrl: c.product.imageUrl,
+            fileSize: Math.round(c.product.imageUrl.length * 0.75),
             itemName: c.product.nameGu,
             copies: c.quantity || 1,
-            pages: 1,
-            colorMode: isPvc ? 'pvc_card' : 'color',
+            pages: parsedPages || 1,
+            colorMode: isPvc ? 'pvc_card' : isColor ? 'color' : 'black_white',
             sideOption: isDouble ? 'double_side' : 'single_side',
             paperSize: isPvc ? 'PVC Card' : 'A4',
             lamination: isLam
           });
-          saveFileToCloudStorage(fileId, img, fName, 'image/jpeg').catch(() => {});
-        });
-      } else if (c.product.imageUrl && (c.product.imageUrl.startsWith('data:') || c.product.imageUrl.startsWith('http') || c.product.imageUrl.startsWith('blob:'))) {
-        const fileId = `f-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const fnMatch = c.product.nameGu.match(/\[([^\]]+)\]/);
-        const fName = fnMatch ? fnMatch[1].trim() : `${c.product.nameGu.slice(0, 30)}.pdf`;
-        collectedAttachedFiles.push({
-          id: fileId,
-          fileName: fName,
-          fileDataUrl: c.product.imageUrl,
-          fileSize: Math.round(c.product.imageUrl.length * 0.75),
-          itemName: c.product.nameGu,
-          copies: c.quantity || 1,
-          pages: parsedPages || 1,
-          colorMode: isPvc ? 'pvc_card' : isColor ? 'color' : 'black_white',
-          sideOption: isDouble ? 'double_side' : 'single_side',
-          paperSize: isPvc ? 'PVC Card' : 'A4',
-          lamination: isLam
-        });
-        saveFileToCloudStorage(
-          fileId,
-          c.product.imageUrl,
-          fName,
-          fName.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image/jpeg' : 'application/pdf'
-        ).catch(() => {});
+          saveFileToCloudStorage(
+            fileId,
+            c.product.imageUrl,
+            fName,
+            fName.match(/\.(jpg|jpeg|png|webp)$/i) ? 'image/jpeg' : 'application/pdf'
+          ).catch(() => {});
+        }
       }
+      // Note: Regular stationery products (notebooks, pens, files, etc.) do NOT get added to print files
     });
 
     const newOrder: OrderRecord = {
@@ -1120,7 +1439,7 @@ export default function App() {
       notes: orderDetails.discountCode ? `પ્રોમો કોડ: ${orderDetails.discountCode}` : ''
     };
 
-    setOrders(prev => [newOrder, ...prev]);
+    getActiveOrdersSetter()(prev => [newOrder, ...prev]);
     setAdminUnreadOrdersCount(prev => prev + 1);
     showToast(`🔔 નવો ઑર્ડર મળ્યો! ગ્રાહક: ${newOrder.customerName} (₹${newOrder.total})`);
 
@@ -1190,7 +1509,7 @@ export default function App() {
 
   // DELETE BILL / ORDER - Opens In-App Modal -> Auto-restocks and Moves to Trash Bin
   const handleDeleteOrder = (orderId: string) => {
-    const orderToDelete = orders.find(o => o.id === orderId);
+    const orderToDelete = currentOrders.find(o => o.id === orderId);
     if (!orderToDelete) return;
 
     setDeleteConfirmTarget({
@@ -1206,15 +1525,15 @@ export default function App() {
   const handleRestoreTrashRecord = (record: TrashRecord) => {
     if (record.type === 'product') {
       const prod: ProductItem = record.data;
-      setPosItems(prev => [prod, ...prev.filter(p => p.id !== prod.id)]);
+      getActivePosSetter()(prev => [prod, ...prev.filter(p => p.id !== prod.id)]);
       setTrashList(prev => prev.filter(t => t.id !== record.id));
       showToast(`🔄 પ્રોડક્ટ "${prod.nameGu}" સ્ટોકમાં પાછી ઉમેરાઈ ગઈ!`);
     } else if (record.type === 'order') {
       const ord: OrderRecord = record.data;
-      setOrders(prev => [ord, ...prev.filter(o => o.id !== ord.id)]);
+      getActiveOrdersSetter()(prev => [ord, ...prev.filter(o => o.id !== ord.id)]);
       
       // Re-deduct stock for the restored order
-      setPosItems(prev =>
+      getActivePosSetter()(prev =>
         prev.map(p => {
           const matched = ord.items.find(i => i.name === p.nameGu || i.name === p.nameEn);
           if (matched && typeof p.stock === 'number') {
@@ -1224,7 +1543,7 @@ export default function App() {
         })
       );
 
-      setStats(s => ({
+      getActiveStatsSetter()(s => ({
         ...s,
         dailySales: Number((s.dailySales + ord.total).toFixed(2)),
         totalBills: s.totalBills + 1,
@@ -1235,17 +1554,17 @@ export default function App() {
       showToast(`🔄 બિલ #${ord.invoiceNo} ઓર્ડર લિસ્ટમાં પાછું આવી ગયું!`);
     } else if (record.type === 'expense') {
       const exp: ExpenseRecord = record.data;
-      setExpenses(prev => [exp, ...prev.filter(e => e.id !== exp.id)]);
+      getActiveExpensesSetter()(prev => [exp, ...prev.filter(e => e.id !== exp.id)]);
       setTrashList(prev => prev.filter(t => t.id !== record.id));
       showToast(`🔄 ખર્ચ રેકોર્ડ પાછો ઉમેરાઈ ગયો!`);
     } else if (record.type === 'khata_account') {
       const accData = record.data?.account || record.data;
       const txData = record.data?.transactions || [];
       if (accData) {
-        setKhataAccounts(prev => [...prev.filter(a => a.id !== accData.id), accData]);
+        getActiveKhataAccountsSetter()(prev => [...prev.filter(a => a.id !== accData.id), accData]);
         if (txData && txData.length > 0) {
           const txIds = new Set(txData.map((t: any) => t.id));
-          setKhataTransactions(prev => [...prev.filter(t => !txIds.has(t.id)), ...txData]);
+          getActiveKhataTransactionsSetter()(prev => [...prev.filter(t => !txIds.has(t.id)), ...txData]);
         }
         setTrashList(prev => prev.filter(t => t.id !== record.id));
         showToast(`🔄 ખાતું "${accData.name}" પાછું આવી ગયું!`);
@@ -1253,9 +1572,9 @@ export default function App() {
     } else if (record.type === 'khata_transaction') {
       const tx = record.data;
       if (tx) {
-        setKhataTransactions(prev => [...prev.filter(t => t.id !== tx.id), tx]);
+        getActiveKhataTransactionsSetter()(prev => [...prev.filter(t => t.id !== tx.id), tx]);
         // Re-apply balance
-        setKhataAccounts(prev => prev.map(a => {
+        getActiveKhataAccountsSetter()(prev => prev.map(a => {
           if (a.id === tx.accountId) {
             const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
             return {
@@ -1273,9 +1592,16 @@ export default function App() {
     } else if (record.type === 'rojmel') {
       const entry = record.data;
       if (entry) {
-        setRojmelEntries(prev => [...prev.filter(e => e.id !== entry.id), entry]);
+        getActiveRojmelSetter()(prev => [...prev.filter(e => e.id !== entry.id), entry]);
         setTrashList(prev => prev.filter(t => t.id !== record.id));
         showToast(`🔄 રોજમેળ એન્ટ્રી પાછી ઉમેરાઈ ગઈ!`);
+      }
+    } else if (record.type === 'bank_entry') {
+      const entry = record.data;
+      if (entry) {
+        getActiveBankEntriesSetter()(prev => [...prev.filter(e => e.id !== entry.id), entry]);
+        setTrashList(prev => prev.filter(t => t.id !== record.id));
+        showToast(`🔄 બેંક એન્ટ્રી પાછી ઉમેરાઈ ગઈ!`);
       }
     }
   };
@@ -1314,7 +1640,7 @@ export default function App() {
     const dateFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
     if (type === 'product') {
-      const itemToDelete: ProductItem = data || posItems.find(p => p.id === id);
+      const itemToDelete: ProductItem = data || currentPosItems.find(p => p.id === id);
       if (itemToDelete) {
         const trashRec: TrashRecord = {
           id: `trash-${Date.now()}`,
@@ -1325,15 +1651,15 @@ export default function App() {
           data: itemToDelete
         };
         setTrashList(prev => [trashRec, ...prev]);
-        setPosItems(prev => prev.filter(item => item.id !== id));
+        getActivePosSetter()(prev => prev.filter(item => item.id !== id));
         if (editingItem?.id === id) setEditingItem(null);
         showToast(`🗑️ "${itemToDelete.nameGu}" ડિલીટ થઈ ટ્રેશ બિનમાં ખસેડવામાં આવી!`);
       }
     } else if (type === 'order') {
-      const orderToDelete: OrderRecord = data || orders.find(o => o.id === id);
+      const orderToDelete: OrderRecord = data || currentOrders.find(o => o.id === id);
       if (orderToDelete) {
         // Restore inventory stock for all items in the deleted order
-        setPosItems(prev =>
+        getActivePosSetter()(prev =>
           prev.map(p => {
             const matchedItem = orderToDelete.items.find(
               it => it.productId === p.id || it.name === p.nameGu || it.name === p.nameEn
@@ -1348,7 +1674,7 @@ export default function App() {
         // calculate profit to deduct
         const totalProfitToDeduct = orderToDelete.items.reduce((sum, item) => {
           if (item.productId) {
-            const prod = posItems.find(p => p.id === item.productId);
+            const prod = currentPosItems.find(p => p.id === item.productId);
             if (prod) {
               return sum + (Math.max(0, item.price - prod.costPrice) * item.qty);
             }
@@ -1357,7 +1683,7 @@ export default function App() {
         }, 0);
 
         // Deduct from business stats
-        setStats(s => ({
+        getActiveStatsSetter()(s => ({
           ...s,
           dailySales: Math.max(0, Number((s.dailySales - orderToDelete.total).toFixed(2))),
           totalBills: Math.max(0, s.totalBills - 1),
@@ -1389,17 +1715,18 @@ export default function App() {
         markCloudFileAsDeleted(orderToDelete.id);
         if (orderToDelete.invoiceNo) markCloudFileAsDeleted(orderToDelete.invoiceNo);
 
-        const ordDeleted = getDeletedIds('prisha_orders_v4');
+        const collName = activeShopMode === 'professional' ? (activeStoreMode === 'gst' ? 'prof_gst_currentOrders' : 'prof_currentOrders') : (activeStoreMode === 'gst' ? 'gst_currentOrders' : 'prisha_currentOrders_v4');
+        const ordDeleted = getDeletedIds(collName);
         ordDeleted.add(orderToDelete.id);
         if (orderToDelete.invoiceNo) ordDeleted.add(orderToDelete.invoiceNo);
-        saveDeletedIds('prisha_orders_v4', ordDeleted);
+        saveDeletedIds(collName, ordDeleted);
 
         setTrashList(prev => [trashRec, ...prev]);
-        setOrders(prev => prev.filter(o => o.id !== id));
+        getActiveOrdersSetter()(prev => prev.filter(o => o.id !== id));
         showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થયું અને માલ સ્ટોકમાં જમા થયો!`);
       }
     } else if (type === 'expense') {
-      const expToDelete: ExpenseRecord = data || expenses.find(e => e.id === id);
+      const expToDelete: ExpenseRecord = data || currentExpenses.find(e => e.id === id);
       if (expToDelete) {
         const trashRec: TrashRecord = {
           id: `trash-${Date.now()}`,
@@ -1410,11 +1737,11 @@ export default function App() {
           data: expToDelete
         };
         setTrashList(prev => [trashRec, ...prev]);
-        setExpenses(prev => prev.filter(e => e.id !== id));
+        getActiveExpensesSetter()(prev => prev.filter(e => e.id !== id));
         showToast(`🗑️ ખર્ચ એન્ટ્રી ટ્રેશ બિનમાં ખસેડાઈ!`);
       }
     } else if (type === 'purchase') {
-      const purToDelete: PurchaseRecord = data || purchases.find(p => p.id === id);
+      const purToDelete: PurchaseRecord = data || currentPurchases.find(p => p.id === id);
       if (purToDelete) {
         const trashRec: TrashRecord = {
           id: `trash-${Date.now()}`,
@@ -1425,7 +1752,7 @@ export default function App() {
           data: purToDelete
         };
         setTrashList(prev => [trashRec, ...prev]);
-        setPurchases(prev => prev.filter(p => p.id !== id));
+        getActivePurchasesSetter()(prev => prev.filter(p => p.id !== id));
         showToast(`🗑️ ખરીદી બિલ #${purToDelete.billNo || ''} ડિલીટ થઈ ગયું!`);
       }
     } else if (type === 'trash_item') {
@@ -1440,10 +1767,10 @@ export default function App() {
           }
           if (ord.id) markCloudFileAsDeleted(ord.id);
           if (ord.invoiceNo) markCloudFileAsDeleted(ord.invoiceNo);
-          const ordDeleted = getDeletedIds('prisha_orders_v4');
+          const ordDeleted = getDeletedIds(currentOrderCollection);
           if (ord.id) ordDeleted.add(ord.id);
           if (ord.invoiceNo) ordDeleted.add(ord.invoiceNo);
-          saveDeletedIds('prisha_orders_v4', ordDeleted);
+          saveDeletedIds(currentOrderCollection, ordDeleted);
         }
         const trashDeleted = getDeletedIds('prisha_trash_v4');
         trashDeleted.add(itemToDelete.id);
@@ -1452,7 +1779,7 @@ export default function App() {
       setTrashList(prev => prev.filter(t => t.id !== id));
       showToast(`❌ આઇટમ કાયમી ધોરણે ડિલીટ થઈ ગઈ.`);
     } else if (type === 'all_trash') {
-      const ordDeleted = getDeletedIds('prisha_orders_v4');
+      const ordDeleted = getDeletedIds(currentOrderCollection);
       const trashDeleted = getDeletedIds('prisha_trash_v4');
       trashList.forEach(item => {
         trashDeleted.add(item.id);
@@ -1473,7 +1800,7 @@ export default function App() {
           }
         }
       });
-      saveDeletedIds('prisha_orders_v4', ordDeleted);
+      saveDeletedIds(currentOrderCollection, ordDeleted);
       saveDeletedIds('prisha_trash_v4', trashDeleted);
       setTrashList([]);
       showToast('🧹 ટ્રેશ બિન આખું ખાલી થઈ ગયું!');
@@ -1486,9 +1813,9 @@ export default function App() {
   const handleUpdateOrderStatus = (orderId: string, newStatus: OrderRecord['orderStatus']) => {
     const now = new Date();
     const timeFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    const matchedOrder = orders.find(o => o.id === orderId);
+    const matchedOrder = currentOrders.find(o => o.id === orderId);
 
-    setOrders(prev =>
+    getActiveOrdersSetter()(prev =>
       prev.map(o => {
         if (o.id === orderId) {
           return {
@@ -1521,6 +1848,45 @@ export default function App() {
   };
 
   // DIRECT INVENTORY STOCK NUMBER UPDATE (e.g. typing 100 directly)
+  const handlePriceOrDiscountUpdate = (productId: string, field: 'price' | 'mrp' | 'discount', value: string) => {
+    const val = parseFloat(value);
+    const setter = getActivePosSetter();
+    
+    setter(prev => prev.map(p => {
+      if (p.id === productId) {
+        const updated = { ...p, updatedAt: Date.now() };
+        let mrp = field === 'mrp' ? (isNaN(val) ? 0 : val) : (p.mrp || p.price);
+        
+        // If we are applying a discount but MRP is blank, use current price as MRP
+        if (field === 'discount' && !p.mrp) {
+          mrp = p.price;
+          updated.mrp = mrp;
+        }
+
+        if (field === 'discount') {
+          const discount = isNaN(val) ? 0 : val;
+          updated.discountPercent = discount;
+          updated.price = Math.round(mrp * (1 - discount / 100));
+        } else if (field === 'price') {
+          const price = isNaN(val) ? 0 : val;
+          updated.price = price;
+          if (mrp > 0) {
+            updated.discountPercent = Math.round(((mrp - price) / mrp) * 100);
+          }
+        } else if (field === 'mrp') {
+          updated.mrp = mrp;
+          if (updated.discountPercent !== undefined && updated.discountPercent > 0) {
+            updated.price = Math.round(mrp * (1 - updated.discountPercent / 100));
+          } else if (updated.price > 0 && mrp > 0) {
+            updated.discountPercent = Math.round(((mrp - updated.price) / mrp) * 100);
+          }
+        }
+        return updated;
+      }
+      return p;
+    }));
+  };
+
   const handleDirectStockUpdate = (productId: string, newStockVal: string) => {
     const parsed = Number(newStockVal);
     const validStock = isNaN(parsed) ? 0 : Math.max(0, parsed);
@@ -1540,7 +1906,7 @@ export default function App() {
 
   // SAVE EDITED ORDER
   const handleSaveOrderEdit = (updatedOrder: OrderRecord) => {
-    setOrders(prev => prev.map(o => (o.id === updatedOrder.id ? updatedOrder : o)));
+    getActiveOrdersSetter()(prev => prev.map(o => (o.id === updatedOrder.id ? updatedOrder : o)));
     setEditingOrder(null);
     showToast(`✅ બિલ #${updatedOrder.invoiceNo} અપડેટ થઈ ગયું!`);
   };
@@ -1666,7 +2032,7 @@ export default function App() {
       showToast('⚠️ કૃપા કરીને લિસ્ટમાંથી પ્રોડક્ટ પસંદ કરો!');
       return;
     }
-    const prod = posItems.find(p => p.id === posSelectedProdId);
+    const prod = currentPosItems.find(p => p.id === posSelectedProdId);
     if (!prod) return;
 
     const qty = Math.max(1, posSelectedQty || 1);
@@ -1784,7 +2150,7 @@ export default function App() {
     // Calculate profit
     const totalProfit = billItems.reduce((sum, item) => {
       if (item.productId) {
-        const prod = posItems.find(p => p.id === item.productId);
+        const prod = currentPosItems.find(p => p.id === item.productId);
         if (prod) {
           return sum + (Math.max(0, item.price - prod.costPrice) * item.qty);
         }
@@ -1793,7 +2159,7 @@ export default function App() {
     }, 0);
 
     // Deduct stock for inventory products
-    setPosItems(prev =>
+    getActivePosSetter()(prev =>
       prev.map(p => {
         const inB = billItems.find(b => b.productId === p.id || b.name === p.nameGu || b.name === p.nameEn);
         if (inB && typeof p.stock === 'number') {
@@ -1811,7 +2177,7 @@ export default function App() {
       mobile: posCustomerMobile || storeSettings.phone,
       address: 'દુકાન કાઉન્ટર - થરાદ',
       items: billItems.map(b => {
-        const prod = b.productId ? posItems.find(p => p.id === b.productId) : undefined;
+        const prod = b.productId ? currentPosItems.find(p => p.id === b.productId) : undefined;
         const detected = detectHsnAndGst(b.name, prod?.category);
         return {
           name: b.name,
@@ -1834,11 +2200,11 @@ export default function App() {
       statusUpdatedAt: dateFormatted
     };
 
-    setOrders(prev => [inv, ...prev]);
+    getActiveOrdersSetter()(prev => [inv, ...prev]);
     setActiveInvoiceOrder(inv);
     setIsSuccessModal(false);
 
-    setStats(s => ({
+    getActiveStatsSetter()(s => ({
       ...s,
       dailySales: Number((s.dailySales + finalTotal).toFixed(2)),
       itemsSold: s.itemsSold + billItems.reduce((acc, curr) => acc + curr.qty, 0),
@@ -1857,7 +2223,7 @@ export default function App() {
   // Export to Excel
   const handleExportExcel = () => {
     try {
-      const productData = posItems.map((p, index) => ({
+      const productData = (currentPosItems || []).filter(Boolean).map((p, index) => ({
         'ક્રમ': index + 1,
         'આઇટમ નામ (ગુજરાતી)': p.nameGu,
         'English Name': p.nameEn,
@@ -1868,7 +2234,7 @@ export default function App() {
         'એકમ': p.unit
       }));
 
-      const ordersData = orders.map(o => ({
+      const currentOrdersData = (currentOrders || []).filter(Boolean).map(o => ({
         'બિલ નં': o.invoiceNo,
         'તારીખ': o.date,
         'ગ્રાહક': o.customerName,
@@ -1880,7 +2246,7 @@ export default function App() {
 
       const wb = XLSX.utils.book_new();
       const wsP = XLSX.utils.json_to_sheet(productData);
-      const wsO = XLSX.utils.json_to_sheet(ordersData);
+      const wsO = XLSX.utils.json_to_sheet(currentOrdersData);
       XLSX.utils.book_append_sheet(wb, wsP, 'સ્ટોક ઇન્વેન્ટરી');
       XLSX.utils.book_append_sheet(wb, wsO, 'બિલ હિસ્ટ્રી');
       XLSX.writeFile(wb, `Prisha_Stationery_Data_${new Date().toISOString().slice(0, 10)}.xlsx`);
@@ -1891,8 +2257,11 @@ export default function App() {
     }
   };
 
+
+
   // Filtered Items for Catalog & POS Grid
-  const filteredItems = posItems.filter(item => {
+  const filteredItems = (currentPosItems || []).filter(item => {
+    if (!item) return false;
     // If not admin, hide items marked as hidden
     if (!isAdminUnlocked && item.isHidden) return false;
 
@@ -1905,8 +2274,8 @@ export default function App() {
     if (sortOption === 'wishlist' && !wishlist.includes(item.id)) return false;
 
     const matchesSearch =
-      item.nameGu.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.nameEn.toLowerCase().includes(searchQuery.toLowerCase());
+      (item.nameGu || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (item.nameEn || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCat;
   }).sort((a, b) => {
@@ -1961,6 +2330,7 @@ export default function App() {
           onSave={(updated) => {
             setStoreSettings(prev => ({ ...prev, ...updated }));
           }}
+          onRescueData={clearAllDeletedIds}
           showToast={showToast}
         />
       )}
@@ -2092,13 +2462,12 @@ export default function App() {
                 <button
                   onClick={() => {
                     setAdminUnreadOrdersCount(0);
-                    setActiveTab('admin');
-                    showToast(`🔔 કુલ ${orders.length} ઑર્ડર્સ છે.`);
+                    setShowOnlineOrdersModal(true);
                   }}
                   className="relative bg-amber-500 hover:bg-amber-600 text-black px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer"
-                  title="નવા ગ્રાહક ઑર્ડર નોટિફિકેશન"
+                  title="ઓનલાઇન ઓર્ડર્સ મેનેજમેન્ટ ખોલો"
                 >
-                  <Bell className="w-3.5 h-3.5 text-black shrink-0 animate-bounce" />
+                  <ShoppingBag className="w-3.5 h-3.5 text-black shrink-0" />
                   <span className="hidden md:inline">ઓર્ડર</span>
                   {adminUnreadOrdersCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 bg-red-600 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-4 text-center animate-ping">
@@ -2158,6 +2527,8 @@ export default function App() {
               <span>ઓર્ડર ટ્રેક કરો (Track)</span>
             </button>
 
+
+
             {/* STORE SHARE LINK BUTTON (ADMIN PANEL ONLY) */}
             {activeTab !== 'customer' && (
               <button
@@ -2182,14 +2553,14 @@ export default function App() {
               <button
                 onClick={() => {
                   forceCloudSyncAll();
-                  showToast(`🔄 ફાયરબેઝ ક્લાઉડમાંથી તમામ ${posItems.length} વસ્તુઓ તાત્કાલિક સિન્ક થઈ રહી છે...`);
+                  showToast(`🔄 ફાયરબેઝ ક્લાઉડમાંથી તમામ ${currentPosItems.length} વસ્તુઓ તાત્કાલિક સિન્ક થઈ રહી છે...`);
                   setShowMultiPlatformSyncModal(true);
                 }}
                 className="bg-purple-900 hover:bg-purple-800 text-purple-200 border border-purple-600 px-2.5 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
                 title="મોબાઇલ અને પીસી વચ્ચે ડેટા તાત્કાલિક સિન્ક કરો (Sync Now)"
               >
                 <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
-                <span>🔄 સિન્ક ({posItems.length})</span>
+                <span>🔄 સિન્ક ({currentPosItems.length})</span>
               </button>
             )}
 
@@ -2297,6 +2668,169 @@ export default function App() {
         </div>
       )}
 
+      {/* PRISHA PROFESSIONAL SHOP LOGIN MODAL */}
+      {showPrishaLoginModal && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border-2 border-orange-600 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-black">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-black">🏢 પ્રિષા પ્રોફેશનલ શોપ લૉગિન</h3>
+                  <p className="text-[10px] text-neutral-500 font-bold">અલગ ઇન્વેન્ટરી & હિસાબ કોપી</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowPrishaLoginModal(false)}
+                className="text-neutral-400 hover:text-black p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                const correctPass = storeSettings.adminPassword || 'Bharat@1994';
+                if (prishaLoginPassword === correctPass) {
+                  setActiveShopMode('professional');
+                  setShowPrishaLoginModal(false);
+                  setPrishaLoginPassword('');
+                  setPrishaLoginError('');
+                  showToast('🏢 પ્રિષા પ્રોફેશનલ શોપ (અલગ કોપી) સફળતાપૂર્વક ખુલી ગઈ!');
+                } else {
+                  setPrishaLoginError('❌ ખોટો પાસવર્ડ! કૃપા કરીને સાચો પાસવર્ડ દાખલ કરો.');
+                }
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="text-xs font-black block mb-1 text-neutral-800">
+                  🔑 એડમિન પાસવર્ડ દાખલ કરો:
+                </label>
+                <input
+                  type="password"
+                  placeholder="Enter Password..."
+                  value={prishaLoginPassword}
+                  onChange={e => {
+                    setPrishaLoginPassword(e.target.value);
+                    setPrishaLoginError('');
+                  }}
+                  className="w-full text-sm font-black p-2.5 border-2 border-neutral-400 rounded-xl focus:border-orange-600 outline-none"
+                  autoFocus
+                />
+                {prishaLoginError && (
+                  <p className="text-[11px] font-black text-red-600 mt-1.5 bg-red-50 p-1.5 rounded border border-red-200">
+                    {prishaLoginError}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowPrishaLoginModal(false)}
+                  className="px-3.5 py-2 border rounded-xl text-xs font-bold text-neutral-700 hover:bg-neutral-100"
+                >
+                  રદ કરો
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-black shadow flex items-center gap-1.5"
+                >
+                  <Unlock className="w-3.5 h-3.5 text-black" />
+                  <span>પ્રિષા શોપ ખોલો</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* SECONDARY PASSWORD & ITEM EDIT / COST PRICE VERIFICATION MODAL */}
+      {securityModalState && securityModalState.isOpen && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full border-2 border-indigo-600 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-black">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-black">{securityModalState.title}</h3>
+                  {securityModalState.subtitle && (
+                    <p className="text-[10px] text-neutral-500 font-bold">{securityModalState.subtitle}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSecurityModalState(null)}
+                className="text-neutral-400 hover:text-black p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSecurityPasswordSubmit} className="space-y-3">
+              <div>
+                <label className="text-xs font-black block mb-1 text-neutral-800">
+                  🔑 પાસવર્ડ દાખલ કરો:
+                </label>
+                <div className="relative">
+                  <input
+                    type={securityPasswordShow ? 'text' : 'password'}
+                    placeholder="Enter Security Password..."
+                    value={securityPasswordInput}
+                    onChange={e => {
+                      setSecurityPasswordInput(e.target.value);
+                      setSecurityPasswordError('');
+                    }}
+                    className="w-full text-sm font-black p-2.5 pr-10 border-2 border-neutral-400 rounded-xl focus:border-indigo-600 outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setSecurityPasswordShow(!securityPasswordShow)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 p-1"
+                  >
+                    {securityPasswordShow ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                {securityPasswordError && (
+                  <p className="text-[11px] font-black text-red-600 mt-1.5 bg-red-50 p-1.5 rounded border border-red-200">
+                    {securityPasswordError}
+                  </p>
+                )}
+                <div className="mt-2 text-[10px] text-neutral-500 bg-neutral-50 p-2 rounded-lg border border-neutral-200">
+                  <p className="font-bold text-neutral-700 mb-0.5">💡 માન્ય પાસવર્ડ્સ:</p>
+                  <p>એડમિન પાસવર્ડ, <code>0123</code>, <code>2626</code> અથવા <code>Prisha@2024</code></p>
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSecurityModalState(null)}
+                  className="px-3.5 py-2 border rounded-xl text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+                >
+                  રદ કરો
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Unlock className="w-3.5 h-3.5 text-white" />
+                  <span>અનલૉક કરો</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ========================================================================= */}
       {/* 3. MAIN BODY: CUSTOMER E-COMMERCE VIEW (DEFAULT) */}
       {/* ========================================================================= */}
@@ -2383,7 +2917,7 @@ export default function App() {
             {/* Category Filter Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-black">
 
-              {['all', ...Array.from(new Set(posItems.map(p => p.category)))].map(cat => (
+              {['all', ...Array.from(new Set((currentPosItems || []).filter(p => p && p.category).map(p => p.category)))].map(cat => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
@@ -2396,7 +2930,7 @@ export default function App() {
                   <span>{cat === 'all' ? '🛍️ બધી પ્રોડક્ટ્સ' : `✨ ${cat}`}</span>
                   {cat !== 'all' && (
                     <span className="opacity-70 text-[10px]">
-                      ({posItems.filter(p => p.category === cat).length})
+                      ({(currentPosItems || []).filter(p => p && p.category === cat).length})
                     </span>
                   )}
                 </button>
@@ -2439,14 +2973,35 @@ export default function App() {
                   className={`bg-white rounded-xl border border-neutral-200 hover:border-blue-400 shadow-sm hover:shadow-lg transition-all flex justify-between overflow-hidden group relative ${isListView ? 'flex-row items-center p-2 gap-3' : 'flex-col'}`}
                   onClick={() => setSelectedProductForModal(item)}
                 >
-                  {/* Top Badge */}
-                  {item.badge && (
-                    <div className="absolute top-2 left-2 z-20">
-                      <span className="bg-orange-500 text-black text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
-                        {item.badge}
-                      </span>
-                    </div>
-                  )}
+                  {/* Top Badge & Discount Badge */}
+                  {(() => {
+                    const currentPrice = getFinalPrice(item);
+                    const originalPrice = item.mrp || (currentPrice < item.price ? item.price : 0);
+                    const hasDiscount = originalPrice > currentPrice || (item.discountPercent && item.discountPercent > 0);
+                    
+                    // Priority 1: Individual discount % if it was manually set
+                    // Priority 2: Calculated % from MRP vs Final Price
+                    const effectiveDiscPercent = (item.discountPercent && item.discountPercent > 0) 
+                      ? item.discountPercent 
+                      : (originalPrice > currentPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0);
+
+                    if (!item.badge && !hasDiscount) return null;
+
+                    return (
+                      <div className="absolute top-2 left-2 z-20 flex flex-col gap-1 items-start">
+                        {item.badge && (
+                          <span className="bg-orange-500 text-black text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
+                            {item.badge}
+                          </span>
+                        )}
+                        {hasDiscount && effectiveDiscPercent > 0 && (
+                          <span className="bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded-lg shadow-lg border border-red-400 animate-pulse">
+                            🔥 {effectiveDiscPercent}% OFF
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Wishlist Button (Customer) */}
                   <div className={`absolute z-20 ${isAdminUnlocked ? 'top-10 right-2' : 'top-2 right-2'}`}>
@@ -2478,7 +3033,7 @@ export default function App() {
                           <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => setEditingItem(item)}
+                          onClick={() => handleEditItemRequest(item)}
                           className="text-blue-700 hover:text-blue-900 p-1 rounded hover:bg-blue-50 cursor-pointer"
                           title="પ્રોડક્ટ એડિટ કરો"
                         >
@@ -2524,8 +3079,13 @@ export default function App() {
                           accept="image/*"
                           className="hidden"
                           onChange={e => {
-                            setEditingItem(item);
-                            handleImageFileUpload(e, 'editingProduct');
+                            const pass = window.prompt('પ્રોડક્ટ ફોટો બદલવા માટે પાસવર્ડ દાખલ કરો:');
+                            if (pass && verifySecondaryPassword(pass)) {
+                              setEditingItem(item);
+                              handleImageFileUpload(e, 'editingProduct');
+                            } else if (pass !== null) {
+                              alert('❌ ખોટો પાસવર્ડ!');
+                            }
                           }}
                         />
                       </label>
@@ -2576,9 +3136,16 @@ export default function App() {
                       <p className="text-[10px] text-neutral-500 font-bold truncate mt-0.5">
                         {item.nameEn}
                       </p>
+
+                      {/* 5-Star Rating & Review Count */}
+                      <div className="flex items-center gap-1 mt-1 text-[10px] font-bold text-amber-800">
+                        <span className="text-amber-500 text-xs leading-none">★</span>
+                        <span>4.9</span>
+                        <span className="text-neutral-400 font-medium">(7 રિવ્યૂ)</span>
+                      </div>
                       
-                      {/* Bulk Pricing / Offer Note */}
-                      {item.bulkPricing && (
+                      {/* Bulk Pricing / Offer Note (Admin Only) */}
+                      {isAdminUnlocked && item.bulkPricing && (
                         <p className="text-[9px] sm:text-[10px] font-black text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded mt-1.5 inline-block">
                           {item.bulkPricing}
                         </p>
@@ -2588,23 +3155,38 @@ export default function App() {
                     {/* Price and Cart Control */}
                     <div className={`pt-2 border-t border-neutral-100 flex items-center justify-between gap-1 ${isListView ? 'border-t border-neutral-200 mt-2' : ''}`}>
                       <div className="cursor-pointer" onClick={(e) => { e.stopPropagation(); setSelectedProductForModal(item); }}>
-                        {/* Show MRP if exists and greater than price */}
-                        {storeSettings.showMrpOnStore !== false && item.mrp && item.mrp > item.price && (
-                          <div className="text-[10px] sm:text-[11px] text-neutral-400 font-bold line-through">
-                            ₹{item.mrp}
-                          </div>
-                        )}
-                        <span className="text-sm sm:text-base font-black text-orange-700">
-                          ₹{item.price}
-                        </span>
-                        {storeSettings.showDiscountOnStore !== false && item.mrp && item.mrp > item.price && (
-                          <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-1 ml-1 rounded">
-                            {Math.round(((item.mrp - item.price) / item.mrp) * 100)}% છૂટ
-                          </span>
-                        )}
-                        <span className="text-[10px] text-neutral-500 font-bold ml-1">
-                          / {item.unit || 'નંગ'}
-                        </span>
+                        {/* Show MRP / Original Price if exists and greater than final price */}
+                        {(() => {
+                          const currentPrice = getFinalPrice(item);
+                          const originalPrice = item.mrp || (currentPrice < item.price ? item.price : 0);
+                          const hasDiscount = originalPrice > currentPrice || (item.discountPercent && item.discountPercent > 0);
+                          const effectiveDiscPercent = (item.discountPercent && item.discountPercent > 0) 
+                            ? item.discountPercent 
+                            : (originalPrice > currentPrice ? Math.round(((originalPrice - currentPrice) / originalPrice) * 100) : 0);
+
+                          return (
+                            <div className="flex flex-col">
+                              {hasDiscount && (
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-[10px] sm:text-[11px] text-neutral-400 font-bold line-through">
+                                    ₹{originalPrice}
+                                  </span>
+                                  <span className="text-[10px] font-black text-red-600 bg-red-50 px-1.5 rounded">
+                                    {effectiveDiscPercent}% OFF
+                                  </span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm sm:text-lg font-black text-[#0B1E48]">
+                                  ₹{currentPrice}
+                                </span>
+                                <span className="text-[10px] text-neutral-500 font-bold">
+                                  / {item.unit || 'નંગ'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {inCart ? (
@@ -2646,7 +3228,7 @@ export default function App() {
                             e.stopPropagation();
                             if (isOutOfStock) {
                               if (isAdminUnlocked) {
-                                setEditingItem(item);
+                               handleEditItemRequest(item);
                                 showToast(`📦 "${item.nameGu}" નો સ્ટોક વધારો.`);
                               } else {
                                 showToast(`⚠️ "${item.nameGu}" હાલમાં સ્ટોકમાં ખલાસ છે!`);
@@ -2685,147 +3267,247 @@ export default function App() {
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
           {/* ADMIN TOP CONTROL BAR */}
-          <div className="bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black">
-                <Store className="w-5 h-5" />
+          {/* ADMIN TOP CONTROL BAR */}
+          <div className="bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs space-y-3">
+            {/* Top row: Brand & Primary Controls */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-neutral-200">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black shrink-0">
+                  <Store className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-black text-neutral-900">
+                      સંચાલક કંટ્રોલ
+                    </h2>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                      activeShopMode === 'professional'
+                        ? 'bg-orange-100 text-orange-900 border-orange-300'
+                        : 'bg-blue-100 text-blue-900 border-blue-300'
+                    }`}>
+                      {activeShopMode === 'professional' ? '🏢 પ્રિષા પ્રોફેશનલ મોડ' : '🏪 જનરલ સ્ટોર મોડ'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-neutral-500 font-bold">
+                    સંચાલક: BHARAT CHAUDHARY
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-base font-black text-neutral-900">
-                  સંચાલક કંટ્રોલ
-                </h2>
-                <p className="text-xs text-neutral-500 font-bold">
-                  સંચાલક: BHARAT CHAUDHARY
-                </p>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* ORANGE "PRISHA" PROFESSIONAL SHOP BUTTON OR EXIT / LOGOUT BUTTON */}
+                {activeShopMode === 'professional' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveShopMode('general');
+                      showToast('🚪 પ્રિષા પ્રોફેશનલ શોપમાંથી બહાર આવ્યા (જનરલ મોડ સક્રિય)');
+                    }}
+                    className="bg-red-700 hover:bg-red-800 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-red-400 animate-pulse"
+                    title="પ્રિષા પ્રોફેશનલ શોપમાંથી લોગઆઉટ કરી જનરલ શોપમાં પાછા જાઓ"
+                  >
+                    <LogOut className="w-4 h-4 text-white shrink-0" />
+                    <span>🚪 Prisha બહાર નીકળો</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrishaLoginPassword('');
+                      setPrishaLoginError('');
+                      setShowPrishaLoginModal(true);
+                    }}
+                    className="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border-2 border-orange-700"
+                    title="પ્રિષા પ્રોફેશનલ શોપ (અલગ ઇન્વેન્ટરી અને હિસાબ સાથે આખી સાઇટની કોપી)"
+                  >
+                    <Store className="w-4 h-4 text-black shrink-0" />
+                    <span>🏢 Prisha (પ્રોફેશનલ શોપ)</span>
+                  </button>
+                )}
+
+                {/* SHOW COST PRICE TOGGLE BUTTON */}
+                <button
+                  type="button"
+                  onClick={handleToggleCostPrices}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border transition-all ${
+                    showCostPrices 
+                      ? 'bg-red-50 text-red-700 border-red-200' 
+                      : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-400'
+                  }`}
+                  title="દરેક આઇટમનો ખરીદ ભાવ જોવા અથવા છુપાવવા માટે"
+                >
+                  {showCostPrices ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <span>{showCostPrices ? 'ખરીદ ભાવ છુપાવો' : 'ખરીદ ભાવ જુઓ'}</span>
+                </button>
+
+                {/* DEDICATED ONLINE ORDERS BUTTON */}
+                <button
+                  type="button"
+                  onClick={() => setShowOnlineOrdersModal(true)}
+                  className="relative bg-gradient-to-r from-orange-600 via-amber-600 to-yellow-600 hover:from-orange-700 hover:to-amber-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-orange-300 ring-2 ring-orange-400/40"
+                  title="ગ્રાહકોના તમામ ઓનલાઇન ઓર્ડર્સ, વસ્તુઓની યાદી, બિલ અને ફોટો જુઓ"
+                >
+                  <ShoppingBag className="w-4 h-4 text-yellow-200" />
+                  <span>🌐 ઓનલાઇન ઓર્ડર્સ ({(currentOrders || []).filter(o => o && (o.orderType === 'online' || !o.orderType || (o.invoiceNo && o.invoiceNo.startsWith('ORD-')))).length})</span>
+                  {(currentOrders || []).filter(o => o && (o.orderType === 'online' || !o.orderType || (o.invoiceNo && o.invoiceNo.startsWith('ORD-'))) && (o.orderStatus === 'placed' || o.orderStatus === 'confirmed' || !o.orderStatus)).length > 0 && (
+                    <span className="bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-pulse shadow-xs">
+                      {(currentOrders || []).filter(o => o && (o.orderType === 'online' || !o.orderType || (o.invoiceNo && o.invoiceNo.startsWith('ORD-'))) && (o.orderStatus === 'placed' || o.orderStatus === 'confirmed' || !o.orderStatus)).length} નવા!
+                    </span>
+                  )}
+                </button>
+
+                {/* + નવો સ્ટોક ઉમેરો */}
+                <button
+                  type="button"
+                  onClick={() => setIsAddingNewItem(true)}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ નવો સ્ટોક ઉમેરો</span>
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* CUSTOMER DIRECT UPLOAD QR & LINK BUTTON */}
+            {/* ALL QUICK ADMIN ACTION BUTTONS - DISPLAYED DIRECTLY OUTSIDE IN THE OPEN */}
+            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              {/* 1. 📲 ફાઇલ અપલોડ QR & લિંક */}
               <button
                 type="button"
                 onClick={() => setShowCustomerUploadQrModal(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-emerald-400"
-                title="ગ્રાહક પોતાના મોબાઇલથી PDF/ફોટો મોકલી શકે તે માટે QR કોડ અને લિંક"
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="ગ્રાહક ફાઇલ અપલોડ QR & ડાયરેક્ટ લિંક"
               >
-                <Smartphone className="w-4 h-4 text-emerald-200" />
+                <Smartphone className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>📲 ફાઇલ અપલોડ QR & લિંક</span>
               </button>
 
-              {/* PRINT JOBS & UPLOADED DOCUMENTS BUTTON (PDF, JPG, PNG, EXCEL) */}
+              {/* 2. 🖨️ પ્રિન્ટ ફાઇલો */}
               <button
                 type="button"
                 onClick={() => setShowPrintJobsModal(true)}
-                className="relative bg-gradient-to-r from-blue-900 to-indigo-950 hover:from-blue-950 hover:to-indigo-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-blue-400"
-                title="ગ્રાહકોએ મોકલેલા તમામ પ્રિન્ટ ડોક્યુમેન્ટ્સ (PDF, JPG, PNG, Excel) ડાઉનલોડ કરો"
+                className="bg-blue-50 hover:bg-blue-100 text-blue-950 border border-blue-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="ગ્રાહકે અપલોડ કરેલ તમામ પ્રિન્ટ ફાઇલો જુઓ"
               >
-                <Printer className="w-4 h-4 text-orange-400" />
+                <Printer className="w-3.5 h-3.5 text-blue-600 shrink-0" />
                 <span>🖨️ પ્રિન્ટ ફાઇલો ({totalPrintCount})</span>
-                {unlinkedCloudFilesCount > 0 && (
-                  <span className="bg-emerald-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-bounce shadow-xs">
-                    {unlinkedCloudFilesCount} નવી!
-                  </span>
-                )}
               </button>
 
-              {/* DAILY SALES, PROFIT & STOCK REPORT BUTTON */}
+              {/* 3. 📈 રોજમેળ (Daily ERP) */}
               <button
                 type="button"
                 onClick={() => setShowRojmelModal(true)}
-                className="bg-gradient-to-r from-blue-700 to-indigo-800 hover:from-blue-800 hover:to-indigo-900 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-blue-400"
-                title="રોજમેળ અને ખાતાવહી (Excel Style)"
+                className="bg-sky-50 hover:bg-sky-100 text-sky-950 border border-sky-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="રોજમેળ & ખાતાવહી ERP હિસાબ"
               >
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
+                <TrendingUp className="w-3.5 h-3.5 text-sky-600 shrink-0" />
                 <span>📈 રોજમેળ (Daily ERP)</span>
               </button>
 
-              {/* DAILY CASH CLOSING SUMMARY BUTTON */}
+              {/* 4. 💰 ગલ્લા હિસાબ [F9] */}
               <button
                 type="button"
                 onClick={() => setShowDailyCashClosingModal(true)}
-                className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-amber-300"
-                title="દૈનિક ગલ્લા બંધ હિસાબ & નોટોની ગણતરી (શોર્ટકટ: F9)"
+                className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-400 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="દૈનિક ગલ્લા કેશ ક્લોઝિંગ હિસાબ (F9)"
               >
-                <Calculator className="w-4 h-4 text-amber-200" />
+                <Calculator className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>💰 ગલ્લા હિસાબ [F9]</span>
               </button>
 
-              {/* CA AUDIT & GST EXPORT BUTTON */}
+              {/* 5. 📊 CA ઑડિટ & GST */}
               <button
                 type="button"
                 onClick={() => setShowCaAuditModal(true)}
-                className="bg-gradient-to-r from-emerald-800 to-teal-900 hover:from-emerald-900 hover:to-teal-950 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-emerald-400"
-                title="CA (Chartered Accountant) માટે ઑડિટ રિપોર્ટ, GSTR-1, GSTR-2, નફા-નુકસાન અને 1-Page બેલેન્સ સ્ટેટમેન્ટ"
+                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-950 border border-emerald-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="CA ઑડિટ અને GST સ્ટેટિસ્ટિક્સ રિપોર્ટ"
               >
-                <BarChart3 className="w-4 h-4 text-amber-300" />
+                <BarChart3 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                 <span>📊 CA ઑડિટ & GST</span>
               </button>
 
-              {/* DEDICATED GeM PORTAL GOVT BILL GENERATOR BUTTON */}
+              {/* 6. 🏛️ GeM બિલ જનરેટર */}
               <button
                 type="button"
                 onClick={() => setShowGemBillModal(true)}
-                className="bg-gradient-to-r from-blue-900 via-blue-950 to-indigo-950 hover:from-blue-950 hover:to-black text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-orange-400 ring-2 ring-orange-500/30"
-                title="GeM પોર્ટલ સરકારી બિલ જનરેટર (PDF < 5MB Compliant)"
+                className="bg-orange-50 hover:bg-orange-100 text-orange-950 border border-orange-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="સરકારી GeM પોર્ટલ બિલ જનરેટર"
               >
-                <Building className="w-4 h-4 text-orange-400" />
+                <Building className="w-3.5 h-3.5 text-orange-600 shrink-0" />
                 <span>🏛️ GeM બિલ જનરેટર</span>
               </button>
 
-              {/* 5-FIRM TENDER MULTI-QUOTATION BUILDER BUTTON */}
+              {/* 7. 📋 ૫ કંપની ક્વોટેશન */}
               <button
                 type="button"
                 onClick={() => setShowMultiQuotationModal(true)}
-                className="bg-gradient-to-r from-amber-600 via-amber-700 to-orange-700 hover:from-amber-700 hover:to-orange-800 text-white px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border border-amber-300 ring-2 ring-amber-400/30"
-                title="૧ ક્લિકમાં ૫ અલગ કંપનીના ક્વોટેશન & ભાવ તુલનાત્મક પત્રક (Comparative Statement)"
+                className="bg-amber-50 hover:bg-amber-100 text-amber-950 border border-amber-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="૫ અલગ અલગ પેઢીઓનું ટેન્ડર ક્વોટેશન પત્રક"
               >
-                <FileText className="w-4 h-4 text-amber-200" />
+                <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                 <span>📋 ૫ કંપની ક્વોટેશન</span>
               </button>
 
+              {/* 8. 🏦 કરન્ટ એકાઉન્ટ પાસબુક */}
               <button
                 type="button"
-                onClick={() => setIsAddingNewItem(true)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                onClick={() => setShowBankCurrentAccountModal(true)}
+                className="bg-purple-50 hover:bg-purple-100 text-purple-950 border border-purple-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="બેંક કરન્ટ એકાઉન્ટ પાસબુક & UPI વ્યવહારો"
               >
-                <Plus className="w-4 h-4" />
-                <span>+ નવો સ્ટોક ઉમેરો</span>
+                <Landmark className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                <span>🏦 કરન્ટ એકાઉન્ટ પાસબુક</span>
               </button>
 
+              {/* 9. 🏢 દુકાન ભાડું & બિલ */}
+              <button
+                type="button"
+                onClick={() => setShowShopRentModal(true)}
+                className="bg-rose-50 hover:bg-rose-100 text-rose-950 border border-rose-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="દુકાન ભાડું, લાઈટ બિલ અને સ્ટાફ પગાર ખાતાવહી"
+              >
+                <Building2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span>🏢 દુકાન ભાડું & બિલ</span>
+              </button>
+
+              {/* 10. 🗑️ ટ્રેશ બિન */}
               <button
                 type="button"
                 onClick={() => setShowTrashModal(true)}
-                className="bg-rose-700 hover:bg-rose-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                title="ડીલીટ કરેલ ડેટા / રિસાયકલ બિન"
+                className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 border border-neutral-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="ડિલીટ કરેલી આઇટમ્સ અને બિલ ટ્રેશ બિન"
               >
-                <Trash2 className="w-4 h-4 text-rose-200" />
-                <span>ટ્રેશ બિન ({trashList.length})</span>
+                <Trash2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                <span>🗑️ ટ્રેશ બિન ({trashList.length})</span>
               </button>
 
+              {/* 11. 📊 Excel રિપોર્ટ */}
               <button
                 type="button"
                 onClick={handleExportExcel}
-                className="bg-green-800 hover:bg-green-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
+                className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="આખી ઇન્વેન્ટરી અને બિલ્સ Excel ફાઇલમાં ડાઉનલોડ કરો"
               >
-                <Download className="w-4 h-4" />
-                <span>Excel રિપોર્ટ</span>
+                <Download className="w-3.5 h-3.5 text-white shrink-0" />
+                <span>📊 Excel રિપોર્ટ</span>
               </button>
 
+              {/* 12. 📤 બેકઅપ ડાઉનલોડ */}
               <button
                 type="button"
                 onClick={handleExportBackupJson}
-                className="bg-indigo-700 hover:bg-indigo-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                title="તમારો તમામ ડેટા (બધી વસ્તુઓ, બિલ, ખર્ચ) બેકઅપ JSON ફાઇલ તરીકે ડાઉનલોડ કરો"
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="સંપૂર્ણ સાઇટનો સુરક્ષિત JSON બેકઅપ ડાઉનલોડ કરો"
               >
-                <Download className="w-4 h-4 text-amber-300" />
+                <Download className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                 <span>📤 બેકઅપ ડાઉનલોડ</span>
               </button>
 
+              {/* 13. 📥 બેકઅપ ઇમ્પોર્ટ */}
               <label
-                className="bg-purple-700 hover:bg-purple-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                title="Vercel કે અન્ય જગ્યાનો બેકઅપ JSON ફાઇલ અહીં અપલોડ કરીને મર્જ કરો"
+                className="bg-indigo-50 hover:bg-indigo-100 text-indigo-950 border border-indigo-300 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="બેકઅપ ફાઇલ ઇમ્પોર્ટ કરી ડેટા લોડ કરો"
               >
-                <Upload className="w-4 h-4 text-amber-300" />
+                <Upload className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
                 <span>📥 બેકઅપ ઇમ્પોર્ટ</span>
                 <input
                   type="file"
@@ -2835,42 +3517,46 @@ export default function App() {
                 />
               </label>
 
+              {/* 14. 🔑 પાસવર્ડ બદલો */}
               <button
                 type="button"
                 onClick={() => setShowChangePasswordModal(true)}
-                className="bg-amber-600 hover:bg-amber-700 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                title="એડમિન પાસવર્ડ બદલો"
+                className="bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-400 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="એડમિન અને સેકન્ડરી પાસવર્ડ્સ મેનેજ કરો"
               >
-                <KeyRound className="w-4 h-4 text-amber-200" />
-                <span>પાસવર્ડ બદલો</span>
+                <KeyRound className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                <span>🔑 પાસવર્ડ બદલો</span>
               </button>
 
+              {/* 15. 🧾 બિલ / ઇન્વોઇસ સેટિંગ્સ */}
               <button
                 type="button"
                 onClick={() => setShowBillSettingsModal(true)}
-                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                title="પાસપોર્ટ લોગો, QR કોડ, અધિકૃત સહી અને બિલ કસ્ટમાઇઝેશન"
+                className="bg-blue-900 hover:bg-blue-950 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="બિલ પ્રિન્ટિંગ, સહી, નિયમો અને વોટરમાર્ક સેટિંગ્સ"
               >
-                <FileText className="w-4 h-4 text-orange-400" />
-                <span>બિલ / ઇન્વોઇસ સેટિંગ્સ</span>
+                <FileText className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                <span>🧾 બિલ / ઇન્વોઇસ સેટિંગ્સ</span>
               </button>
 
+              {/* 16. ⚙️ વેબસાઇટ / દુકાન સેટિંગ્સ */}
               <button
                 type="button"
                 onClick={() => setShowStoreSettingsModal(true)}
-                className="bg-emerald-700 hover:bg-emerald-800 text-white px-3 py-2 rounded-xl text-xs font-black shadow-2xs flex items-center gap-1.5 cursor-pointer"
-                title="બેનર, સ્ટોરી, કલર, ફોન્ટ અને લેઆઉਟ કસ્ટમાઇઝેશન"
+                className="bg-[#0B1E48] hover:bg-blue-900 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-2xs cursor-pointer transition-all active:scale-95"
+                title="દુકાન નામ, મોબાઇલ, બેનર અને ડિસ્પ્લે સેટિંગ્સ"
               >
-                <Settings className="w-4 h-4 text-emerald-200" />
-                <span>વેબસાઇટ / દુકાન સેટિંગ્સ</span>
+                <Settings className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                <span>⚙️ વેબસાઇટ / દુકાન સેટિંગ્સ</span>
               </button>
             </div>
           </div>
 
           {/* LIVE STOCK & CATEGORY ANALYTICS BAR (REAL-TIME COST VS SELLING PRICE) */}
           {(() => {
-            const totalCategories = new Set(posItems.map(p => p.category)).size;
-            const totalItemsCount = posItems.length;
+            const items = currentPosItems || [];
+            const totalCategories = new Set(items.filter(p => p && p.category).map(p => p.category)).size;
+            const totalItemsCount = items.length;
             const projectedProfit = Math.max(0, displaySellingStockValue - displayCostStockValue);
 
             return (
@@ -2922,8 +3608,8 @@ export default function App() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             <div
               onClick={() => {
-                const val = prompt('દૈનિક વેચાણ (Today) કરેક્શન/સુધારો (+/-):', (stats?.correctionDaily || 0).toString());
-                if (val !== null) setStats(s => ({ ...s, correctionDaily: Number(val) || 0 }));
+                const val = prompt('દૈનિક વેચાણ (Today) કરેક્શન/સુધારો (+/-):', (currentStats?.correctionDaily || 0).toString());
+                if (val !== null) getActiveStatsSetter()(s => ({ ...s, correctionDaily: Number(val) || 0 }));
               }}
               className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-orange-500 transition-colors"
             >
@@ -2933,8 +3619,8 @@ export default function App() {
 
             <div
               onClick={() => {
-                const val = prompt('અઠવાડિયાનું વેચાણ (Weekly) કરેક્શન/સુધારો (+/-):', (stats?.correctionWeekly || 0).toString());
-                if (val !== null) setStats(s => ({ ...s, correctionWeekly: Number(val) || 0 }));
+                const val = prompt('અઠવાડિયાનું વેચાણ (Weekly) કરેક્શન/સુધારો (+/-):', (currentStats?.correctionWeekly || 0).toString());
+                if (val !== null) getActiveStatsSetter()(s => ({ ...s, correctionWeekly: Number(val) || 0 }));
               }}
               className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-blue-500 transition-colors"
             >
@@ -2944,8 +3630,8 @@ export default function App() {
 
             <div
               onClick={() => {
-                const val = prompt('મહિનાનું વેચાણ (Monthly) કરેક્શન/સુધારો (+/-):', (stats?.correctionMonthly || 0).toString());
-                if (val !== null) setStats(s => ({ ...s, correctionMonthly: Number(val) || 0 }));
+                const val = prompt('મહિનાનું વેચાણ (Monthly) કરેક્શન/સુધારો (+/-):', (currentStats?.correctionMonthly || 0).toString());
+                if (val !== null) getActiveStatsSetter()(s => ({ ...s, correctionMonthly: Number(val) || 0 }));
               }}
               className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-emerald-500 transition-colors"
             >
@@ -2955,8 +3641,8 @@ export default function App() {
 
             <div
               onClick={() => {
-                const val = prompt('આખા વર્ષનું વેચાણ (Yearly) કરેક્શન/સુધારો (+/-):', (stats?.correctionYearly || 0).toString());
-                if (val !== null) setStats(s => ({ ...s, correctionYearly: Number(val) || 0 }));
+                const val = prompt('આખા વર્ષનું વેચાણ (Yearly) કરેક્શન/સુધારો (+/-):', (currentStats?.correctionYearly || 0).toString());
+                if (val !== null) getActiveStatsSetter()(s => ({ ...s, correctionYearly: Number(val) || 0 }));
               }}
               className="bg-white p-4 rounded-xl border border-neutral-300 shadow-sm cursor-pointer hover:border-purple-500 transition-colors"
             >
@@ -2976,8 +3662,8 @@ export default function App() {
 
             <div
               onClick={() => {
-                const val = prompt('કુલ ખરીદ સ્ટોક મૂલ્ય કરેક્શન (+/-):', (stats?.correctionStockVal || 0).toString());
-                if (val !== null) setStats(s => ({ ...s, correctionStockVal: Number(val) || 0 }));
+                const val = prompt('કુલ ખરીદ સ્ટોક મૂલ્ય કરેક્શન (+/-):', (currentStats?.correctionStockVal || 0).toString());
+                if (val !== null) getActiveStatsSetter()(s => ({ ...s, correctionStockVal: Number(val) || 0 }));
               }}
               className="bg-white p-3 rounded-xl border border-neutral-300 shadow-2xs cursor-pointer hover:border-rose-500 transition-colors"
             >
@@ -3048,7 +3734,7 @@ export default function App() {
                           if (e.key === 'Enter') {
                             const code = (e.target as HTMLInputElement).value.trim();
                             if (code) {
-                              const found = posItems.find(p => p.barcode === code || p.id === code || p.nameGu.toLowerCase().includes(code.toLowerCase()));
+                              const found = currentPosItems.find(p => p.barcode === code || p.id === code || p.nameGu.toLowerCase().includes(code.toLowerCase()));
                               if (found) {
                                 setPosBillItems(prev => {
                                   const existing = prev.find(i => i.product?.id === found.id || i.id === found.id);
@@ -3077,7 +3763,7 @@ export default function App() {
                       className="w-full text-xs font-bold p-2 bg-white border border-neutral-300 rounded-lg outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-400"
                     >
                       <option value="">-- લિસ્ટમાંથી વસ્તુ પસંદ કરો --</option>
-                      {posItems.map(prod => (
+                      {(currentPosItems || []).filter(p => p).map(prod => (
                         <option key={prod.id} value={prod.id}>
                           {prod.nameGu} ({prod.nameEn}) - ₹{prod.price} (હાજર સ્ટોક: {prod.stock})
                         </option>
@@ -3292,7 +3978,7 @@ export default function App() {
                 <div>
                   <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
                     <FileText className="w-4 h-4 text-blue-700" />
-                    <span>ઓર્ડર અને બિલિંગ મેનેજમેન્ટ ({orders.length})</span>
+                    <span>ઓર્ડર અને બિલિંગ મેનેજમેન્ટ ({currentOrders.length})</span>
                   </h3>
                   <p className="text-[11px] text-neutral-500 font-bold">
                     નવા ઓનલાઇન ઓર્ડર્સ પ્રોસેસ કરો, સ્ટેટસ બદલો, બિલ એડિટ/ડિલીટ કરો
@@ -3312,7 +3998,7 @@ export default function App() {
                   >
                     <span>🔔 પેન્ડિંગ / નવા</span>
                     <span className="bg-black text-amber-300 px-1.5 py-0.2 rounded-full text-[10px] font-black">
-                      {orders.filter(o => o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled').length}
+                      {(currentOrders || []).filter(o => o && o.orderStatus !== 'delivered' && o.orderStatus !== 'cancelled').length}
                     </span>
                   </button>
                   <button
@@ -3324,7 +4010,7 @@ export default function App() {
                         : 'text-neutral-600 hover:text-neutral-900'
                     }`}
                   >
-                    પૂર્ણ થયેલ ({orders.filter(o => o.orderStatus === 'delivered' || o.orderStatus === 'cancelled').length})
+                    પૂર્ણ થયેલ ({(currentOrders || []).filter(o => o && (o.orderStatus === 'delivered' || o.orderStatus === 'cancelled')).length})
                   </button>
                   <button
                     type="button"
@@ -3335,7 +4021,7 @@ export default function App() {
                         : 'text-neutral-600 hover:text-neutral-900'
                     }`}
                   >
-                    🌐 ઓનલાઇન ({orders.filter(o => o.orderType === 'online').length})
+                    🌐 ઓનલાઇન ({(currentOrders || []).filter(o => o && o.orderType === 'online').length})
                   </button>
                   <button
                     type="button"
@@ -3346,7 +4032,7 @@ export default function App() {
                         : 'text-neutral-600 hover:text-neutral-900'
                     }`}
                   >
-                    🏪 કાઉન્ટર ({orders.filter(o => o.orderType !== 'online').length})
+                    🏪 કાઉન્ટર ({(currentOrders || []).filter(o => o && o.orderType !== 'online').length})
                   </button>
                   <button
                     type="button"
@@ -3357,15 +4043,16 @@ export default function App() {
                         : 'text-neutral-600 hover:text-neutral-900'
                     }`}
                   >
-                    બધા ({orders.length})
+                    બધા ({(currentOrders || []).length})
                   </button>
                 </div>
               </div>
 
               {/* ORDERS LIST */}
               <div className="max-h-96 overflow-y-auto divide-y divide-neutral-200 pr-1 space-y-2">
-                {orders
+                {(currentOrders || [])
                   .filter(o => {
+                    if (!o) return false;
                     const isCompleted = o.orderStatus === 'delivered' || o.orderStatus === 'cancelled';
                     if (adminOrderFilter === 'pending') return !isCompleted;
                     if (adminOrderFilter === 'completed') return isCompleted;
@@ -3591,7 +4278,7 @@ export default function App() {
                   );
                 })}
 
-                {orders.length === 0 && (
+                {currentOrders.length === 0 && (
                   <p className="text-center py-6 text-xs text-neutral-500 font-bold">
                     કોઈ ઓર્ડર ઉપલબ્ધ નથી.
                   </p>
@@ -3607,7 +4294,7 @@ export default function App() {
               <div>
                 <h3 className="text-sm font-black text-neutral-900 flex items-center gap-1.5">
                   <Package className="w-4 h-4 text-emerald-600" />
-                  <span>ઇન્વેન્ટરી સ્ટોક મેનેજમેન્ટ ({posItems.length} આઇટમ્સ)</span>
+                  <span>ઇન્વેન્ટરી સ્ટોક મેનેજમેન્ટ ({currentPosItems.length} આઇટમ્સ)</span>
                 </h3>
                 <p className="text-[11px] text-neutral-500 font-bold">
                   હાજર સ્ટોક ખાનામાં સીધો નંબર (દા.ત. 100) લખીને તરત સ્ટોક અપડેટ કરો
@@ -3619,13 +4306,13 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     forceCloudSyncAll();
-                    showToast(`🔄 ફાયરબેઝ ક્લાઉડ સાથે સિંક ચાલુ છે... હાલ ${posItems.length} આઇટમ્સ સુરક્ષિત છે!`);
+                    showToast(`🔄 ફાયરબેઝ ક્લાઉડ સાથે સિંક ચાલુ છે... હાલ ${currentPosItems.length} આઇટમ્સ સુરક્ષિત છે!`);
                   }}
                   className="bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 px-2.5 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 shadow-2xs cursor-pointer transition-all"
                   title="Vercel અને ફાયરબેઝમાંથી તાજેતરની તમામ વસ્તુઓ તાત્કાલિક લોડ કરો"
                 >
                   <RefreshCw className="w-3.5 h-3.5 text-purple-700" />
-                  <span>ક્લાઉડ સિંક ({posItems.length})</span>
+                  <span>ક્લાઉડ સિંક ({currentPosItems.length})</span>
                 </button>
                 <button
                   type="button"
@@ -3646,14 +4333,16 @@ export default function App() {
                     <th className="p-2">પ્રોડક્ટ</th>
                     <th className="p-2">કેટેગરી</th>
                     <th className="p-2">વેચાણ ભાવ</th>
+                    <th className="p-2 text-center">ડિસ્કાઉન્ટ %</th>
                     <th className="p-2">ખરીદ ભાવ</th>
+                    <th className="p-2">હોલસેલ વિગત</th>
                     <th className="p-2 text-center">એકમ (Unit)</th>
                     <th className="p-2 text-center">હાજર સ્ટોક (ડાયરેક્ટ અપડેટ)</th>
                     <th className="p-2 text-right">એક્શન</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-200">
-                  {posItems
+                  {currentPosItems
                     .slice()
                     .sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999))
                     .map((item, posIndex, sortedArr) => (
@@ -3728,11 +4417,75 @@ export default function App() {
                       </td>
                       <td className="p-2 font-bold text-neutral-600">{item.category}</td>
                       <td className="p-2 font-black text-orange-700">
-                        ₹{item.price}
-                        {item.mrp && <span className="block text-[10px] text-neutral-400 font-bold line-through">MRP ₹{item.mrp}</span>}
-                        {item.bulkPricing && <span className="block text-[9px] text-emerald-600 mt-0.5">{item.bulkPricing}</span>}
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-neutral-400">₹</span>
+                            <input
+                              type="number"
+                              value={item.price}
+                              onChange={e => handlePriceOrDiscountUpdate(item.id, 'price', e.target.value)}
+                              className="w-16 font-black text-xs py-0.5 border border-transparent hover:border-neutral-300 focus:border-blue-500 outline-none bg-transparent"
+                            />
+                          </div>
+                          {item.mrp && <span className="block text-[10px] text-neutral-400 font-bold line-through">MRP ₹{item.mrp}</span>}
+                        </div>
                       </td>
-                      <td className="p-2 font-bold text-neutral-600">₹{item.costPrice}</td>
+                      <td className="p-2 text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <input
+                            type="number"
+                            value={item.discountPercent || ''}
+                            onChange={e => handlePriceOrDiscountUpdate(item.id, 'discount', e.target.value)}
+                            className="w-12 text-center font-black text-xs py-1 border border-neutral-300 rounded-md focus:border-blue-500 outline-none"
+                            placeholder="0"
+                          />
+                          <span className="text-[10px] font-bold text-neutral-500">%</span>
+                        </div>
+                      </td>
+                      <td className="p-2 font-bold text-neutral-600">
+                        {showCostPrices ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] font-bold text-neutral-400">₹</span>
+                            <input
+                              type="number"
+                              value={item.costPrice}
+                              onChange={e => {
+                                const val = parseFloat(e.target.value);
+                                const newCost = isNaN(val) ? 0 : val;
+                                const updateCostFn = (prev: ProductItem[]) =>
+                                  prev.map(p => (p.id === item.id ? { ...p, costPrice: newCost, updatedAt: Date.now() } : p));
+                                getActivePosSetter()(updateCostFn);
+                                setPosItems(updateCostFn);
+                                setProfessionalPosItems(updateCostFn);
+                              }}
+                              className="w-16 font-bold text-xs py-0.5 border border-transparent hover:border-neutral-300 focus:border-blue-500 outline-none bg-transparent"
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleToggleCostPrices}
+                            className="flex items-center gap-1 text-neutral-400 hover:text-indigo-600 px-1 py-0.5 rounded hover:bg-indigo-50 cursor-pointer transition-colors"
+                            title="ખરીદ ભાવ જોવા માટે ક્લિક કરી પાસવર્ડ દાખલ કરો"
+                          >
+                            <span className="text-[10px] font-bold">₹</span>
+                            <span className="text-xs font-black tracking-widest">****</span>
+                            <Lock className="w-3 h-3 text-neutral-400 shrink-0" />
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="text"
+                          value={item.bulkPricing || ''}
+                          onChange={e => {
+                            const val = e.target.value;
+                            getActivePosSetter()(prev => prev.map(p => p.id === item.id ? { ...p, bulkPricing: val || undefined } : p));
+                          }}
+                          placeholder="5 નંગ: ₹..."
+                          className="w-24 font-bold text-[10px] py-1 border border-transparent hover:border-neutral-300 focus:border-blue-500 outline-none bg-transparent"
+                        />
+                      </td>
                       
                       {/* QUICK UNIT SELECTOR (નંગ / પેકેટ / સેટ / રીમ / બોક્સ / વગેરે) */}
                       <td className="p-2 text-center">
@@ -3799,7 +4552,7 @@ export default function App() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
-                            onClick={() => setEditingItem(item)}
+                            onClick={() => handleEditItemRequest(item)}
                             className="text-blue-700 hover:text-blue-900 p-1 font-bold text-xs cursor-pointer"
                             title="એડિટ"
                           >
@@ -3913,15 +4666,38 @@ export default function App() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="font-bold block mb-1">વેચાણ ભાવ (₹) *</label>
                   <input
                     type="number"
                     value={newProdPrice}
-                    onChange={e => setNewProdPrice(e.target.value)}
+                    onChange={e => {
+                      const price = parseFloat(e.target.value);
+                      setNewProdPrice(e.target.value);
+                      const mrp = parseFloat(newProdMrp);
+                      if (mrp > 0 && !isNaN(price)) {
+                        setNewProdDiscount(Math.round(((mrp - price) / mrp) * 100).toString());
+                      }
+                    }}
                     className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500"
                     required
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">ડિસ્કાઉન્ટ %</label>
+                  <input
+                    type="number"
+                    value={newProdDiscount}
+                    onChange={e => {
+                      const disc = parseFloat(e.target.value);
+                      setNewProdDiscount(e.target.value);
+                      const mrp = parseFloat(newProdMrp);
+                      if (mrp > 0 && !isNaN(disc)) {
+                        setNewProdPrice(Math.round(mrp * (1 - disc / 100)).toString());
+                      }
+                    }}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500 bg-blue-50"
                   />
                 </div>
                 <div>
@@ -3941,9 +4717,23 @@ export default function App() {
                   <input
                     type="number"
                     value={newProdMrp}
-                    onChange={e => setNewProdMrp(e.target.value)}
+                    onChange={e => {
+                      const mrp = parseFloat(e.target.value);
+                      setNewProdMrp(e.target.value);
+                      const disc = parseFloat(newProdDiscount);
+                      if (!isNaN(mrp)) {
+                        if (disc > 0) {
+                          setNewProdPrice(Math.round(mrp * (1 - disc / 100)).toString());
+                        } else {
+                          const price = parseFloat(newProdPrice);
+                          if (price > 0) {
+                            setNewProdDiscount(Math.round(((mrp - price) / mrp) * 100).toString());
+                          }
+                        }
+                      }
+                    }}
                     placeholder="દા.ત. 100"
-                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none"
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-orange-500"
                   />
                 </div>
                 <div>
@@ -3967,6 +4757,17 @@ export default function App() {
                   value={newProdBarcode}
                   onChange={e => setNewProdBarcode(e.target.value)}
                   className="w-full font-mono font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-neutral-50"
+                />
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1 text-neutral-600">હોલસેલ ભાવ / ઓફર વિગત (Wholesale)</label>
+                <input
+                  type="text"
+                  value={newProdBulkPricing}
+                  onChange={e => setNewProdBulkPricing(e.target.value)}
+                  placeholder='દા.ત. "5 નંગ: ₹200, 10 નંગ: ₹350"'
+                  className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none text-[11px]"
                 />
               </div>
 
@@ -4037,7 +4838,7 @@ export default function App() {
                   className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white"
                 />
                 <datalist id="category-list">
-                  {Array.from(new Set(posItems.map(p => p.category))).map(cat => (
+                  {Array.from(new Set((currentPosItems || []).filter(p => p && p.category).map(p => p.category))).map(cat => (
                     <option key={cat} value={cat} />
                   ))}
                 </datalist>
@@ -4326,7 +5127,7 @@ export default function App() {
                   className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none bg-white focus:border-blue-600"
                 />
                 <datalist id="edit-category-list">
-                  {Array.from(new Set(posItems.map(p => p.category))).map(cat => (
+                  {Array.from(new Set((currentPosItems || []).filter(p => p && p.category).map(p => p.category))).map(cat => (
                     <option key={cat} value={cat} />
                   ))}
                 </datalist>
@@ -4412,14 +5213,33 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="font-bold block mb-1">વેચાણ ભાવ (₹)</label>
                   <input
                     type="number"
                     value={editingItem.price}
-                    onChange={e => setEditingItem({ ...editingItem, price: Number(e.target.value) || 0 })}
+                    onChange={e => {
+                      const price = Number(e.target.value) || 0;
+                      const mrp = editingItem.mrp || 0;
+                      const discount = mrp > 0 ? Math.round(((mrp - price) / mrp) * 100) : (editingItem.discountPercent || 0);
+                      setEditingItem({ ...editingItem, price, discountPercent: discount });
+                    }}
                     className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold block mb-1">ડિસ્કાઉન્ટ %</label>
+                  <input
+                    type="number"
+                    value={editingItem.discountPercent || ''}
+                    onChange={e => {
+                      const disc = Number(e.target.value) || 0;
+                      const mrp = editingItem.mrp || 0;
+                      const price = mrp > 0 ? Math.round(mrp * (1 - disc / 100)) : editingItem.price;
+                      setEditingItem({ ...editingItem, discountPercent: disc, price });
+                    }}
+                    className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-500 bg-blue-50"
                   />
                 </div>
                 <div>
@@ -4787,11 +5607,16 @@ export default function App() {
         <ChangePasswordModal
           currentStoredPassword={storeSettings.adminPassword}
           ownerSecretNumber="8140430395"
-          onClose={() => setShowChangePasswordModal(false)}
+          secondaryPasswords={storeSettings.secondaryPasswords || []}
           onPasswordChanged={newPass => {
             setStoreSettings(prev => ({ ...prev, adminPassword: newPass }));
             showToast('✅ એડમિન પાસવર્ડ સફળતાપૂર્વક બદલાઈ ગયો!');
           }}
+          onUpdateSecondaryPasswords={passwords => {
+            setStoreSettings(prev => ({ ...prev, secondaryPasswords: passwords }));
+            showToast('✅ સેકન્ડરી પાસવર્ડ્સ લિસ્ટ અપડેટ થઈ ગયું!');
+          }}
+          onClose={() => setShowChangePasswordModal(false)}
         />
       )}
 
@@ -4802,7 +5627,7 @@ export default function App() {
         <OrderTrackingModal
           isOpen={showTrackingModal}
           onClose={() => setShowTrackingModal(false)}
-          orders={orders}
+          orders={currentOrders}
           onViewInvoice={order => {
             setActiveInvoiceOrder(order);
             setIsSuccessModal(false);
@@ -5156,32 +5981,93 @@ export default function App() {
       )}
 
       {/* ========================================================================= */}
+      {/* 20B. DEDICATED ONLINE ORDERS & DELIVERIES MODAL */}
+      {/* ========================================================================= */}
+      {showOnlineOrdersModal && (
+        <OnlineOrdersModal
+          isOpen={showOnlineOrdersModal}
+          onClose={() => setShowOnlineOrdersModal(false)}
+          orders={currentOrders}
+          storeSettings={storeSettings}
+          onUpdateOrderStatus={handleUpdateOrderStatus}
+          onDeleteOrder={handleDeleteOrder}
+          onPrintInvoice={(ord) => {
+            setActiveInvoiceOrder(ord);
+            setIsSuccessModal(false);
+          }}
+          onEditOrder={(ord) => {
+            setEditingOrder(ord);
+          }}
+        />
+      )}
+
+      {/* ========================================================================= */}
+      {/* 20C. DEDICATED BANK CURRENT ACCOUNT & UPI PASSBOOK MODAL */}
+      {/* ========================================================================= */}
+      {showBankCurrentAccountModal && (
+        <BankCurrentAccountModal
+          isOpen={showBankCurrentAccountModal}
+          onClose={() => setShowBankCurrentAccountModal(false)}
+          bankEntries={currentBankEntries}
+          onAddBankEntry={(entry) => {
+            const newEntry: BankAccountEntry = {
+              ...entry,
+              id: `bank-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+              createdAt: Date.now()
+            };
+            getActiveBankEntriesSetter()(prev => [newEntry, ...prev]);
+          }}
+          onUpdateBankEntry={(id, updates) => {
+            getActiveBankEntriesSetter()(prev => prev.map(e => e.id === id ? { ...e, ...updates } : e));
+          }}
+          onDeleteBankEntry={(id) => {
+            const entry = currentBankEntries.find(e => e.id === id);
+            if (entry) {
+              setTrashList(prev => [{
+                id: 'trash-bank-' + Date.now(),
+                type: 'bank_entry',
+                title: 'બેંક એન્ટ્રી: ' + entry.particulars + ' (₹' + entry.amount + ')',
+                deletedAt: new Date().toLocaleString(),
+                summary: 'પ્રકાર: ' + (entry.type === 'deposit' ? 'જમા' : 'ઉપાડ') + ', તારીખ: ' + entry.date,
+                data: entry
+              }, ...prev]);
+            }
+            getActiveBankEntriesSetter()(prev => prev.filter(e => e.id !== id));
+            showToast('🗑️ બેંક એન્ટ્રી ટ્રેશ બિનમાં ખસેડાઈ.');
+          }}
+          orders={currentOrders}
+          storeSettings={storeSettings}
+          showToast={showToast}
+        />
+      )}
+
+      {/* ========================================================================= */}
       {/* 21. ADMIN PRINT JOBS & CUSTOMER DOCUMENTS MODAL (PDF, JPG, PNG, EXCEL) */}
       {/* ========================================================================= */}
       {showPrintJobsModal && (
         <AdminPrintJobsModal
           isOpen={showPrintJobsModal}
           onClose={() => setShowPrintJobsModal(false)}
-          printJobs={printJobs}
+          printJobs={currentPrintJobs}
           storeSettings={storeSettings}
           cloudFiles={cloudPrintFiles.filter(cf => !isPurgedOrDeletedCloudFile(cf))}
           onClearAllCloudFiles={() => {
             setCloudPrintFiles([]);
-            setPrintJobs([]);
+            getActivePrintJobsSetter()([]);
           }}
           onUpdateJob={(jobId, updates) => {
-            setPrintJobs(prev => prev.map(j => j.id === jobId ? { ...j, ...updates } : j));
+            getActivePrintJobsSetter()(prev => prev.map(j => j.id === jobId ? { ...j, ...updates } : j));
           }}
           onDeleteJob={(jobId) => {
             markCloudFileAsDeleted(jobId);
-            setPrintJobs(prev => prev.filter(j => j.id !== jobId));
+            getActivePrintJobsSetter()(prev => prev.filter(j => j.id !== jobId));
             setCloudPrintFiles(prev => prev.filter(cf => cf.id !== jobId && cf.jobId !== jobId));
             showToast('🗑️ પ્રિન્ટ જોબ ડિલીટ થઈ!');
           }}
           onConvertToInvoice={(job, billItems, total) => {
             const newOrder: OrderRecord = {
               id: `ord-${Date.now()}`,
-              invoiceNo: `prisha${String(stats.totalBills + 1).padStart(6, '0')}`,
+              invoiceNo: `prisha${String(currentStats.totalBills + 1).padStart(6, '0')}`,
               date: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
               customerName: job.customerName || 'ગ્રાહક',
               mobile: job.mobile || '9999999999',
@@ -5206,7 +6092,7 @@ export default function App() {
                 itemName: `પ્રિન્ટ જોબ #${job.jobNo}`
               }))
             };
-            setOrders(prev => [newOrder, ...prev]);
+            getActiveOrdersSetter()(prev => [newOrder, ...prev]);
             showToast(`✅ પ્રિન્ટ જોબ #${job.jobNo} નું બિલ બની ગયું!`);
           }}
         />
@@ -5219,18 +6105,18 @@ export default function App() {
         <RojmelKhataModal
           isOpen={showRojmelModal}
           onClose={() => setShowRojmelModal(false)}
-          rojmelEntries={rojmelEntries}
+          rojmelEntries={currentRojmel}
           onAddRojmelEntry={(entry) => {
             const newEntry = {
               ...entry,
               id: `rojmel-${Date.now()}`,
               createdAt: Date.now()
             };
-            setRojmelEntries(prev => [...prev, newEntry]);
+            getActiveRojmelSetter()(prev => [...prev, newEntry]);
           }}
           onOpenTrash={() => setShowTrashModal(true)}
           onDeleteRojmelEntry={(id) => {
-            const entry = rojmelEntries.find(e => e.id === id);
+            const entry = currentRojmel.find(e => e.id === id);
             if (entry) {
               setTrashList(prev => [{
                 id: 'trash-rojmel-' + Date.now(),
@@ -5241,10 +6127,10 @@ export default function App() {
                 data: entry
               }, ...prev]);
             }
-            setRojmelEntries(prev => prev.filter(e => e.id !== id));
+            getActiveRojmelSetter()(prev => prev.filter(e => e.id !== id));
             showToast('🗑️ રોજમેળ એન્ટ્રી ટ્રેશ બિનમાં ખસેડાઈ.');
           }}
-          khataAccounts={khataAccounts}
+          khataAccounts={currentKhataAccounts}
           onAddKhataAccount={(acc) => {
             const newAcc = {
               ...acc,
@@ -5254,12 +6140,12 @@ export default function App() {
               totalReceived: 0,
               lastTransactionDate: new Date().toISOString()
             };
-            setKhataAccounts(prev => [...prev, newAcc]);
+            getActiveKhataAccountsSetter()(prev => [...prev, newAcc]);
           }}
-          khataTransactions={khataTransactions}
+          khataTransactions={currentKhataTransactions}
           onAddKhataTransaction={(tx) => {
             // Find account to calculate balanceAfter
-            const acc = khataAccounts.find(a => a.id === tx.accountId);
+            const acc = currentKhataAccounts.find(a => a.id === tx.accountId);
             const currentBalance = acc?.balance || 0;
             const txAmt = tx.type === 'jama' ? tx.amount : -tx.amount;
             const balanceAfter = currentBalance + txAmt;
@@ -5272,7 +6158,8 @@ export default function App() {
             };
             
             // Update account balance
-            setKhataAccounts(prev => prev.map(a => {
+            getActiveKhataTransactionsSetter()(prev => [...prev, newTx]);
+            getActiveKhataAccountsSetter()(prev => prev.map(a => {
               if (a.id === tx.accountId) {
                 return {
                   ...a,
@@ -5284,28 +6171,26 @@ export default function App() {
               }
               return a;
             }));
-
-            setKhataTransactions(prev => [...prev, newTx]);
           }}
-                    onDeleteKhataAccount={(id) => {
-            const acc = khataAccounts.find(a => a.id === id);
-            const txs = khataTransactions.filter(t => t.accountId === id);
+          onDeleteKhataAccount={(id) => {
+            const acc = currentKhataAccounts.find(a => a.id === id);
+            const txs = currentKhataTransactions.filter(t => t.accountId === id);
             if (acc) {
               setTrashList(prev => [{
                 id: `trash-khata-acc-${Date.now()}`,
                 type: 'khata_account',
-                title: `खाતું: ${acc.name} (${acc.type === 'customer' ? 'ગ્રાહક' : 'વેપારી'})`,
+                title: `ખાતું: ${acc.name} (${acc.type === 'customer' ? 'ગ્રાહક' : 'વેપારી'})`,
                 deletedAt: new Date().toLocaleString(),
-                summary: `ಬાકી: ₹${acc.balance}, ફોન: ${acc.phone || 'નથી'}`,
+                summary: `બાકી: ₹${acc.balance}, ફોન: ${acc.phone || 'નથી'}`,
                 data: { account: acc, transactions: txs }
               }, ...prev]);
             }
-            setKhataAccounts(prev => prev.filter(a => a.id !== id));
-            setKhataTransactions(prev => prev.filter(t => t.accountId !== id));
+            getActiveKhataAccountsSetter()(prev => prev.filter(a => a.id !== id));
+            getActiveKhataTransactionsSetter()(prev => prev.filter(t => t.accountId !== id));
             showToast('🗑️ ખાતું અને વ્યવહારો ટ્રેશ બિનમાં ખસેડાયા.');
           }}
-                    onDeleteKhataTransaction={(id, accountId) => {
-            const tx = khataTransactions.find(t => t.id === id);
+          onDeleteKhataTransaction={(id, accountId) => {
+            const tx = currentKhataTransactions.find(t => t.id === id);
             if (!tx) return;
             
             setTrashList(prev => [{
@@ -5317,10 +6202,10 @@ export default function App() {
               data: tx
             }, ...prev]);
             
-            setKhataTransactions(prev => prev.filter(t => t.id !== id));
+            getActiveKhataTransactionsSetter()(prev => prev.filter(t => t.id !== id));
             
             // Reverse the balance
-            setKhataAccounts(prev => prev.map(a => {
+            getActiveKhataAccountsSetter()(prev => prev.map(a => {
               if (a.id === accountId) {
                 const reverseAmt = tx.type === 'jama' ? -tx.amount : tx.amount;
                 return {
@@ -5335,23 +6220,23 @@ export default function App() {
             showToast('🗑️ વ્યવહાર ટ્રેશ બિનમાં ગયો.');
           }}
           onEditKhataAccount={(id, newName, newPhone, newAddress) => {
-             setKhataAccounts(prev => prev.map(a => a.id === id ? { ...a, name: newName, phone: newPhone, address: newAddress } : a));
+             getActiveKhataAccountsSetter()(prev => prev.map(a => a.id === id ? { ...a, name: newName, phone: newPhone, address: newAddress } : a));
              showToast('✅ ખાતાની વિગત (નામ, ફોન, સરનામું) અપડેટ થઈ ગઈ!');
           }}
           onEditKhataTransaction={(id, newAmount, newDesc) => {
-            const tx = khataTransactions.find(t => t.id === id);
+            const tx = currentKhataTransactions.find(t => t.id === id);
             if (!tx) return;
             
             const amountDiff = newAmount - tx.amount;
             
-            setKhataTransactions(prev => prev.map(t => {
+            getActiveKhataTransactionsSetter()(prev => prev.map(t => {
                if(t.id === id) {
                  return { ...t, amount: newAmount, description: newDesc };
                }
                return t;
             }));
             
-            setKhataAccounts(prev => prev.map(a => {
+            getActiveKhataAccountsSetter()(prev => prev.map(a => {
                if (a.id === tx.accountId) {
                  const balanceDiff = tx.type === 'jama' ? amountDiff : -amountDiff;
                  return {
@@ -5370,20 +6255,74 @@ export default function App() {
         />
       )}
 
+      {/* ========================================================================= */}
+      {/* 24. SHOP RENT & BILLS LEDGER MODAL */}
+      {/* ========================================================================= */}
+      {showShopRentModal && (
+        <ShopRentAndBillsModal
+          isOpen={showShopRentModal}
+          onClose={() => setShowShopRentModal(false)}
+          shopBills={currentShopBills}
+          onAddShopBill={(bill) => {
+            const newBill = {
+              ...bill,
+              id: `bill-${Date.now()}`,
+              createdAt: Date.now()
+            };
+            getActiveShopBillsSetter()(prev => [newBill, ...prev]);
+            
+            // Sync to Rojmel if requested
+            if (bill.syncToRojmel) {
+              const rojmelEntry: RojmelEntry = {
+                id: `rojmel-bill-${Date.now()}`,
+                date: bill.paymentDate || bill.dueDate || new Date().toLocaleDateString('en-GB'),
+                type: 'javak',
+                category: bill.categoryLabel,
+                amount: bill.amount,
+                paymentMode: bill.paymentMode === 'Current_Bank' ? 'Bank' : (bill.paymentMode as any),
+                notes: `બિલ ચૂકવ્યું: ${bill.title} (${bill.recipientName})`,
+                createdAt: Date.now()
+              };
+              getActiveRojmelSetter()(prev => [...prev, rojmelEntry]);
+            }
+          }}
+          onUpdateShopBill={(id, updates) => {
+            getActiveShopBillsSetter()(prev => prev.map(b => b.id === id ? { ...b, ...updates } : b));
+          }}
+          onDeleteShopBill={(id) => {
+            const bill = currentShopBills.find(b => b.id === id);
+            if (bill) {
+              setTrashList(prev => [{
+                id: 'trash-shop-bill-' + Date.now(),
+                type: 'expense', // Using expense type for trash display
+                title: 'દુકાન બિલ: ' + bill.title,
+                deletedAt: new Date().toLocaleString(),
+                summary: 'રકમ: ₹' + bill.amount + ', કેટેગરી: ' + bill.categoryLabel,
+                data: bill
+              }, ...prev]);
+            }
+            getActiveShopBillsSetter()(prev => prev.filter(b => b.id !== id));
+            showToast('🗑️ બિલ રેકોર્ડ ટ્રેશ બિનમાં ખસેડાયો.');
+          }}
+          showToast={showToast}
+          storeSettings={storeSettings}
+        />
+      )}
+
       {/* 13.B CA AUDIT & GST REPORT MODAL */}
       {showCaAuditModal && (
         <CaAuditModal
           isOpen={showCaAuditModal}
           onClose={() => setShowCaAuditModal(false)}
-          orders={orders}
-          products={posItems}
-          purchases={purchases}
-          expenses={expenses}
-          rojmelEntries={rojmelEntries}
-          khataAccounts={khataAccounts}
+          orders={currentOrders}
+          products={currentPosItems}
+          purchases={currentPurchases}
+          expenses={currentExpenses}
+          rojmelEntries={currentRojmel}
+          khataAccounts={currentKhataAccounts}
           storeSettings={storeSettings}
           onDeleteExpense={(expenseId, title) => {
-            const exp = expenses.find(e => e.id === expenseId);
+            const exp = currentExpenses.find(e => e.id === expenseId);
             setDeleteConfirmTarget({
               type: 'expense',
               id: expenseId,
@@ -5393,7 +6332,7 @@ export default function App() {
             });
           }}
           onDeletePurchase={(purchaseId, billNo) => {
-            const pur = purchases.find(p => p.id === purchaseId);
+            const pur = currentPurchases.find(p => p.id === purchaseId);
             setDeleteConfirmTarget({
               type: 'purchase',
               id: purchaseId,
@@ -5403,11 +6342,11 @@ export default function App() {
             });
           }}
           onClearAllExpenses={() => {
-            setExpenses([]);
+            getActiveExpensesSetter()([]);
             showToast('🧹 તમામ ખર્ચ એન્ટ્રીઓ સાફ થઈ ગઈ!');
           }}
           onClearAllPurchases={() => {
-            setPurchases([]);
+            getActivePurchasesSetter()([]);
             showToast('🧹 તમામ ખરીદી બિલ્સ સાફ થઈ ગયા!');
           }}
         />
@@ -5418,9 +6357,9 @@ export default function App() {
         <DailyCashClosingModal
           isOpen={showDailyCashClosingModal}
           onClose={() => setShowDailyCashClosingModal(false)}
-          orders={orders}
-          expenses={expenses}
-          rojmelEntries={rojmelEntries}
+          orders={currentOrders}
+          expenses={currentExpenses}
+          rojmelEntries={currentRojmel}
           storeSettings={storeSettings}
           showToast={showToast}
         />
@@ -5539,8 +6478,83 @@ export default function App() {
           onClose={() => setSelectedProductForModal(null)}
           onAddToCart={addToCart}
           cartQuantity={cart.find(c => c.product.id === selectedProductForModal.id)?.quantity || 0}
-          relatedProducts={posItems.filter(p => p.category === selectedProductForModal.category && p.id !== selectedProductForModal.id).slice(0, 4)}
+          relatedProducts={currentPosItems.filter(p => p.category === selectedProductForModal.category && p.id !== selectedProductForModal.id).slice(0, 4)}
+          onSelectProduct={(p) => setSelectedProductForModal(p)}
+          storeSettings={storeSettings}
+          isAdminUnlocked={isAdminUnlocked}
         />
+      )}
+
+      {/* SMART IMPORT CONFIRMATION MODAL */}
+      {pendingImportData && (
+        <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 no-print animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 max-w-lg w-full border-4 border-orange-500 shadow-2xl space-y-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 opacity-5">
+              <Database className="w-32 h-32 text-orange-500" />
+            </div>
+            
+            <div className="flex items-center gap-3 border-b pb-4 relative z-10">
+              <div className="w-12 h-12 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                <Database className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-black text-lg text-neutral-900">📥 બેકઅપ ઇમ્પોર્ટ કન્ફર્મેશન</h3>
+                <p className="text-xs text-neutral-500 font-bold">Smart Import & Merge System</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 relative z-10">
+              <div className="p-4 bg-blue-50 rounded-2xl border border-blue-200 text-center">
+                <p className="text-[10px] font-black text-blue-600 uppercase mb-1">ફાઇલમાં આઇટમ્સ</p>
+                <p className="text-2xl font-black text-blue-900 font-mono">
+                  {(pendingImportData.products || pendingImportData.prisha_products_v4 || pendingImportData.data?.products || []).length}
+                </p>
+              </div>
+              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 text-center">
+                <p className="text-[10px] font-black text-emerald-600 uppercase mb-1">તમારી હાલની આઇટમ્સ</p>
+                <p className="text-2xl font-black text-emerald-900 font-mono">{currentPosItems.length}</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 p-4 rounded-2xl border-2 border-amber-300 space-y-2 relative z-10">
+              <h4 className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-600" />
+                <span>તમે શું કરવા માંગો છો?</span>
+              </h4>
+              <p className="text-[11px] text-amber-900 font-bold leading-relaxed">
+                જો તમે <b className="text-emerald-700">"Merge (ભેગું કરો)"</b> પસંદ કરશો તો તમારી આજની મહેનત (નવી ૧૦ આઇટમ્સ) સુરક્ષિત રહેશે અને જૂનો બેકઅપ પણ તેની સાથે જોડાઈ જશે.
+                જો <b className="text-red-700">"Overwrite"</b> કરશો તો હાલની બધી વિગતો ભૂસાઈ જશે અને ફક્ત ફાઇલનો ડેટા રહેશે.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 relative z-10">
+              <button
+                type="button"
+                onClick={() => processImport('merge')}
+                className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-sm shadow-lg flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Merge (ભેગું કરો - Recommended)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => processImport('overwrite')}
+                className="flex-1 py-3 bg-white hover:bg-red-50 text-red-600 border-2 border-red-200 rounded-2xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Overwrite (બધું બદલી નાખો)</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setPendingImportData(null)}
+              className="w-full py-2 text-neutral-400 font-bold text-xs hover:text-neutral-600 cursor-pointer"
+            >
+              રદ કરો (Cancel)
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ORDER ATTACHED FILE IN-SCREEN PREVIEW MODAL */}
@@ -5641,9 +6655,9 @@ export default function App() {
       {showGemBillModal && (
         <GemBillGeneratorModal
           storeSettings={storeSettings}
-          orders={orders}
+          orders={currentOrders}
           onSaveOrder={(newOrder) => {
-            setOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+            getActiveOrdersSetter()(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
           }}
           onClose={() => setShowGemBillModal(false)}
           showToast={showToast}

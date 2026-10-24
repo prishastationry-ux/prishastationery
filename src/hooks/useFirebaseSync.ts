@@ -213,16 +213,25 @@ export function forceCloudSyncAll(): void {
   }
 }
 
+export function clearAllDeletedIds(): void {
+  if (typeof window !== 'undefined') {
+    // Clear all local deleted IDs
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.endsWith('_deleted_ids')) {
+        localStorage.removeItem(key);
+      }
+    }
+    window.dispatchEvent(new CustomEvent('prisha_rescue_deleted_ids'));
+    forceCloudSyncAll();
+  }
+}
+
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
 
-  // Clear any accidental deletedIds for products to ensure zero items are ever lost
-  if (docName === 'products' && typeof window !== 'undefined') {
-    try {
-      localStorage.removeItem(localKey + '_deleted_ids');
-    } catch (e) {}
-  }
+  // Deleted IDs tracking is now enabled for all collections including products
 
   const filterMockData = (val: any): any => {
     if (!Array.isArray(val)) return val;
@@ -276,17 +285,18 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     }
     if (docName === 'purchases') {
       // User explicitly requested to delete the 1 purchase bill in CA audit
+      // We only filter out the specific PUR-1 or invalid test bills
       return val.filter((p: any) => {
         if (!p) return false;
-        if (p.billNo === 'PUR-1' || !p.supplierName || p.totalAmount <= 0) return false;
-        return false; // Filter out the 1 demo/test purchase bill
+        if (p.billNo === 'PUR-1' || !p.supplierName || p.totalAmount <= 0 || p.supplierName === 'ટેસ્ટ સપ્લાયર') return false;
+        return true;
       });
     }
     return val;
   };
 
   const [data, setData] = useState<T>(() => {
-    const deletedIds = docName === 'products' ? new Set<string>() : getDeletedIds(localKey);
+    const deletedIds = getDeletedIds(localKey);
     let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
     let initialVal = initialData;
     if (saved) {
@@ -296,7 +306,6 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         if (Array.isArray(cleaned)) {
           initialVal = cleaned.filter((item: any) => {
             if (!item) return false;
-            if (docName === 'products') return true; // Never filter out products by deletedIds
             const id = item.id;
             const inv = item.invoiceNo;
             const dataId = item.data?.id;
@@ -314,7 +323,6 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     } else if (Array.isArray(initialData)) {
       initialVal = (initialData as any[]).filter((item: any) => {
         if (!item) return false;
-        if (docName === 'products') return true; // Keep all products intact
         const id = item.id;
         const inv = item.invoiceNo;
         if (id && deletedIds.has(id)) return false;
@@ -338,7 +346,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           const rawData = snapData?.data;
           const cloudDeletedIds: string[] = snapData?.deletedIds || [];
           
-          if (docName !== 'products' && cloudDeletedIds.length > 0) {
+          if (cloudDeletedIds.length > 0) {
             const curDeleted = getDeletedIds(localKey);
             let updated = false;
             cloudDeletedIds.forEach(id => {
@@ -353,12 +361,10 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           if (rawData !== undefined && rawData !== null) {
             const rawCleaned = filterMockData(rawData);
             setData((prevData) => {
-              const deletedIds = docName === 'products' ? new Set<string>() : getDeletedIds(localKey);
+              const deletedIds = getDeletedIds(localKey);
               if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
                 const isItemDeleted = (item: any) => {
                   if (!item) return true;
-                  // Products are inventory items - NEVER filter them out as deleted!
-                  if (docName === 'products') return false;
                   const id = item.id;
                   const inv = item.invoiceNo;
                   const dataId = item.data?.id;
@@ -432,11 +438,18 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     };
     document.addEventListener('visibilitychange', handleVisibility);
     
+    const handleRescue = () => {
+      // For rescue, we temporarily ignore deleted IDs and re-sync
+      syncDocFromCloud();
+    };
+    window.addEventListener('prisha_rescue_deleted_ids', handleRescue);
+    
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocusOrVisible);
       window.removeEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('prisha_rescue_deleted_ids', handleRescue);
     };
   }, [docName, localKey]);
 
@@ -445,7 +458,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       const next = typeof value === 'function' ? (value as any)(prev) : value;
       
       // Force immediate deletion tracking (ONLY for orders/trash, NEVER for products)
-      if (docName !== 'products' && Array.isArray(prev) && Array.isArray(next)) {
+      if (Array.isArray(prev) && Array.isArray(next)) {
         const deletedIds = getDeletedIds(localKey);
         let changed = false;
         const nextIds = new Set<string>();

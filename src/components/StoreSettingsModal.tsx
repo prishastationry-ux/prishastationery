@@ -25,7 +25,10 @@ import {
   Truck,
   Package,
   Banknote,
-  Tag
+  Tag,
+  RefreshCw,
+  Lock,
+  Edit3
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { compressAndResizeImage } from '../lib/invoiceUtils';
@@ -38,6 +41,7 @@ interface StoreSettingsModalProps {
   settings: StoreSettings;
   onSave: (updated: Partial<StoreSettings>) => void;
   showToast: (msg: string) => void;
+  onRescueData?: () => void;
 }
 
 export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
@@ -45,7 +49,8 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
   onClose,
   settings,
   onSave,
-  showToast
+  showToast,
+  onRescueData
 }) => {
   const [formData, setFormData] = useState<Partial<StoreSettings>>({
     storeNameGu: settings.storeNameGu || '',
@@ -104,10 +109,13 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
     packingChargeAmount: settings.packingChargeAmount ?? 30,
     otherFeeEnabled: settings.otherFeeEnabled ?? false,
     otherFeeLabel: settings.otherFeeLabel || 'અન્ય સર્વિસ ચાર્જ',
-    otherFeeAmount: settings.otherFeeAmount ?? 0
+    otherFeeAmount: settings.otherFeeAmount ?? 0,
+    globalDiscount: settings.globalDiscount ?? 0,
+    categoryDiscounts: settings.categoryDiscounts || {},
+    secondaryPasswords: settings.secondaryPasswords || []
   });
 
-  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'delivery_fees' | 'xerox' | 'banners' | 'stories' | 'posters' | 'news'>('store_info');
+  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'delivery_fees' | 'xerox' | 'banners' | 'stories' | 'posters' | 'news' | 'offers' | 'security'>('store_info');
   const [newSlideTitle, setNewSlideTitle] = useState<string>('');
   const [newSlideSubtitle, setNewSlideSubtitle] = useState<string>('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState<string>('');
@@ -373,6 +381,32 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
           >
             <Smartphone className="w-3.5 h-3.5 text-rose-400" />
             <span>મોબાઇલ પોસ્ટર (જમણી બાજુનું સ્ક્રીન)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('offers')}
+            className={`px-3.5 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'offers'
+                ? 'bg-[#0B1E48] text-white shadow-xs'
+                : 'bg-white text-neutral-700 hover:bg-neutral-200 border border-neutral-300'
+            }`}
+          >
+            <Tag className="w-3.5 h-3.5 text-rose-400" />
+            <span>🏷️ સેલ & ડિસ્કાઉન્ટ ઓફર્સ</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('security')}
+            className={`px-3.5 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'security'
+                ? 'bg-[#0B1E48] text-white shadow-xs'
+                : 'bg-white text-neutral-700 hover:bg-neutral-200 border border-neutral-300'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
+            <span>🔐 પ્રાઈવસી & સિક્યોરિટી</span>
           </button>
         </div>
 
@@ -1868,6 +1902,209 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                 <div className="hidden lg:flex items-center justify-center p-4 bg-neutral-100 rounded-2xl border-2 border-dashed border-neutral-300">
                   <div className="w-64">
                      <MobilePosterWidget posters={formData.mobilePosters || []} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* TAB 8: DISCOUNTS & OFFERS */}
+          {activeTab === 'offers' && (
+            <div className="space-y-6">
+              <div className="bg-rose-50 p-4 rounded-xl border border-rose-200">
+                <h3 className="font-black text-rose-950 text-sm mb-1 flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-rose-700" />
+                  <span>🏷️ સેલ & ડિસ્કાઉન્ટ ઓફર્સ (Bulk Discount Management)</span>
+                </h3>
+                <p className="text-rose-800 font-bold text-[11px]">
+                  તમે અહીંથી આખી સાઇટ પર અથવા ચોક્કસ કેટેગરી પર એકસાથે ડિસ્કાઉન્ટ આપી શકો છો. આ ડિસ્કાઉન્ટ ગ્રાહકને પ્રોડક્ટના ભાવ પર વધારાના ડિસ્કાઉન્ટ તરીકે દેખાશે.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Global Discount */}
+                <div className="bg-white p-5 rounded-2xl border border-neutral-300 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 border-b pb-3">
+                    <Sparkles className="w-5 h-5 text-amber-500" />
+                    <h4 className="font-black text-neutral-900 text-sm">આખી સાઇટ પર ડિસ્કાઉન્ટ (Global Sale)</h4>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <label className="block text-xs font-black text-neutral-700">ડિસ્કાઉન્ટ % (દરેક આઇટમ પર):</label>
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value={formData.globalDiscount || 0}
+                        onChange={e => setFormData({ ...formData, globalDiscount: parseInt(e.target.value) })}
+                        className="flex-1 h-2 bg-neutral-200 rounded-lg appearance-none cursor-pointer accent-[#0B1E48]"
+                      />
+                      <div className="w-16 flex items-center gap-1 bg-amber-50 border border-amber-300 rounded-lg px-2 py-1">
+                        <input
+                          type="number"
+                          value={formData.globalDiscount || 0}
+                          onChange={e => setFormData({ ...formData, globalDiscount: parseInt(e.target.value) || 0 })}
+                          className="w-full text-center font-black text-sm bg-transparent outline-none"
+                        />
+                        <span className="text-xs font-black">%</span>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-neutral-500 font-bold italic">
+                      * આ સેટ કરવાથી તમારી દુકાનની બધી જ પ્રોડક્ટ્સ પર વધારાનું {formData.globalDiscount}% ડિસ્કાઉન્ટ લાગુ થશે.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Category Wise Discount */}
+                <div className="bg-white p-5 rounded-2xl border border-neutral-300 shadow-sm space-y-4">
+                  <div className="flex items-center gap-2 border-b pb-3">
+                    <Layout className="w-5 h-5 text-blue-500" />
+                    <h4 className="font-black text-neutral-900 text-sm">કેટેગરી વાઈઝ સ્પેશિયલ ઓફર</h4>
+                  </div>
+                  
+                  <div className="max-h-[300px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                    {['books', 'stationery', 'service', 'printing', 'office', 'bags', 'other'].map(cat => {
+                      const catLabel = cat === 'books' ? 'ચોપડા (Books)' : 
+                                       cat === 'stationery' ? 'સ્ટેશનરી (Stationery)' : 
+                                       cat === 'service' ? 'CSC ઓનલાઇન સેવાઓ' : 
+                                       cat === 'printing' ? 'ઝેરોક્ષ & પ્રિન્ટિંગ' : 
+                                       cat === 'office' ? 'ઓફિસ સપ્લાય' : 
+                                       cat === 'bags' ? 'બેગ્સ & થેલા' : 'અન્ય';
+                      
+                      return (
+                        <div key={cat} className="flex items-center justify-between gap-4 p-2 bg-neutral-50 rounded-xl border border-neutral-200">
+                          <span className="text-[11px] font-black text-neutral-700">{catLabel}</span>
+                          <div className="flex items-center gap-1.5 bg-white border border-neutral-300 rounded-lg px-2 py-1 w-20">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={formData.categoryDiscounts?.[cat] || 0}
+                              onChange={e => {
+                                const newDiscounts = { ...formData.categoryDiscounts, [cat]: parseInt(e.target.value) || 0 };
+                                setFormData({ ...formData, categoryDiscounts: newDiscounts });
+                              }}
+                              className="w-full text-center font-black text-xs bg-transparent outline-none"
+                              placeholder="0"
+                            />
+                            <span className="text-[10px] font-black text-neutral-500">%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* TAB 9: SECURITY & PASSWORDS */}
+          {activeTab === 'security' && (
+            <div className="space-y-6">
+              <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                <h3 className="font-black text-blue-950 text-sm mb-1 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-blue-700" />
+                  <span>🔐 પ્રાઈવસી & સિક્યોરિટી સેટિંગ્સ</span>
+                </h3>
+                <p className="text-blue-800 font-bold text-[11px]">
+                  અહીં તમે 'ખરીદ ભાવ જોવા' અને 'પ્રોડક્ટ એડિટ' કરવા માટેના વધારાના પાસવર્ડ્સ મેનેજ કરી શકો છો.
+                </p>
+              </div>
+
+              <div className="bg-white p-5 rounded-2xl border border-neutral-300 shadow-sm space-y-4">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <h4 className="font-black text-neutral-900 text-sm">વધારાના સુરક્ષા પાસવર્ડ્સ (Secondary Passwords)</h4>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pass = window.prompt('નવો પાસવર્ડ ઉમેરો:');
+                      if (pass) {
+                        const current = formData.secondaryPasswords || [];
+                        setFormData({ ...formData, secondaryPasswords: [...current, pass] });
+                      }
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-black shadow-xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>પાસવર્ડ ઉમેરો</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {!(formData.secondaryPasswords || []).length ? (
+                    <p className="text-center py-4 text-neutral-400 font-bold italic">કોઈ વધારાના પાસવર્ડ નથી.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {(formData.secondaryPasswords || []).map((pass, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2.5 bg-neutral-50 rounded-xl border border-neutral-200 group">
+                          <div className="flex items-center gap-2">
+                            <Lock className="w-3.5 h-3.5 text-neutral-400" />
+                            <span className="font-mono font-bold text-neutral-800">{pass}</span>
+                          </div>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newPass = window.prompt('પાસવર્ડ બદલો:', pass);
+                                if (newPass) {
+                                  const current = [...(formData.secondaryPasswords || [])];
+                                  current[idx] = newPass;
+                                  setFormData({ ...formData, secondaryPasswords: current });
+                                }
+                              }}
+                              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                              title="બદલો"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (window.confirm('શું તમે આ પાસવર્ડ કાઢી નાખવા માંગો છો?')) {
+                                  const current = (formData.secondaryPasswords || []).filter((_, i) => i !== idx);
+                                  setFormData({ ...formData, secondaryPasswords: current });
+                                }
+                              }}
+                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                              title="દૂર કરો"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-4 border-t border-neutral-100 space-y-4">
+                  <p className="text-[10px] text-neutral-500 font-bold leading-relaxed">
+                    💡 <b>નોંધ:</b> તમારો મુખ્ય એડમિન પાસવર્ડ પણ આ બધી જગ્યાએ કામ કરશે. અહીં ઉમેરેલા પાસવર્ડ્સ તમારા સ્ટાફ કે અન્ય સંચાલકો માટે વાપરી શકાય છે.
+                  </p>
+
+                  <div className="bg-amber-50 p-4 rounded-xl border-2 border-dashed border-amber-300 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-full bg-amber-600 text-white flex items-center justify-center shadow">
+                        <Database className="w-4 h-4" />
+                      </div>
+                      <h4 className="font-black text-amber-950 text-sm">ડેટા રિકવરી (Rescue Mode)</h4>
+                    </div>
+                    <p className="text-[11px] text-amber-800 font-bold leading-relaxed">
+                      જો તમે ભૂલથી બેકઅપ ઓવરરાઇટ કર્યો હોય અને આજની વસ્તુઓ જતી રહી હોય, તો આ બટન દબાવવાથી એ બધી વસ્તુઓ પાછી લાવવાનો પ્રયત્ન થશે.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (onRescueData) {
+                          onRescueData();
+                          showToast('🚀 રેસ્ક્યુ મોડ ચાલુ થયો! બધી વસ્તુઓ પાછી આવી રહી છે...');
+                        }
+                      }}
+                      className="w-full py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-black shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <RefreshCw className="w-4 h-4" />
+                      <span>ડેટા રિકવરી (વધારેલી વસ્તુઓ પાછી લાવો)</span>
+                    </button>
                   </div>
                 </div>
               </div>

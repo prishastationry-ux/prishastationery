@@ -83,7 +83,10 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   packingChargeAmount: 30, // ₹30 પેકિંગ ચાર્જ
   otherFeeEnabled: false,
   otherFeeLabel: 'અન્ય સર્વિસ ચાર્જ',
-  otherFeeAmount: 0
+  otherFeeAmount: 0,
+  globalDiscount: 0,
+  categoryDiscounts: {},
+  secondaryPasswords: ['0123', '2626', 'Prisha@2024']
 };
 
 export const INITIAL_PRODUCTS: ProductItem[] = [
@@ -94,6 +97,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     category: 'books',
     price: 50,
     costPrice: 35,
+    mrp: 65,
+    discountPercent: 23,
     stock: 120,
     unit: 'નંગ',
     icon: '📖',
@@ -109,6 +114,8 @@ export const INITIAL_PRODUCTS: ProductItem[] = [
     category: 'stationery',
     price: 80,
     costPrice: 50,
+    mrp: 100,
+    discountPercent: 20,
     stock: 95,
     unit: 'પેકેટ',
     icon: '✒️',

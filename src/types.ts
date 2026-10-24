@@ -21,6 +21,7 @@ export interface ProductItem {
   badge?: string;
   isSpecial?: boolean;
   description?: string;
+  isCustomUpload?: boolean;
   
   // New properties based on feedback
   isHidden?: boolean; // છુપાવો (ગ્રાહકને ન દેખાય)
@@ -31,6 +32,7 @@ export interface ProductItem {
   hsnCode?: string;
   gstRate?: number; // e.g. 0, 5, 12, 18, 28
   minStockAlert?: number;
+  discountPercent?: number; // ડિસ્કાઉન્ટ % (MRP પર)
   createdAt?: number;
   updatedAt?: number;
 }
@@ -204,6 +206,11 @@ export interface StoreSettings {
   bankName?: string; // Optional Bank details for official invoices
   accountNumber?: string;
   ifscCode?: string;
+  currentAccountOpeningBalance?: number;
+  currentAccountBank?: string;
+  currentAccountNumber?: string;
+  currentAccountIfsc?: string;
+  currentAccountBranch?: string;
   // Custom Invoice Number Prefix & Sequential Number Config
   invoicePrefix?: string; // e.g. "PRISHA", "INV", "GST"
   nextInvoiceSeq?: number; // Starting or next sequence number e.g. 1
@@ -250,6 +257,11 @@ export interface StoreSettings {
   otherFeeEnabled?: boolean; // Toggle અન્ય ચાર્જ ચાલુ/બંધ
   otherFeeLabel?: string; // અન્ય ચાર્જ નામ (Default "અન્ય સર્વિસ ચાર્જ")
   otherFeeAmount?: number; // અન્ય ચાર્જ રકમ (Default ₹0)
+  
+  // DISCOUNT & OFFERS CONFIGURATION (ડિસ્કાઉન્ટ & ઓફર સેટિંગ્સ)
+  globalDiscount?: number; // આખી સાઇટ પર ડિસ્કાઉન્ટ % (Default 0)
+  categoryDiscounts?: Record<string, number>; // કેટેગરી વાઈઝ ડિસ્કાઉન્ટ %
+  secondaryPasswords?: string[]; // વધારાના પાસવર્ડ્સ (e.g. 0123, 2626)
 }
 
 export interface RojmelEntry {
@@ -293,9 +305,26 @@ export interface KhataTransaction {
   createdAt?: number;
 }
 
+export interface BankAccountEntry {
+  id: string;
+  date: string; // DD/MM/YYYY
+  type: 'deposit' | 'withdrawal'; // જમા (Deposit/Credit) કે ઉપાડ (Withdrawal/Debit)
+  amount: number;
+  category: 'upi_receipt' | 'cash_deposit' | 'cheque_deposit' | 'neft_rtgs_in' | 'supplier_payment' | 'cash_withdrawal' | 'bank_charges' | 'other';
+  categoryLabel?: string;
+  particulars: string; // વિગત (Customer name, firm name, purpose)
+  referenceNo?: string; // UTR / Cheque / Ref number
+  accountType?: 'current' | 'savings'; // Defaults to 'current'
+  bankName?: string;
+  accountNumber?: string;
+  balanceAfter?: number;
+  notes?: string;
+  createdAt?: number;
+}
+
 export interface TrashRecord {
   id: string;
-  type: 'product' | 'order' | 'expense' | 'khata_account' | 'khata_transaction' | 'rojmel' | 'print_job';
+  type: 'product' | 'order' | 'expense' | 'khata_account' | 'khata_transaction' | 'rojmel' | 'print_job' | 'bank_entry';
   title: string;
   deletedAt: string;
   summary: string;
@@ -390,4 +419,23 @@ export interface PrintJobRecord {
   invoiceGenerated?: boolean;
   invoiceNo?: string;
   totalJobSize?: number;
+}
+
+export interface ShopBillRecord {
+  id: string;
+  category: 'rent' | 'light_bill' | 'staff_salary' | 'tax_gumasta' | 'internet' | 'maintenance' | 'refreshment' | 'other';
+  categoryLabel: string; // e.g. "🏠 દુકાન ભાડું"
+  title: string; // e.g. "ઓક્ટોબર ૨૦૨૬ દુકાન ભાડું"
+  periodMonthYear: string; // e.g. "10/2026" or "ઓક્ટોબર 2026"
+  amount: number;
+  dueDate?: string; // DD/MM/YYYY
+  paymentDate?: string; // DD/MM/YYYY
+  status: 'paid' | 'pending'; // ચૂકવાઈ ગયું કે બાકી
+  recipientName: string; // Landlord name, PGVCL/UGVCL, Employee name, etc.
+  paymentMode: 'Cash' | 'Current_Bank' | 'UPI' | 'Cheque';
+  receiptNo?: string; // રસીદ કે બિલ નંબર
+  consumerNo?: string; // મીટર નંબર / કન્ઝ્યુમર નંબર (ફોર લાઇટ બિલ)
+  notes?: string;
+  createdAt: number;
+  syncToRojmel?: boolean;
 }
