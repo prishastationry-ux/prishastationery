@@ -634,7 +634,7 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           ${
             (order.deliveryCharge || 0) > 0
               ? `<div>🚚 ડિલિવરી ચાર્જ (${order.deliveryType === 'cover' ? 'કવર' : `${order.packageWeightKg || 1} KG પાર્સલ`}): <b>+₹${Number(order.deliveryCharge).toFixed(2)}</b></div>`
-              : ''
+              : (order.deliveryType === 'pickup' ? `<div>🏪 પિકઅપ: <b>₹0 (દુકાનેથી રૂબરૂ)</b></div>` : '')
           }
           ${
             (order.platformFee || 0) > 0
@@ -1889,11 +1889,15 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
                     ડિસ્કાઉન્ટ: -₹{Number(order.discount).toFixed(2)}
                   </div>
                 )}
-                {(order.deliveryCharge || 0) > 0 && (
+                {(order.deliveryCharge || 0) > 0 ? (
                   <div className="text-[11px] font-bold text-blue-800">
                     🚚 ડિલિવરી: +₹{Number(order.deliveryCharge).toFixed(2)}
                   </div>
-                )}
+                ) : order.deliveryType === 'pickup' ? (
+                  <div className="text-[11px] font-bold text-emerald-800">
+                    🏪 પિકઅપ: ₹0.00 (દુકાનેથી રૂબરૂ)
+                  </div>
+                ) : null}
                 {(order.platformFee || 0) > 0 && (
                   <div className="text-[11px] font-bold text-indigo-800">
                     📱 પ્લેટફોર્મ ફી: +₹{Number(order.platformFee).toFixed(2)}

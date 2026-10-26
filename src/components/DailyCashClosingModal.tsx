@@ -79,7 +79,21 @@ export const DailyCashClosingModal: React.FC<DailyCashClosingModalProps> = ({
   // Filter orders, expenses, and rojmel for selected date
   const isSelectedDate = (dateStr?: string) => {
     if (!dateStr) return false;
-    return dateStr.startsWith(selectedDate);
+    const clean = dateStr.trim();
+    if (clean.startsWith(selectedDate)) return true;
+    const parts = selectedDate.split('/');
+    if (parts.length === 3) {
+      const dd = parts[0].padStart(2, '0');
+      const mm = parts[1].padStart(2, '0');
+      const yyyy = parts[2];
+      const iso = `${yyyy}-${mm}-${dd}`;
+      const hyphen = `${dd}-${mm}-${yyyy}`;
+      const slash = `${dd}/${mm}/${yyyy}`;
+      if (clean.startsWith(iso) || clean.startsWith(hyphen) || clean.startsWith(slash)) {
+        return true;
+      }
+    }
+    return false;
   };
 
   const dayOrders = orders.filter(o => isSelectedDate(o.date));

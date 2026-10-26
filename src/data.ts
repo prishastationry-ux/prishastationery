@@ -77,8 +77,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   deliveryChargePerKg: 100, // ₹100 પ્રતિ કિલો
   deliveryCoverCharge: 50, // ₹50 કવર / એન્વલપ
   deliveryFreeAbove: 0,
-  platformFeeEnabled: true,
-  platformFeeAmount: 15, // ₹15 પ્લેટફોર્મ ફી
+  platformFeeEnabled: false,
+  platformFeeAmount: 0, // ₹0 પ્લેટફોર્મ ફી હટાવી દીધી
   packingChargeEnabled: true,
   packingChargeAmount: 30, // ₹30 પેકિંગ ચાર્જ
   otherFeeEnabled: false,

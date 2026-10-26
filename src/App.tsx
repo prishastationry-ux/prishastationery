@@ -1234,7 +1234,7 @@ export default function App() {
     discountCode?: string;
     subtotal?: number;
     deliveryCharge?: number;
-    deliveryType?: 'cover' | 'parcel';
+    deliveryType?: 'cover' | 'parcel' | 'pickup';
     packageWeightKg?: number;
     platformFee?: number;
     packingCharge?: number;
@@ -1430,7 +1430,7 @@ export default function App() {
       tax: 0,
       total: totalAmount,
       paymentMode: orderDetails.paymentMode as any,
-      paymentStatus: 'Paid',
+      paymentStatus: orderDetails.paymentMode === 'Cash' ? 'બાકી' : 'Paid',
       orderType: 'online',
       orderStatus: 'placed',
       paymentScreenshot: orderDetails.paymentScreenshot,

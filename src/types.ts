@@ -101,7 +101,7 @@ export interface OrderRecord {
   consigneeGstin?: string;
   // Delivery & Platform Charges Breakdown
   deliveryCharge?: number;
-  deliveryType?: 'cover' | 'parcel';
+  deliveryType?: 'cover' | 'parcel' | 'pickup';
   packageWeightKg?: number;
   platformFee?: number;
   packingCharge?: number;
@@ -153,6 +153,7 @@ export interface StoreSettings {
   payeeName: string;
   gstNumber: string;
   address: string;
+  pincode?: string;
   marqueeText: string;
   leftLogoUrl: string;
   rightLogoUrl: string;

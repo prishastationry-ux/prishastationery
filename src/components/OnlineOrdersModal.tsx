@@ -388,8 +388,16 @@ export const OnlineOrdersModal: React.FC<OnlineOrdersModalProps> = ({
                       )}
 
                       {order.deliveryType && (
-                        <span className="bg-purple-50 text-purple-800 text-[10px] font-black px-2 py-0.5 rounded border border-purple-200">
-                          {order.deliveryType === 'parcel' ? '📦 પાર્સલ ડિલિવરી' : '✉️ કવર ડિલિવરી'}
+                        <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${
+                          order.deliveryType === 'pickup'
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                            : 'bg-purple-50 text-purple-800 border-purple-200'
+                        }`}>
+                          {order.deliveryType === 'pickup'
+                            ? '🏪 દુકાનેથી પિકઅપ'
+                            : order.deliveryType === 'parcel'
+                              ? '📦 પાર્સલ ડિલિવરી'
+                              : '✉️ કવર ડિલિવરી'}
                         </span>
                       )}
                     </div>

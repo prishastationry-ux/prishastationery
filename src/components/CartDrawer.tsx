@@ -23,7 +23,8 @@ import {
   Truck,
   Package,
   Tag,
-  Info
+  Info,
+  Store
 } from 'lucide-react';
 import { CartItem, StoreSettings } from '../types';
 import { GUJARAT_DISTRICTS, getVillagesForTaluka, getPincodeForTaluka } from '../lib/gujaratDistricts';
@@ -38,7 +39,7 @@ export interface CustomerOrderPayload {
   discountCode?: string;
   subtotal: number;
   deliveryCharge: number;
-  deliveryType: 'cover' | 'parcel';
+  deliveryType: 'cover' | 'parcel' | 'pickup';
   packageWeightKg: number;
   platformFee: number;
   packingCharge: number;
@@ -78,9 +79,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   const [promoCode, setPromoCode] = useState('');
   const [appliedPromo, setAppliedPromo] = useState<{code: string, discount: number} | null>(null);
 
-  // Delivery configuration state
-  const [deliveryType, setDeliveryType] = useState<'cover' | 'parcel'>('cover');
+  // Delivery configuration state: cover | parcel | pickup
+  const [deliveryType, setDeliveryType] = useState<'cover' | 'parcel' | 'pickup'>('cover');
   const [packageWeightKg, setPackageWeightKg] = useState<number>(1);
+
+  // Payment mode state: Online (UPI QR) or Cash (Pay at Shop Counter)
+  const [paymentMode, setPaymentMode] = useState<'Online' | 'Cash'>('Online');
 
   // Form Fields - Structured Address
   const [customerName, setCustomerName] = useState('');
@@ -120,11 +124,21 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const coverCharge = storeSettings.deliveryCoverCharge ?? 50;
   const parcelPerKgCharge = storeSettings.deliveryChargePerKg ?? 100;
-  const rawDeliveryCharge = deliveryType === 'cover' ? coverCharge : (parcelPerKgCharge * Math.max(1, packageWeightKg));
-  const deliveryCharge = (storeSettings.deliveryChargeEnabled !== false && !isFreeDelivery) ? rawDeliveryCharge : 0;
+  const rawDeliveryCharge = deliveryType === 'pickup'
+    ? 0
+    : deliveryType === 'cover'
+      ? coverCharge
+      : (parcelPerKgCharge * Math.max(1, packageWeightKg));
+  const deliveryCharge = (deliveryType === 'pickup' || storeSettings.deliveryChargeEnabled === false || isFreeDelivery)
+    ? 0
+    : rawDeliveryCharge;
 
-  const platformFee = storeSettings.platformFeeEnabled !== false ? (storeSettings.platformFeeAmount ?? 15) : 0;
-  const packingCharge = storeSettings.packingChargeEnabled !== false ? (storeSettings.packingChargeAmount ?? 30) : 0;
+  const platformFee = (storeSettings.platformFeeEnabled === true && (storeSettings.platformFeeAmount || 0) > 0)
+    ? (storeSettings.platformFeeAmount || 0)
+    : 0;
+  const packingCharge = (deliveryType === 'pickup' || storeSettings.packingChargeEnabled === false)
+    ? 0
+    : (storeSettings.packingChargeAmount ?? 30);
   const otherFee = (storeSettings.otherFeeEnabled && (storeSettings.otherFeeAmount || 0) > 0) ? (storeSettings.otherFeeAmount || 0) : 0;
   const discountAmount = appliedPromo ? appliedPromo.discount : 0;
 
@@ -232,7 +246,14 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     let villageVal = villageName.trim();
     let pinVal = pincode.trim();
 
-    if (stateSelection === 'Gujarat') {
+    if (deliveryType === 'pickup') {
+      fullAddress = `🏪 દુકાને રૂબરૂ પિકઅપ (${storeSettings.storeNameGu || storeSettings.storeNameEn || 'દુકાન'} - ${storeSettings.address || 'દુકાન સરનામે'})`;
+      stateVal = 'ગુજરાત (Gujarat)';
+      districtVal = 'દુકાને પિકઅપ';
+      talukaVal = 'રૂબરૂ';
+      villageVal = 'દુકાન કાઉન્ટર';
+      pinVal = storeSettings.pincode || '385565';
+    } else if (stateSelection === 'Gujarat') {
       if (!houseStreet.trim()) {
         setFormError('⚠️ કૃપા કરીને ઘર નંબર, સોસાયટી અથવા શેરીનું નામ દાખલ કરો.');
         return;
@@ -260,7 +281,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       fullAddress = `${villageVal}, ${talukaVal}, જિ: ${districtVal}, ${stateVal} - ${pinVal}`;
     }
 
-    if (!paymentScreenshot) {
+    if (paymentMode === 'Online' && !paymentScreenshot) {
       setFormError('⚠️ ઓર્ડર કન્ફર્મ કરવા માટે ઓનલાઇન પેમેન્ટ (QR સ્કેન) કરી સ્ક્રીનશોટ અપલોડ કરવો ફરજિયાત છે!');
       return;
     }
@@ -276,7 +297,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
       taluka: talukaVal,
       village: villageVal,
       pincode: pinVal,
-      paymentMode: 'Online',
+      paymentMode: paymentMode,
       paymentScreenshot: paymentScreenshot || undefined,
       subtotal: cartTotal,
       deliveryCharge: deliveryCharge,
@@ -458,7 +479,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
                     {/* Option 1: Cover / Envelope */}
                     <button
                       type="button"
@@ -474,7 +495,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                         <span className="text-blue-700 font-black">₹{coverCharge}</span>
                       </div>
                       <p className="text-[10px] text-neutral-500 font-normal mt-0.5">
-                        કાર્ડ, સિંગલ કાગળ, પ્રમાણપત્ર
+                        કાર્ડ, કાગળ, પ્રમાણપત્ર
                       </p>
                     </button>
 
@@ -494,6 +515,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </div>
                       <p className="text-[10px] text-neutral-500 font-normal mt-0.5">
                         નોટબુક, સ્ટેશનરી સામાન
+                      </p>
+                    </button>
+
+                    {/* Option 3: Shop Pickup (Free) */}
+                    <button
+                      type="button"
+                      onClick={() => setDeliveryType('pickup')}
+                      className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                        deliveryType === 'pickup'
+                          ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-400 text-emerald-950 font-black shadow-xs'
+                          : 'bg-white/70 border-neutral-300 text-neutral-700 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-black text-xs">🏪 દુકાનેથી પિકઅપ</span>
+                        <span className="text-emerald-700 font-black bg-emerald-100 px-1.5 py-0.5 rounded text-[10px]">₹0 ફ્રી</span>
+                      </div>
+                      <p className="text-[10px] text-emerald-700 font-medium mt-0.5">
+                        રૂબરૂ લેવા (કોઈ ચાર્જ નહિ)
                       </p>
                     </button>
                   </div>
@@ -526,6 +566,16 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                       </div>
                     </div>
                   )}
+
+                  {/* Pickup Info Banner in Step 1 */}
+                  {deliveryType === 'pickup' && (
+                    <div className="flex items-center gap-2 bg-emerald-100/70 border border-emerald-300 text-emerald-900 p-2.5 rounded-lg text-xs font-bold">
+                      <Store className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>
+                        દુકાનેથી પિકઅપ પસંદ કર્યું છે: ડિલિવરી ચાર્જ અને પેકિંગ ચાર્જ <strong>₹૦ (સંપૂર્ણ મફત)</strong> રહેશે!
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -537,7 +587,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
 
                 {/* Delivery Charge */}
-                {storeSettings.deliveryChargeEnabled !== false ? (
+                {deliveryType === 'pickup' ? (
+                  <div className="flex items-center justify-between text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1.5 rounded-lg border border-emerald-200">
+                    <span className="flex items-center gap-1.5 font-black">
+                      <Store className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>🏪 દુકાનેથી પિકઅપ:</span>
+                    </span>
+                    <span className="font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded text-[10px]">
+                      ₹0 (મફત / કોઈ ચાર્જ નહિ)
+                    </span>
+                  </div>
+                ) : storeSettings.deliveryChargeEnabled !== false ? (
                   <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
                     <span className="flex items-center gap-1">
                       <Truck className="w-3.5 h-3.5 text-blue-600" />
@@ -559,7 +619,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 )}
 
                 {/* Platform Fee */}
-                {storeSettings.platformFeeEnabled !== false && platformFee > 0 && (
+                {platformFee > 0 && (
                   <div className="flex items-center justify-between text-xs font-bold text-neutral-700">
                     <span className="flex items-center gap-1">
                       <Banknote className="w-3.5 h-3.5 text-indigo-600" />
@@ -680,7 +740,42 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </div>
               </div>
 
-              {/* STRUCTURED ADDRESS WITH GUJARAT DISTRICT, TALUKA & VILLAGE AUTO-OPTIONS */}
+              {/* STRUCTURED ADDRESS OR SHOP PICKUP CARD */}
+              {deliveryType === 'pickup' ? (
+                <div className="space-y-3 bg-emerald-50/80 p-3.5 rounded-xl border-2 border-emerald-300">
+                  <div className="flex items-center gap-2 border-b border-emerald-200 pb-2">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black shrink-0">
+                      <Store className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-emerald-950">🏪 દુકાનેથી રૂબરૂ પિકઅપ (Shop Pickup)</h4>
+                      <p className="text-[10px] text-emerald-700 font-bold">ડિલિવરી સરનામું ભરવાની જરૂર નથી</p>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 bg-white rounded-lg border border-emerald-200 text-xs space-y-1.5 text-neutral-800">
+                    <p className="font-black text-emerald-950 text-xs">
+                      {storeSettings.storeNameGu || storeSettings.storeNameEn || 'પ્રિશા સ્ટેશનરી & ઝેરોક્ષ'}
+                    </p>
+                    {storeSettings.address && (
+                      <p className="text-neutral-600 text-[11px] flex items-start gap-1">
+                        <MapPin className="w-3.5 h-3.5 text-neutral-400 shrink-0 mt-0.5" />
+                        <span>{storeSettings.address}</span>
+                      </p>
+                    )}
+                    {storeSettings.phoneDisplay && (
+                      <p className="text-neutral-600 text-[11px] flex items-center gap-1">
+                        <Phone className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                        <span>સંપર્ક: <strong>{storeSettings.phoneDisplay}</strong></span>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-emerald-100/80 p-2 rounded-lg border border-emerald-300 text-[11px] text-emerald-900 font-bold">
+                    <span>💡 ઓર્ડર મળ્યા બાદ તૈયાર રાખવામાં આવશે. તમે દુકાને આવીને સરળતાથી સામાન મેળવી શકો છો.</span>
+                  </div>
+                </div>
+              ) : (
               <div className="space-y-3 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
                 <div className="flex items-center justify-between border-b pb-1.5">
                   <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
@@ -932,141 +1027,208 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 )}
 
               </div>
+              )}
 
-              {/* Mandatory Online Payment Section */}
-              <div className="space-y-2.5 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
-                <div className="flex items-center justify-between border-b pb-1.5">
+              {/* PAYMENT SECTION - ONLINE QR OR CASH AT SHOP */}
+              <div className="space-y-3 bg-neutral-50 p-3.5 rounded-xl border border-neutral-200">
+                <div className="flex items-center justify-between border-b pb-2">
                   <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
-                    <QrCode className="w-4 h-4 text-orange-600" />
-                    <span>ઓનલાઇન પેમેન્ટ (Online Payment Before Order)</span>
+                    <Banknote className="w-4 h-4 text-orange-600" />
+                    <span>ચુકવણી પદ્ધતિ પસંદ કરો (Payment Mode)</span>
                   </h4>
                   <span className="text-xs font-black text-orange-700">
                     કુલ: ₹{finalPayableTotal}/-
                   </span>
                 </div>
 
-                <div className="p-3 bg-red-50 rounded-xl border border-red-200 flex flex-col items-center text-center space-y-2.5">
-                  <p className="text-[11px] font-black text-red-700">
-                    ⚠️ રોકડ (Cash on Delivery) સુવિધા ઉપલબ્ધ નથી. ઓર્ડર માટે નીચે મુજબ પેમેન્ટ કરવાનું રહેશે.
-                  </p>
-                  
-                  {/* Detailed summary pill */}
-                  <div className="bg-white/90 p-2 rounded-lg border border-red-200 text-[10.5px] font-bold text-neutral-800 w-full text-left space-y-1">
-                    <div className="flex justify-between">
-                      <span>સામાન: ₹{cartTotal}</span>
-                      <span>{deliveryCharge > 0 ? `ડિલિવરી: ₹${deliveryCharge}` : 'ડિલિવરી: ફ્રી'}</span>
+                {/* Mode Selector: Online QR vs Cash at Shop */}
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('Online')}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      paymentMode === 'Online'
+                        ? 'bg-white border-blue-600 ring-2 ring-blue-400 text-blue-950 font-black shadow-xs'
+                        : 'bg-white/70 border-neutral-300 text-neutral-600 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <QrCode className="w-4 h-4 text-blue-600" />
+                      <span className="font-black text-xs">📱 ઓનલાઇન QR</span>
                     </div>
-                    <div className="flex justify-between text-neutral-600">
-                      <span>પ્લેટફોર્મ: ₹{platformFee}</span>
-                      <span>પેકિંગ: ₹{packingCharge}</span>
-                      {otherFee > 0 && <span>અન્ય: ₹{otherFee}</span>}
+                    <p className="text-[10px] text-neutral-500 font-normal mt-0.5">
+                      Google Pay, PhonePe, Paytm
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMode('Cash')}
+                    className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      paymentMode === 'Cash'
+                        ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-400 text-emerald-950 font-black shadow-xs'
+                        : 'bg-white/70 border-neutral-300 text-neutral-600 hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Banknote className="w-4 h-4 text-emerald-600" />
+                      <span className="font-black text-xs">💵 દુકાને રોકડ</span>
                     </div>
-                    <div className="border-t pt-1 flex justify-between font-black text-orange-700 text-xs">
-                      <span>ચુકવણી રકમ:</span>
-                      <span>₹{finalPayableTotal}/-</span>
-                    </div>
+                    <p className="text-[10px] text-emerald-700 font-normal mt-0.5">
+                      કાઉન્ટર પર રોકડ (Cash)
+                    </p>
+                  </button>
+                </div>
+
+                {/* Amount Summary Pill */}
+                <div className="bg-white p-2.5 rounded-lg border border-neutral-200 text-[11px] font-bold text-neutral-800 space-y-1">
+                  <div className="flex justify-between">
+                    <span>સામાન: ₹{cartTotal}</span>
+                    <span>
+                      {deliveryType === 'pickup'
+                        ? '🏪 પિકઅપ: ₹0 (ફ્રી)'
+                        : deliveryCharge > 0
+                          ? `ડિલિવરી: ₹${deliveryCharge}`
+                          : 'ડિલિવરી: ફ્રી'}
+                    </span>
                   </div>
-
-                  <p className="text-[11px] font-black text-neutral-800">
-                    📱 નીચેનો QR કોડ સ્કેન કરીને <span className="text-orange-600 text-sm">₹{finalPayableTotal}/-</span> ચૂકવો
-                  </p>
-                  
-                  {upiQrUrl && (
-                    <div className="p-2 bg-white rounded-lg border shadow-xs">
-                      <img src={upiQrUrl} alt="UPI QR" className="w-40 h-40 object-contain" />
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-1 text-[11px] font-black bg-neutral-100 px-2.5 py-1 rounded-md border border-neutral-200">
-                    <span>UPI ID: <strong className="text-blue-800 font-mono">{storeSettings.upiId}</strong></span>
-                    <button
-                      type="button"
-                      onClick={handleCopyUpi}
-                      className="text-neutral-500 hover:text-black p-0.5 ml-1 cursor-pointer"
-                      title="Copy UPI ID"
-                    >
-                      {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-                    </button>
+                  <div className="flex justify-between text-neutral-600 text-[10.5px]">
+                    {platformFee > 0 && <span>પ્લેટફોર્મ: ₹{platformFee}</span>}
+                    {packingCharge > 0 && <span>પેકિંગ: ₹{packingCharge}</span>}
+                    {otherFee > 0 && <span>અન્ય: ₹{otherFee}</span>}
                   </div>
-
-                  {/* MANDATORY SCREENSHOT UPLOAD SECTION */}
-                  <div className="w-full pt-2 border-t border-dashed border-red-300 text-left">
-                    <label className="text-[11px] font-black text-neutral-800 flex items-center justify-between mb-1.5">
-                      <span className="flex items-center gap-1 text-red-600">
-                        <Camera className="w-3.5 h-3.5 text-orange-600" />
-                        <span>પેમેન્ટ સ્ક્રીનશોટ (ફરજિયાત *)</span>
-                      </span>
-                      {paymentScreenshot && (
-                        <span className="text-emerald-700 text-[10px] font-black flex items-center gap-0.5">
-                          <Check className="w-3 h-3" /> અપલોડ થઈ ગયું
-                        </span>
-                      )}
-                    </label>
-
-                    {/* Transaction ID Input */}
-                    <div className="mb-3">
-                      <label className="text-[10px] font-bold text-neutral-600 block mb-1">
-                        Transaction ID / Reference No (વૈકલ્પિક)
-                      </label>
-                      <input
-                        type="text"
-                        placeholder="દા.ત. UPI Ref No. 123456789012"
-                        value={transactionId}
-                        onChange={e => setTransactionId(e.target.value)}
-                        className="w-full text-xs font-mono font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                      />
-                    </div>
-                    
-                    {paymentScreenshot ? (
-                      <div className="flex items-center gap-3 p-2 bg-emerald-50 rounded-xl border border-emerald-200">
-                        <img
-                          src={paymentScreenshot}
-                          alt="Payment Proof"
-                          className="w-14 h-14 object-cover rounded-lg border border-emerald-300"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] font-black text-emerald-900 truncate">
-                            ✅ સ્ક્રીનશોટ સિલેક્ટ થઈ ગયો
-                          </p>
-                          <label className="text-[10px] font-bold text-blue-700 hover:underline cursor-pointer block mt-0.5">
-                            <span>ફોટો બદલો</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleScreenshotUpload}
-                              className="hidden"
-                            />
-                          </label>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setPaymentScreenshot('')}
-                          className="p-1 text-neutral-400 hover:text-red-600 cursor-pointer"
-                          title="Remove Screenshot"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-orange-400 hover:border-orange-600 rounded-xl bg-orange-50/50 hover:bg-orange-50 transition-colors cursor-pointer text-center">
-                        <Upload className="w-6 h-6 text-orange-600 mb-1" />
-                        <span className="text-xs font-black text-orange-950">
-                          પેમેન્ટ કરેલ સ્ક્રીનશોટ અહીં અપલોડ કરો *
-                        </span>
-                        <span className="text-[10px] text-neutral-500 font-bold mt-0.5">
-                          (Google Pay / PhonePe / Paytm માંથી સ્ક્રીનશોટ સિલેક્ટ કરો)
-                        </span>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleScreenshotUpload}
-                          className="hidden"
-                          required
-                        />
-                      </label>
-                    )}
+                  <div className="border-t pt-1 flex justify-between font-black text-orange-700 text-xs">
+                    <span>કુલ ચૂકવવાપાત્ર રકમ:</span>
+                    <span>₹{finalPayableTotal}/-</span>
                   </div>
                 </div>
+
+                {/* IF CASH AT SHOP SELECTED */}
+                {paymentMode === 'Cash' ? (
+                  <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-300 space-y-2 text-left">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 text-xs">
+                        ✓
+                      </div>
+                      <div>
+                        <h5 className="text-xs font-black text-emerald-950">
+                          💵 દુકાને રૂબરૂ રોકડ પેમેન્ટ (Cash at Shop)
+                        </h5>
+                        <p className="text-[10.5px] text-emerald-700 font-bold">
+                          કોઈ ઓનલાઇન પેમેન્ટ કે સ્ક્રીનશોટની જરૂર નથી
+                        </p>
+                      </div>
+                    </div>
+                    <div className="p-2.5 bg-white/95 rounded-lg border border-emerald-200 text-[11px] text-neutral-700 space-y-1">
+                      <p className="font-bold text-emerald-900">• તમારો ઓર્ડર તરત જ નોંધાઈ જશે.</p>
+                      <p>• જ્યારે તમે સામાન લેવા આવો ત્યારે દુકાને કાઉન્ટર પર <strong className="text-emerald-800 text-xs">₹{finalPayableTotal}/- રોકડા</strong> ચૂકવવાના રહેશે.</p>
+                      <p className="text-emerald-800 font-bold">• પેમેન્ટ સ્ટેટસ: બાકી (કાઉન્ટર પર રોકડ ચુકવણી)</p>
+                    </div>
+                  </div>
+                ) : (
+                  /* IF ONLINE QR SELECTED */
+                  <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-200 flex flex-col items-center text-center space-y-2.5">
+                    <p className="text-[11px] font-black text-neutral-800">
+                      📱 નીચેનો QR કોડ સ્કેન કરીને <span className="text-blue-700 text-sm font-black">₹{finalPayableTotal}/-</span> ચૂકવો
+                    </p>
+                    
+                    {upiQrUrl && (
+                      <div className="p-2 bg-white rounded-lg border shadow-xs">
+                        <img src={upiQrUrl} alt="UPI QR" className="w-40 h-40 object-contain" />
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-1 text-[11px] font-black bg-white px-2.5 py-1 rounded-md border border-neutral-200">
+                      <span>UPI ID: <strong className="text-blue-800 font-mono">{storeSettings.upiId}</strong></span>
+                      <button
+                        type="button"
+                        onClick={handleCopyUpi}
+                        className="text-neutral-500 hover:text-black p-0.5 ml-1 cursor-pointer"
+                        title="Copy UPI ID"
+                      >
+                        {copiedUpi ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {/* MANDATORY SCREENSHOT UPLOAD SECTION */}
+                    <div className="w-full pt-2 border-t border-dashed border-blue-300 text-left">
+                      <label className="text-[11px] font-black text-neutral-800 flex items-center justify-between mb-1.5">
+                        <span className="flex items-center gap-1 text-red-600">
+                          <Camera className="w-3.5 h-3.5 text-blue-600" />
+                          <span>પેમેન્ટ સ્ક્રીનશોટ (ફરજિયાત *)</span>
+                        </span>
+                        {paymentScreenshot && (
+                          <span className="text-emerald-700 text-[10px] font-black flex items-center gap-0.5">
+                            <Check className="w-3 h-3" /> અપલોડ થઈ ગયું
+                          </span>
+                        )}
+                      </label>
+
+                      {/* Transaction ID Input */}
+                      <div className="mb-3">
+                        <label className="text-[10px] font-bold text-neutral-600 block mb-1">
+                          Transaction ID / Reference No (વૈકલ્પિક)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="દા.ત. UPI Ref No. 123456789012"
+                          value={transactionId}
+                          onChange={e => setTransactionId(e.target.value)}
+                          className="w-full text-xs font-mono font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
+                        />
+                      </div>
+                      
+                      {paymentScreenshot ? (
+                        <div className="flex items-center gap-3 p-2 bg-emerald-50 rounded-xl border border-emerald-200">
+                          <img
+                            src={paymentScreenshot}
+                            alt="Payment Proof"
+                            className="w-14 h-14 object-cover rounded-lg border border-emerald-300"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-black text-emerald-900 truncate">
+                              ✅ સ્ક્રીનશોટ સિલેક્ટ થઈ ગયો
+                            </p>
+                            <label className="text-[10px] font-bold text-blue-700 hover:underline cursor-pointer block mt-0.5">
+                              <span>ફોટો બદલો</span>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleScreenshotUpload}
+                                className="hidden"
+                              />
+                            </label>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setPaymentScreenshot('')}
+                            className="p-1 text-neutral-400 hover:text-red-600 cursor-pointer"
+                            title="Remove Screenshot"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="flex flex-col items-center justify-center p-3.5 border-2 border-dashed border-blue-400 hover:border-blue-600 rounded-xl bg-blue-50/50 hover:bg-blue-50 transition-colors cursor-pointer text-center">
+                          <Upload className="w-6 h-6 text-blue-600 mb-1" />
+                          <span className="text-xs font-black text-blue-950">
+                            પેમેન્ટ કરેલ સ્ક્રીનશોટ અહીં અપલોડ કરો *
+                          </span>
+                          <span className="text-[10px] text-neutral-500 font-bold mt-0.5">
+                            (Google Pay / PhonePe / Paytm માંથી સ્ક્રીનશોટ સિલેક્ટ કરો)
+                          </span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleScreenshotUpload}
+                            className="hidden"
+                            required
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
             </form>
@@ -1078,7 +1240,11 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
           <div className="p-3.5 sm:p-4 bg-white border-t border-neutral-200 space-y-2 shrink-0">
             <div className="flex items-center justify-between text-xs font-black">
               <span className="text-neutral-600">
-                {step === 1 ? 'કુલ ચૂકવવાપાત્ર રકમ (ચાર્જીસ સહિત):' : 'ઓનલાઇન ચૂકવેલ રકમ:'}
+                {step === 1
+                  ? 'કુલ ચૂકવવાપાત્ર રકમ (ચાર્જીસ સહિત):'
+                  : paymentMode === 'Cash'
+                    ? 'દુકાને રોકડ ચૂકવવાની રકમ:'
+                    : 'ઓનલાઇન ચૂકવેલ રકમ:'}
               </span>
               <span className="text-base text-orange-700 font-black">₹{finalPayableTotal}/-</span>
             </div>
@@ -1089,17 +1255,25 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 onClick={handleProceedToStep2}
                 className="w-full bg-[#EA580C] hover:bg-orange-700 text-white font-black py-3 rounded-xl text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-98"
               >
-                <span>સરનામું અને ઓનલાઇન પેમેન્ટ (Step 2)</span>
+                <span>{deliveryType === 'pickup' ? 'ઓર્ડર અને પેમેન્ટ (Step 2)' : 'સરનામું અને પેમેન્ટ (Step 2)'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={handleSubmitOrder}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-xl text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-98"
+                className={`w-full text-white font-black py-3 rounded-xl text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-98 ${
+                  paymentMode === 'Cash'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-[#0B1E48] hover:bg-blue-900'
+                }`}
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>ઓર્ડર કન્ફર્મ કરો અને રસીદ મેળવો</span>
+                <span>
+                  {paymentMode === 'Cash'
+                    ? `ઓર્ડર કન્ફર્મ કરો (દુકાને રોકડ ₹${finalPayableTotal})`
+                    : 'ઓર્ડર કન્ફર્મ કરો અને રસીદ મેળવો'}
+                </span>
               </button>
             )}
           </div>
