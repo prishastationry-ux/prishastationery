@@ -89,6 +89,7 @@ import MultiQuotationModal from './components/MultiQuotationModal';
 import { BannerSlider } from './components/BannerSlider';
 import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
+import { StockPopupModal } from './components/StockPopupModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { getItemReviewStats } from './utils/reviewHelper';
@@ -338,6 +339,7 @@ export default function App() {
   const [showStoreSettingsModal, setShowStoreSettingsModal] = useState<boolean>(false);
   const [showGemBillModal, setShowGemBillModal] = useState<boolean>(false);
   const [showMultiQuotationModal, setShowMultiQuotationModal] = useState<boolean>(false);
+  const [showStockPopupModal, setShowStockPopupModal] = useState<boolean>(false);
   const [selectedProductForModal, setSelectedProductForModal] = useState<ProductItem | null>(null);
   
   const [rojmelEntries, setRojmelEntries] = useFirebaseSync<RojmelEntry[]>('rojmel', 'prisha_rojmel_v1', []);
@@ -1141,14 +1143,19 @@ export default function App() {
     setCropModalData(prev => ({ ...prev, isOpen: false }));
   };
 
-  const handleEditItemRequest = (item: ProductItem) => {
-    promptSecurityPassword(
-      `પ્રોડક્ટ એડિટ: ${item.nameGu}`,
-      'પ્રોડક્ટની વિગતો, ભાવ કે સ્ટોક બદલવા પાસવર્ડ દાખલ કરો',
-      () => {
-        setEditingItem(item);
-      }
-    );
+  const handleEditItemRequest = (item: ProductItem, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (isAdminUnlocked) {
+      setEditingItem(item);
+    } else {
+      promptSecurityPassword(
+        `પ્રોડક્ટ એડિટ: ${item.nameGu}`,
+        'પ્રોડક્ટની વિગતો, ભાવ કે સ્ટોક બદલવા પાસવર્ડ દાખલ કરો',
+        () => {
+          setEditingItem(item);
+        }
+      );
+    }
   };
 
   // Customer Cart Operations
@@ -2319,7 +2326,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white">
+    <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white">
       
       
       {showStoreSettingsModal && (
@@ -2535,7 +2542,7 @@ export default function App() {
               title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
             >
               <Globe className="w-3.5 h-3.5 text-amber-300" />
-              <span>🌐 ઓનલાઇન સેવા પોર્ટલ</span>
+              <span>ઓનલાઇન સેવા પોર્ટલ</span>
             </button>
 
 
@@ -2708,6 +2715,9 @@ export default function App() {
                 const correctPass = storeSettings.adminPassword || 'Bharat@1994';
                 if (prishaLoginPassword === correctPass) {
                   setActiveShopMode('professional');
+                  if (activeTab === 'portal') {
+                    setActiveTab('customer');
+                  }
                   setShowPrishaLoginModal(false);
                   setPrishaLoginPassword('');
                   setPrishaLoginError('');
@@ -2846,7 +2856,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 3. MAIN BODY: CUSTOMER E-COMMERCE VIEW (DEFAULT) */}
       {/* ========================================================================= */}
-      {activeTab === 'portal' ? (
+      {activeTab === 'portal' && activeShopMode === 'general' ? (
         <OnlineServicesPortal
           onNavigateBack={() => setActiveTab('customer')}
           jobs={onlineServicesJobs}
@@ -2857,7 +2867,7 @@ export default function App() {
           showToast={showToast}
           isAdminUnlocked={isAdminUnlocked}
         />
-      ) : (
+      ) : activeTab === 'customer' ? (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
           {/* ROTATING BANNER SLIDER & STORIES WIDGET (Configured in Store Settings) */}
@@ -3057,7 +3067,7 @@ export default function App() {
                           <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleEditItemRequest(item)}
+                          onClick={e => handleEditItemRequest(item, e)}
                           className="text-blue-700 hover:text-blue-900 p-1 rounded hover:bg-blue-50 cursor-pointer"
                           title="પ્રોડક્ટ એડિટ કરો"
                         >
@@ -3103,13 +3113,8 @@ export default function App() {
                           accept="image/*"
                           className="hidden"
                           onChange={e => {
-                            const pass = window.prompt('પ્રોડક્ટ ફોટો બદલવા માટે પાસવર્ડ દાખલ કરો:');
-                            if (pass && verifySecondaryPassword(pass)) {
-                              setEditingItem(item);
-                              handleImageFileUpload(e, 'editingProduct');
-                            } else if (pass !== null) {
-                              alert('❌ ખોટો પાસવર્ડ!');
-                            }
+                            setEditingItem(item);
+                            handleImageFileUpload(e, 'editingProduct');
                           }}
                         />
                       </label>
@@ -3288,6 +3293,9 @@ export default function App() {
 
           </div>
 
+        </main>
+      ) : activeTab === 'admin' ? (
+        <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
 
           {/* ADMIN TOP CONTROL BAR */}
           {/* ADMIN TOP CONTROL BAR */}
@@ -3393,16 +3401,18 @@ export default function App() {
 
             {/* ALL QUICK ADMIN ACTION BUTTONS - DISPLAYED DIRECTLY OUTSIDE IN THE OPEN */}
             <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-              {/* 0. 🌐 ઓનલાઇન સેવા & ડિજિટલ પોર્ટલ (સંપૂર્ણ અલગ ખાતું) */}
-              <button
-                type="button"
-                onClick={() => setActiveTab('portal')}
-                className="bg-indigo-900 hover:bg-indigo-800 text-amber-300 border-2 border-indigo-500 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95 ring-2 ring-indigo-400/30"
-                title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
-              >
-                <Globe className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span>🌐 ઓનલાઇન સેવા પોર્ટલ ({onlineServicesJobs.length})</span>
-              </button>
+              {/* 0. 🌐 ઓનલાઇન સેવા & ડિજિટલ પોર્ટલ (સંપૂર્ણ અલગ ખાતું - ફક્ત જનરલ સ્ટોર મોડમાં) */}
+              {activeShopMode === 'general' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('portal')}
+                  className="bg-indigo-900 hover:bg-indigo-800 text-amber-300 border-2 border-indigo-500 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95 ring-2 ring-indigo-400/30"
+                  title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
+                >
+                  <Globe className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>🌐 ઓનલાઇન સેવા પોર્ટલ ({onlineServicesJobs.length})</span>
+                </button>
+              )}
 
               {/* 1. 📲 ફાઇલ અપલોડ QR & લિંક */}
               <button
@@ -3712,6 +3722,18 @@ export default function App() {
               <p className="text-[10px] font-bold text-neutral-500">🏷️ કુલ વેચાણ મૂલ્ય (MRP)</p>
               <h3 className="text-sm sm:text-base font-black text-emerald-700">₹{(displaySellingStockValue || 0).toFixed(2)}</h3>
               <span className="text-[9px] text-emerald-600 font-bold">નફો: +₹{Math.max(0, displaySellingStockValue - displayCostStockValue).toFixed(2)}</span>
+            </div>
+
+            <div
+              onClick={() => setShowStockPopupModal(true)}
+              className="bg-orange-50 hover:bg-orange-100 p-3 rounded-xl border-2 border-orange-400 shadow-2xs cursor-pointer transition-colors flex flex-col justify-between col-span-2 sm:col-span-1"
+            >
+              <p className="text-[10px] font-black text-orange-800 uppercase flex items-center gap-1">
+                <span>📦</span>
+                <span>સ્ટોક પોપઅપ જુઓ</span>
+              </p>
+              <h3 className="text-sm sm:text-base font-black text-orange-700">{currentPosItems.length} આઇટમ્સ</h3>
+              <span className="text-[9px] text-orange-600 font-bold underline">ક્લિક કરી યાદી ખોલો</span>
             </div>
           </div>
 
@@ -4610,7 +4632,7 @@ export default function App() {
           </div>
 
         </main>
-      )}
+      ) : null}
 
       {/* ========================================================================= */}
       {/* 6. SIDE DRAWER CART & CHECKOUT MODAL */}
@@ -6706,6 +6728,20 @@ export default function App() {
           showToast={showToast}
         />
       )}
+
+      {/* STOCK POPUP MODAL */}
+      <StockPopupModal
+        isOpen={showStockPopupModal}
+        onClose={() => setShowStockPopupModal(false)}
+        products={currentPosItems}
+        onUpdateStock={(id, newStock) => {
+          getActivePosSetter()(prev => prev.map(p => p.id === id ? { ...p, stock: newStock } : p));
+          showToast('✅ સ્ટોક સફળતાપૂર્વક અપડેટ થયો');
+        }}
+        showToast={showToast}
+        storeSettings={storeSettings}
+        isAdminUnlocked={isAdminUnlocked}
+      />
     </div>
   );
 }

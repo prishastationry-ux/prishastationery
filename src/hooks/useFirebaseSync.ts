@@ -388,19 +388,17 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
                   }
                 });
                 
-                // Union merge: Keeps all items from cloud (e.g. all 58 items from Vercel)
-                // plus any local items, merging non-destructively so zero items are lost
+                // Union merge: Keeps all valid non-deleted items from cloud
+                // plus any local items, merging non-destructively
                 const merged = [
                   ...validCloudItems.map((c: any) => {
                     const local = (c.id && localMap.get(c.id)) || (c.invoiceNo && localMap.get(c.invoiceNo));
                     if (!local) return c;
-                    // Compare timestamps so latest stock/price changes win
                     const localTs = local.updatedAt || local.lastModified || 0;
                     const cloudTs = c.updatedAt || c.lastModified || 0;
                     if (localTs > cloudTs && localTs > 0) {
                       return local;
                     }
-                    // Default to cloud item so stock deductions and sales from any device sync accurately
                     return c;
                   }),
                   ...localUnsyncedItems

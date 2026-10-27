@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   Search,
@@ -55,7 +55,7 @@ const DEFAULT_SERVICES = [
   { id: 'srv_13', name: 'પોલીસ વેરિફિકેશન / ચારિત્ર્ય', defaultRate: 100, category: 'સર્ટિફિકેટ' },
   { id: 'srv_14', name: 'વિધવા / વૃદ્ધ પેન્શન સહાય', defaultRate: 100, category: 'સમાજ કલ્યાણ' },
   { id: 'srv_15', name: 'રેશન કાર્ડ કૂપન / નામ ઉમેરો', defaultRate: 100, category: 'પુરવઠો' },
-  { id: 'srv_16', name: 'સરકારી ભરતી ઓનલાઇન ફોર્મ', defaultRate: 100, category: 'ભરતી ફોર્મ' },
+  { id: 'srv_16', name: 'સરકારી ભરતી ઓનલાઇન ફોર્મ', defaultRate: 100, category: 'ભરતી ફોર્મ' }
 ];
 
 export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
@@ -68,8 +68,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
   showToast,
   isAdminUnlocked
 }) => {
-  // if (!isOpen) return null; // Removed
-
   const todayStr = useMemo(() => {
     const d = new Date();
     const dd = String(d.getDate()).padStart(2, '0');
@@ -80,6 +78,34 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
 
   const [activeTab, setActiveTab] = useState<'jobs' | 'expenses' | 'daily_closing' | 'services_master'>('jobs');
   
+  // Custom Services Catalog State (Editable by user for forms, xerox, lamination, color print, vastu, etc.)
+  const [customServices, setCustomServices] = useState<Array<{ id: string; name: string; defaultRate: number; category: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('prisha_online_services_catalog_v2');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.filter(s => s && s.id !== 'srv_17' && s.id !== 'srv_18' && s.id !== 'srv_19' && s.id !== 'srv_20');
+        }
+      }
+      return DEFAULT_SERVICES;
+    } catch {
+      return DEFAULT_SERVICES;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('prisha_online_services_catalog_v2', JSON.stringify(customServices));
+    } catch {}
+  }, [customServices]);
+
+  // New Service Form State in Master tab
+  const [newCatalogName, setNewCatalogName] = useState('');
+  const [newCatalogRate, setNewCatalogRate] = useState<number | ''>(50);
+  const [newCatalogCategory, setNewCatalogCategory] = useState('સરકારી ફોર્મ');
+  const [editingCatalogService, setEditingCatalogService] = useState<{ id: string; name: string; defaultRate: number; category: string } | null>(null);
+
   // Job Filters
   const [jobSearch, setJobSearch] = useState('');
   const [jobStatusFilter, setJobStatusFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'unpaid'>('all');
@@ -114,16 +140,57 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
   // Daily Closing Tab State
   const [closingDate, setClosingDate] = useState(todayStr);
 
+  // In-App Confirm Delete Modal State (Replaces blocked window.confirm)
+  const [deleteConfirmState, setDeleteConfirmState] = useState<{
+    isOpen: boolean;
+    type: 'catalog' | 'job' | 'expense';
+    id: string;
+    title: string;
+  } | null>(null);
+
   // Generate unique sequential token number
   const generateNextToken = () => {
     const count = jobs.length + 1;
     return `OS-${String(count).padStart(3, '0')}`;
   };
 
-  // Quick fill from standard service catalog
-  const handleSelectServicePreset = (service: typeof DEFAULT_SERVICES[0]) => {
-    setNewServiceName(service.name);
-    setNewAmount(service.defaultRate);
+  // Add or update custom service in catalog
+  const handleSaveCatalogService = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCatalogName.trim()) {
+      showToast('⚠️ કૃપા કરીને સેવા કે ફોર્મનું નામ લખો!');
+      return;
+    }
+    const rate = typeof newCatalogRate === 'number' ? newCatalogRate : parseFloat(newCatalogRate) || 0;
+
+    if (editingCatalogService) {
+      setCustomServices(prev =>
+        prev.map(s => (s.id === editingCatalogService.id ? { ...s, name: newCatalogName.trim(), defaultRate: rate, category: newCatalogCategory } : s))
+      );
+      showToast(`✅ સેવા સુધારી દેવાઈ: ${newCatalogName}`);
+      setEditingCatalogService(null);
+    } else {
+      const newSrv = {
+        id: `srv_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        name: newCatalogName.trim(),
+        defaultRate: rate,
+        category: newCatalogCategory
+      };
+      setCustomServices(prev => [newSrv, ...prev]);
+      showToast(`✅ નવી સેવા / ફોર્મ ઉમેરાઈ ગયું: ${newSrv.name}`);
+    }
+
+    setNewCatalogName('');
+    setNewCatalogRate(50);
+  };
+
+  const handleDeleteCatalogService = (id: string, name: string) => {
+    setDeleteConfirmState({
+      isOpen: true,
+      type: 'catalog',
+      id,
+      title: name
+    });
   };
 
   // Add new online job
@@ -181,10 +248,12 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
 
   // Delete Job
   const handleDeleteJob = (id: string, name: string) => {
-    if (window.confirm(`શું તમે આ કામ '${name}' રેકોર્ડમાંથી ડિલીટ કરવા માંગો છો?`)) {
-      onUpdateJobs(prev => prev.filter(j => j.id !== id));
-      showToast('🗑️ કામ ડિલીટ થઈ ગયું.');
-    }
+    setDeleteConfirmState({
+      isOpen: true,
+      type: 'job',
+      id,
+      title: name
+    });
   };
 
   // Quick mark paid
@@ -251,14 +320,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
     setShowAddExpenseModal(false);
   };
 
-  // Delete Expense
-  const handleDeleteExpense = (id: string) => {
-    if (window.confirm('શું તમે આ ખર્ચ ડિલીટ કરવા માંગો છો?')) {
-      onUpdateExpenses(prev => prev.filter(e => e.id !== id));
-      showToast('🗑️ ખર્ચ ડિલીટ થયો.');
-    }
-  };
-
   // Send WhatsApp Receipt to Customer
   const handleSendWhatsAppReceipt = (job: OnlineServiceJob) => {
     const statusGuj =
@@ -275,7 +336,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
 
     const text =
       `🌐 *${storeSettings.storeNameGu || 'પ્રિષા ઓનલાઇન સેવા કેન્દ્ર'}*\n` +
-      `🎫 *ટોકન પાવતી / ઓનલાઇન કામ પહોંચ*\n` +
+      `🎫 *ટોકન પાવતી / ઓનલાઇਨ કામ પહોંચ*\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `🔢 *ટોકન નં:* #${job.tokenNo}\n` +
       `👤 *ગ્રાહક નામ:* ${job.customerName}\n` +
@@ -309,13 +370,13 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
       `📅 *તારીખ:* ${closingDate}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📋 *કુલ કરેલા કામ:* ${closingJobs.length} કામ\n` +
-      `💰 *કુલ ઓનલાઇન આવક:* ₹${closingStats.totalRevenue.toFixed(2)}\n` +
-      `  • 💵 કાઉન્ટર કેશ રોકડા: ₹${closingStats.cashRevenue.toFixed(2)}\n` +
-      `  • 📱 UPI / ઓનલાઇન જમા: ₹${closingStats.upiRevenue.toFixed(2)}\n` +
-      `  • ⚠️ ગ્રાહક બાકી રકમ (Dues): ₹${closingStats.unpaidDue.toFixed(2)}\n` +
+      `💰 *કુલ ઓનલાઇન આવક:* ₹{closingStats.totalRevenue.toFixed(2)}\n` +
+      `  • 💵 કાઉન્ટર કેશ રોકડા: ₹{closingStats.cashRevenue.toFixed(2)}\n` +
+      `  • 📱 UPI / ઓનલાઇન જમા: ₹{closingStats.upiRevenue.toFixed(2)}\n` +
+      `  • ⚠️ ગ્રાહક બાકી રકમ (Dues): ₹{closingStats.unpaidDue.toFixed(2)}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `💸 *પોર્ટલ ખર્ચા / જાવક:* ₹${closingStats.totalExpenses.toFixed(2)}\n` +
-      `📈 *ચોખ્ખો દૈનિક નફો (Net Profit):* ₹${closingStats.netProfit.toFixed(2)}\n` +
+      `💸 *પોર્ટલ ખર્ચા / જાવક:* ₹{closingStats.totalExpenses.toFixed(2)}\n` +
+      `📈 *ચોખ્ખો દૈનિક નફો (Net Profit):* ₹{closingStats.netProfit.toFixed(2)}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `સંચાલક: ${storeSettings.ownerName || 'ભરત ચૌધરી'} | થરાદ`;
 
@@ -327,7 +388,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
     try {
       const wb = XLSX.utils.book_new();
 
-      // Sheet 1: Jobs
       const jobsData = jobs.map((j, idx) => ({
         'ક્રમ': idx + 1,
         'ટોકન નં': j.tokenNo,
@@ -345,7 +405,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
       const wsJobs = XLSX.utils.json_to_sheet(jobsData);
       XLSX.utils.book_append_sheet(wb, wsJobs, 'ઓનલાઇન કામ રજિસ્ટર');
 
-      // Sheet 2: Expenses
       const expData = expenses.map((e, idx) => ({
         'ક્રમ': idx + 1,
         'તારીખ': e.date,
@@ -369,7 +428,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
   // Filtered Jobs
   const filteredJobs = useMemo(() => {
     return jobs.filter(j => {
-      // Search
       const q = jobSearch.toLowerCase();
       const matchesSearch =
         !q ||
@@ -381,13 +439,11 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
 
       if (!matchesSearch) return false;
 
-      // Status
       if (jobStatusFilter === 'pending' && j.status !== 'pending') return false;
       if (jobStatusFilter === 'in_progress' && j.status !== 'in_progress') return false;
       if (jobStatusFilter === 'completed' && j.status !== 'completed') return false;
       if (jobStatusFilter === 'unpaid' && j.paymentStatus !== 'Pending') return false;
 
-      // Date
       if (jobDateFilter === 'today' && j.date !== todayStr) return false;
       if (jobDateFilter === 'custom' && j.date !== jobCustomDate) return false;
 
@@ -457,7 +513,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-blue-200/80 font-bold mt-0.5">
-                સરકારી ફોર્મ, પાન-આધાર, i-ખેડૂત, લાયસન્સ અને ડિજિટલ સેવાઓનો દૈનિક રોજમેળ
+                સરકારી ફોર્મ, વાસ્તુ ફોર્મ, ઝેરોક્ષ, લેમિનેશન, કલર પ્રિન્ટ, પાન-આધાર અને સેવાઓનું રજિસ્ટર
               </p>
             </div>
           </div>
@@ -529,7 +585,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
               }`}
             >
               <Tag className="w-4 h-4 text-purple-600" />
-              <span>⚙️ સર્વિસીસ & રેટ લિસ્ટ</span>
+              <span>⚙️ સર્વિસીસ & રેટ લિસ્ટ ({customServices.length})</span>
             </button>
           </div>
 
@@ -556,9 +612,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
           </div>
         </div>
 
-        {/* ========================================================================= */}
         {/* TAB 1: JOBS REGISTER */}
-        {/* ========================================================================= */}
         {activeTab === 'jobs' && (
           <div className="flex-1 flex flex-col p-4 overflow-hidden space-y-3">
             
@@ -566,12 +620,12 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
             <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-200">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-black text-blue-950 flex items-center gap-1">
-                  <span>⚡ ફાસ્ટ સેવા પસંદ કરો (ક્લિક કરી તરત નવું કામ ઉમેરો):</span>
+                  <span>⚡ ફાસ્ટ સેવા / ફોર્મ / ઝેરોક્ષ પસંદ કરો (1-ક્લિક કામ ઉમેરો):</span>
                 </span>
-                <span className="text-[10px] text-blue-700 font-bold">1-ક્લિક ઓટો ભાવ</span>
+                <span className="text-[10px] text-blue-700 font-bold">ઓટો ભાવ</span>
               </div>
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-                {DEFAULT_SERVICES.slice(0, 10).map(srv => (
+                {customServices.map(srv => (
                   <button
                     key={srv.id}
                     onClick={() => {
@@ -597,7 +651,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                   <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="ગ્રાહક, મોબાઇલ, i-ખેડૂત, ટોકન સર્ચ..."
+                    placeholder="ગ્રાહક, મોબાઇલ, વાસ્તુ, ઝેરોક્ષ, ટોકન સર્ચ..."
                     value={jobSearch}
                     onChange={e => setJobSearch(e.target.value)}
                     className="w-full text-xs font-bold pl-9 pr-3 py-1.5 bg-white border border-neutral-300 rounded-lg outline-none focus:border-blue-600"
@@ -651,7 +705,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                       <th className="p-2.5 text-right">ફી (₹)</th>
                       <th className="p-2.5 text-center">પેમેન્ટ સ્થિતિ</th>
                       <th className="p-2.5 text-center">કામ સ્ટેટસ</th>
-                      <th className="p-2.5 text-center">એક્શન</th>
+                      <th className="p-2.5 text-center">એક્શન (Edit/Delete)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-200 font-medium">
@@ -660,7 +714,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
 
                       return (
                         <tr key={job.id} className="hover:bg-blue-50/50 transition-colors">
-                          {/* Token & Date */}
                           <td className="p-2.5">
                             <span className="font-black font-mono text-blue-900 bg-blue-100 px-1.5 py-0.5 rounded text-[11px]">
                               #{job.tokenNo}
@@ -668,7 +721,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                             <div className="text-[10px] text-neutral-500 font-bold mt-0.5">{job.date}</div>
                           </td>
 
-                          {/* Service & App No */}
                           <td className="p-2.5">
                             <div className="font-black text-neutral-900 text-xs">{job.serviceName}</div>
                             {job.applicationNo && (
@@ -681,7 +733,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                             )}
                           </td>
 
-                          {/* Customer */}
                           <td className="p-2.5">
                             <div className="font-bold text-neutral-900">{job.customerName}</div>
                             {job.mobile ? (
@@ -694,7 +745,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                             )}
                           </td>
 
-                          {/* Fee */}
                           <td className="p-2.5 text-right">
                             <span className="font-black text-sm text-neutral-900 font-mono">
                               ₹{job.amount.toFixed(2)}
@@ -704,7 +754,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                             </div>
                           </td>
 
-                          {/* Payment Status with 1-click Paid toggle */}
                           <td className="p-2.5 text-center">
                             {isUnpaid ? (
                               <div className="flex flex-col items-center gap-1">
@@ -736,7 +785,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                             )}
                           </td>
 
-                          {/* Work Status with 1-click rotate */}
                           <td className="p-2.5 text-center">
                             <button
                               onClick={() => handleToggleStatus(job.id)}
@@ -768,10 +816,8 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                             </button>
                           </td>
 
-                          {/* Actions */}
                           <td className="p-2.5 text-center">
                             <div className="flex items-center justify-center gap-1">
-                              {/* WhatsApp Slip */}
                               <button
                                 onClick={() => handleSendWhatsAppReceipt(job)}
                                 className="p-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-transform active:scale-95 cursor-pointer"
@@ -780,20 +826,18 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                                 <Share2 className="w-3.5 h-3.5" />
                               </button>
 
-                              {/* Edit */}
                               <button
                                 onClick={() => setEditingJob(job)}
-                                className="p-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg cursor-pointer"
-                                title="સુધારો કરો"
+                                className="p-1.5 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-lg cursor-pointer"
+                                title="ઓર્ડર એડિટ કરો"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </button>
 
-                              {/* Delete */}
                               <button
                                 onClick={() => handleDeleteJob(job.id, job.serviceName)}
-                                className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg cursor-pointer"
-                                title="કાઢી નાખો"
+                                className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg cursor-pointer"
+                                title="ઓર્ડર ડિલીટ કરો"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
@@ -806,48 +850,38 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 </table>
               )}
             </div>
+
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* TAB 2: PORTAL EXPENSES */}
-        {/* ========================================================================= */}
+        {/* TAB 2: EXPENSES */}
         {activeTab === 'expenses' && (
           <div className="flex-1 flex flex-col p-4 overflow-hidden space-y-3">
-            <div className="bg-red-50/70 p-3 rounded-xl border border-red-200 flex items-center justify-between">
+            <div className="bg-red-50 p-3 rounded-xl border border-red-200 flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-black text-red-950 flex items-center gap-1.5">
-                  <DollarSign className="w-4 h-4 text-red-600" />
-                  <span>ઓનલાઇન સેવા કેન્દ્રના સ્વતંત્ર ખર્ચા (Portal Expenses)</span>
-                </h3>
-                <p className="text-[10px] text-red-800 font-bold mt-0.5">
-                  CSC/i-ખેડૂત વોલેટ રિચાર્જ, બ્રોડબેન્ડ ઇન્ટરનેટ, મંત્રા/મોર્ફો બાયોમેટ્રિક સાધનો અને સર્વર ફી
-                </p>
+                <h3 className="text-xs font-black text-red-950">💸 પોર્ટલ ખર્ચા & જાવક રજિસ્ટર</h3>
+                <p className="text-[10px] text-red-800">CSC વોલેટ રિચાર્જ, ઇન્ટરનેટ બિલ અને સામગ્રી ખર્ચા અહીં નોંધી શકો છો.</p>
               </div>
-
               <button
                 onClick={() => setShowAddExpenseModal(true)}
-                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 shadow-xs cursor-pointer"
+                className="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-xl text-xs font-black cursor-pointer shadow-xs"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ ખર્ચ ઉમેરો</span>
+                + નવો ખર્ચ ઉમેરો
               </button>
             </div>
 
-            {/* Expenses Table */}
             <div className="flex-1 overflow-y-auto border border-neutral-200 rounded-xl bg-white shadow-inner">
               {expenses.length === 0 ? (
                 <div className="p-12 text-center text-neutral-400 space-y-2">
                   <p className="text-3xl">💸</p>
                   <p className="font-bold text-sm text-neutral-600">હજુ સુધી કોઈ પોર્ટલ ખર્ચ નોંધાયેલ નથી</p>
-                  <p className="text-xs">વોલેટ રિચાર્જ કે અન્ય ખર્ચ ઉમેરવા ઉપર "+ ખર્ચ ઉમેરો" ક્લિક કરો.</p>
                 </div>
               ) : (
                 <table className="w-full text-left border-collapse text-xs">
-                  <thead className="bg-neutral-100 text-neutral-700 font-black sticky top-0 border-b border-neutral-200 z-10">
+                  <thead className="bg-neutral-100 text-neutral-700 font-black sticky top-0 border-b border-neutral-200">
                     <tr>
                       <th className="p-2.5">તારીખ</th>
-                      <th className="p-2.5">ખર્ચનું નામ</th>
+                      <th className="p-2.5">ખર્ચનું નામ / વિગત</th>
                       <th className="p-2.5">કેટેગરી</th>
                       <th className="p-2.5 text-right">રકમ (₹)</th>
                       <th className="p-2.5 text-center">પેમેન્ટ મોડ</th>
@@ -856,32 +890,30 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                   </thead>
                   <tbody className="divide-y divide-neutral-200 font-medium">
                     {expenses.map(exp => (
-                      <tr key={exp.id} className="hover:bg-red-50/40 transition-colors">
-                        <td className="p-2.5 font-bold text-neutral-600">{exp.date}</td>
-                        <td className="p-2.5 font-black text-neutral-900">
-                          {exp.title}
-                          {exp.notes && (
-                            <div className="text-[10px] text-neutral-500 font-normal italic mt-0.5">
-                              {exp.notes}
-                            </div>
-                          )}
-                        </td>
+                      <tr key={exp.id} className="hover:bg-red-50/40">
+                        <td className="p-2.5 font-mono text-neutral-600">{exp.date}</td>
+                        <td className="p-2.5 font-black text-neutral-900">{exp.title}</td>
                         <td className="p-2.5">
-                          <span className="bg-neutral-100 text-neutral-700 font-bold px-2 py-0.5 rounded text-[10px]">
+                          <span className="bg-neutral-100 text-neutral-800 px-2 py-0.5 rounded font-bold text-[10px]">
                             {exp.category}
                           </span>
                         </td>
-                        <td className="p-2.5 text-right font-black text-sm text-red-600 font-mono">
-                          ₹{exp.amount.toFixed(2)}
+                        <td className="p-2.5 text-right font-mono font-black text-red-600">
+                          -₹{exp.amount.toFixed(2)}
                         </td>
-                        <td className="p-2.5 text-center font-bold text-neutral-700">
-                          {exp.paymentMode}
-                        </td>
+                        <td className="p-2.5 text-center font-bold text-neutral-700">{exp.paymentMode}</td>
                         <td className="p-2.5 text-center">
                           <button
-                            onClick={() => handleDeleteExpense(exp.id)}
-                            className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg cursor-pointer"
-                            title="ડિલીટ"
+                            onClick={() => {
+                              setDeleteConfirmState({
+                                isOpen: true,
+                                type: 'expense',
+                                id: exp.id,
+                                title: exp.title
+                              });
+                            }}
+                            className="p-1.5 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg cursor-pointer"
+                            title="ખર્ચ ડિલીટ કરો"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -895,13 +927,10 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* TAB 3: DAILY LEDGER & CLOSING (દૈનિક રોજમેળ) */}
-        {/* ========================================================================= */}
+        {/* TAB 3: DAILY CLOSING */}
         {activeTab === 'daily_closing' && (
           <div className="flex-1 flex flex-col p-4 overflow-y-auto space-y-4">
             
-            {/* Date Selector & Action Strip */}
             <div className="bg-slate-900 text-white p-3.5 rounded-2xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <Calendar className="w-5 h-5 text-amber-400" />
@@ -932,9 +961,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
               </div>
             </div>
 
-            {/* KPI METRIC CARDS */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-              {/* Total Revenue */}
               <div className="bg-blue-50 border border-blue-200 p-3 rounded-xl">
                 <div className="text-[11px] font-bold text-blue-800">આજની કુલ આવક</div>
                 <div className="text-lg font-black text-blue-950 font-mono mt-0.5">
@@ -943,7 +970,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 <div className="text-[10px] text-blue-600 font-bold">{closingStats.jobsCount} કામ થયા</div>
               </div>
 
-              {/* Cash in Hand */}
               <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-xl">
                 <div className="text-[11px] font-bold text-emerald-800">💵 કાઉન્ટર કેશ રોકડા</div>
                 <div className="text-lg font-black text-emerald-950 font-mono mt-0.5">
@@ -952,7 +978,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 <div className="text-[10px] text-emerald-700 font-bold">ગલ્લામાં રોકડ</div>
               </div>
 
-              {/* Online / UPI */}
               <div className="bg-indigo-50 border border-indigo-200 p-3 rounded-xl">
                 <div className="text-[11px] font-bold text-indigo-800">📱 UPI / ઓનલાઇન</div>
                 <div className="text-lg font-black text-indigo-950 font-mono mt-0.5">
@@ -961,7 +986,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 <div className="text-[10px] text-indigo-700 font-bold">બેંક ખાતામાં જમા</div>
               </div>
 
-              {/* Pending Due */}
               <div className="bg-amber-50 border border-amber-300 p-3 rounded-xl">
                 <div className="text-[11px] font-bold text-amber-900">⚠️ ગ્રાહક બાકી રકમ</div>
                 <div className="text-lg font-black text-amber-950 font-mono mt-0.5">
@@ -970,7 +994,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 <div className="text-[10px] text-amber-700 font-bold">લેવાના બાકી</div>
               </div>
 
-              {/* Total Expenses */}
               <div className="bg-red-50 border border-red-200 p-3 rounded-xl">
                 <div className="text-[11px] font-bold text-red-800">💸 પોર્ટલ ખર્ચા</div>
                 <div className="text-lg font-black text-red-950 font-mono mt-0.5">
@@ -979,7 +1002,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 <div className="text-[10px] text-red-600 font-bold">{closingStats.expensesCount} ખર્ચા નોંધાયા</div>
               </div>
 
-              {/* Net Profit */}
               <div className={`p-3 rounded-xl border ${
                 closingStats.netProfit >= 0
                   ? 'bg-emerald-100 border-emerald-400 text-emerald-950'
@@ -993,114 +1015,106 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
               </div>
             </div>
 
-            {/* Day's Detailed Breakdown */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              
-              {/* Day's Jobs List */}
-              <div className="bg-white border border-neutral-200 rounded-xl p-3 space-y-2">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
-                    <span>📋 આજના કરેલા કામ ({closingJobs.length})</span>
-                  </h4>
-                  <span className="text-xs font-black text-blue-900">
-                    કુલ: ₹{closingStats.totalRevenue.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="max-h-60 overflow-y-auto space-y-1.5 divide-y divide-neutral-100 text-xs">
-                  {closingJobs.length === 0 ? (
-                    <p className="text-neutral-400 text-center py-4">આ તારીખે કોઈ કામ નોંધાયેલ નથી.</p>
-                  ) : (
-                    closingJobs.map(job => (
-                      <div key={job.id} className="pt-1.5 flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-neutral-900">{job.serviceName}</div>
-                          <div className="text-[10px] text-neutral-500">
-                            {job.customerName} • #{job.tokenNo} • {job.paymentMode}
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-mono font-black text-neutral-900">₹{job.amount}</div>
-                          <span className={`text-[9px] font-bold px-1 rounded ${
-                            job.paymentStatus === 'Paid' ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'
-                          }`}>
-                            {job.paymentStatus === 'Paid' ? 'Paid' : 'બાકી'}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Day's Expenses List */}
-              <div className="bg-white border border-neutral-200 rounded-xl p-3 space-y-2">
-                <div className="flex items-center justify-between border-b pb-2">
-                  <h4 className="text-xs font-black text-neutral-800 flex items-center gap-1.5">
-                    <span>💸 આજના ખર્ચા ({closingExpenses.length})</span>
-                  </h4>
-                  <span className="text-xs font-black text-red-900">
-                    કુલ: ₹{closingStats.totalExpenses.toFixed(2)}
-                  </span>
-                </div>
-
-                <div className="max-h-60 overflow-y-auto space-y-1.5 divide-y divide-neutral-100 text-xs">
-                  {closingExpenses.length === 0 ? (
-                    <p className="text-neutral-400 text-center py-4">આ તારીખે કોઈ ખર્ચ નોંધાયેલ નથી.</p>
-                  ) : (
-                    closingExpenses.map(exp => (
-                      <div key={exp.id} className="pt-1.5 flex items-center justify-between">
-                        <div>
-                          <div className="font-bold text-neutral-900">{exp.title}</div>
-                          <div className="text-[10px] text-neutral-500">
-                            {exp.category} • {exp.paymentMode}
-                          </div>
-                        </div>
-                        <div className="font-mono font-black text-red-600">
-                          -₹{exp.amount}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-            </div>
-
           </div>
         )}
 
-        {/* ========================================================================= */}
-        {/* TAB 4: SERVICES & PRICING MASTER (સર્વિસ રેટ લિસ્ટ) */}
-        {/* ========================================================================= */}
+        {/* TAB 4: SERVICES & PRICING MASTER (સર્વિસ રેટ લિસ્ટ & ફોર્મ એડિટ) */}
         {activeTab === 'services_master' && (
-          <div className="flex-1 p-4 overflow-y-auto space-y-3">
-            <div className="bg-purple-50 p-3 rounded-xl border border-purple-200">
-              <h3 className="text-xs font-black text-purple-950 flex items-center gap-1.5">
-                <Tag className="w-4 h-4 text-purple-600" />
-                <span>માનક ઓનલાઇન સેવાઓ અને સરકારી પોર્ટલ દર પત્રક</span>
-              </h3>
-              <p className="text-[10px] text-purple-800 font-bold mt-0.5">
-                નવું કામ ઉમેરતી વખતે આ માનક દરો ઓટોમેટિક ભરાશે. તમે જરૂર મુજબ ગ્રાહક દીઠ રકમ બદલી શકો છો.
-              </p>
+          <div className="flex-1 p-4 overflow-y-auto space-y-4">
+            
+            <div className="bg-purple-50 p-4 rounded-2xl border border-purple-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-black text-purple-950 flex items-center gap-1.5">
+                  <Tag className="w-4 h-4 text-purple-600" />
+                  <span>સરકારી ફોર્મ, વાસ્તુ ફોર્મ, ઝેરોક્ષ, લેમિનેશન અને સેવા રેટ માસ્ટર</span>
+                </h3>
+                <p className="text-xs text-purple-800 font-bold mt-1">
+                  તમે અહીં કોઈપણ નવી સેવા, વાસ્તુ ફોર્મ, ઝેરોક્ષ ભાવ કે કલર પ્રિન્ટ રેટ ઉમેરી, સુધારી કે ડિલીટ કરી શકો છો.
+                </p>
+              </div>
             </div>
 
+            {/* Add / Edit Service Form */}
+            <form onSubmit={handleSaveCatalogService} className="bg-white p-4 rounded-2xl border-2 border-purple-300 shadow-sm space-y-3">
+              <h4 className="text-xs font-black text-purple-900">
+                {editingCatalogService ? '✏️ સેવા અથવા ફોર્મમાં સુધારો કરો' : '➕ નવી સેવા / વાસ્તુ ફોર્મ / ઝેરોક્ષ રેટ ઉમેરો'}
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="text-xs font-bold block mb-1 text-neutral-800">સેવા / ફોર્મ / ઝેરોક્ષ નામ *</label>
+                  <input
+                    type="text"
+                    placeholder="દા.ત. વાસ્તુ ફોર્મ, કલર પ્રિન્ટ, ઝેરોક્ષ..."
+                    value={newCatalogName}
+                    onChange={e => setNewCatalogName(e.target.value)}
+                    className="w-full text-xs font-black p-2.5 border border-neutral-300 rounded-xl outline-none focus:border-purple-600"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold block mb-1 text-neutral-800">માનક દર / ફી (₹) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="50"
+                    value={newCatalogRate}
+                    onChange={e => setNewCatalogRate(e.target.value === '' ? '' : parseFloat(e.target.value))}
+                    className="w-full text-xs font-black p-2.5 border border-neutral-300 rounded-xl outline-none focus:border-purple-600 font-mono text-purple-900"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold block mb-1 text-neutral-800">કેટેગરી</label>
+                  <input
+                    type="text"
+                    placeholder="સરકારી ફોર્મ, પ્રિન્ટ / ઝેરોક્ષ..."
+                    value={newCatalogCategory}
+                    onChange={e => setNewCatalogCategory(e.target.value)}
+                    className="w-full text-xs font-black p-2.5 border border-neutral-300 rounded-xl outline-none focus:border-purple-600"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                {editingCatalogService && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCatalogService(null);
+                      setNewCatalogName('');
+                      setNewCatalogRate(50);
+                    }}
+                    className="px-4 py-2 border rounded-xl text-xs font-bold hover:bg-neutral-100 cursor-pointer"
+                  >
+                    રદ કરો
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-black shadow-md cursor-pointer active:scale-95 transition-all"
+                >
+                  {editingCatalogService ? 'સેવા અપડેટ કરો' : '+ માસ્ટરમાં ઉમેરો'}
+                </button>
+              </div>
+            </form>
+
+            {/* Services List Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {DEFAULT_SERVICES.map(srv => (
+              {customServices.map(srv => (
                 <div
                   key={srv.id}
-                  className="bg-white border border-neutral-200 p-3 rounded-xl shadow-2xs hover:border-purple-400 transition-all flex items-center justify-between"
+                  className="bg-white border border-neutral-200 p-3.5 rounded-2xl shadow-2xs hover:border-purple-400 transition-all flex items-center justify-between"
                 >
                   <div>
-                    <span className="text-[9px] bg-purple-100 text-purple-800 font-bold px-1.5 py-0.5 rounded">
+                    <span className="text-[9px] bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded">
                       {srv.category}
                     </span>
                     <h4 className="text-xs font-black text-neutral-900 mt-1">{srv.name}</h4>
-                  </div>
-                  <div className="text-right">
                     <span className="text-sm font-black font-mono text-purple-900">
                       ₹{srv.defaultRate}
                     </span>
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5">
                     <button
                       onClick={() => {
                         setNewServiceName(srv.name);
@@ -1108,10 +1122,31 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                         setActiveTab('jobs');
                         setShowAddJobModal(true);
                       }}
-                      className="block text-[10px] font-bold text-blue-600 hover:underline mt-0.5 cursor-pointer"
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black rounded-lg cursor-pointer shadow-2xs"
                     >
                       + કામ લો
                     </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setEditingCatalogService(srv);
+                          setNewCatalogName(srv.name);
+                          setNewCatalogRate(srv.defaultRate);
+                          setNewCatalogCategory(srv.category);
+                        }}
+                        className="p-1 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded text-[10px] cursor-pointer"
+                        title="એડિટ"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCatalogService(srv.id, srv.name)}
+                        className="p-1 bg-red-50 hover:bg-red-100 text-red-600 rounded text-[10px] cursor-pointer"
+                        title="ડિલીટ"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -1137,9 +1172,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
 
       </div>
 
-      {/* ========================================================================= */}
       {/* SUB-MODAL 1: CREATE NEW JOB */}
-      {/* ========================================================================= */}
       {showAddJobModal && (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-3 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border-2 border-blue-600 space-y-4 my-auto">
@@ -1149,13 +1182,13 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                   +
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-neutral-900">નવું ઓનલાઇન કામ / ટોકન ઉમેરો</h3>
-                  <p className="text-[10px] text-neutral-500 font-bold">ઓનલાઇન પોર્ટલ રજિસ્ટર</p>
+                  <h3 className="text-sm font-black text-neutral-900">નવું ઓનલાઇન સેવા કામ ઉમેરો</h3>
+                  <p className="text-[10px] text-neutral-500 font-bold">ટોકન નંબર ઓટો જનરેટ થશે</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowAddJobModal(false)}
-                className="text-neutral-400 hover:text-black p-1"
+                className="text-neutral-400 hover:text-black p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1163,40 +1196,51 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
 
             <form onSubmit={handleCreateJob} className="space-y-3 text-xs">
               
-              {/* Service Name with datalist suggestions */}
+              {/* Quick Preset Buttons in Modal */}
               <div>
-                <label className="font-bold block mb-1 text-neutral-800">સેવા / કામનું નામ *</label>
+                <label className="font-bold block mb-1 text-neutral-800">⚡ ફાસ્ટ સર્વિસ પ્રીસેટ પસંદ કરો:</label>
+                <div className="flex items-center gap-1 overflow-x-auto pb-1 no-scrollbar">
+                  {customServices.map(srv => (
+                    <button
+                      key={srv.id}
+                      type="button"
+                      onClick={() => {
+                        setNewServiceName(srv.name);
+                        setNewAmount(srv.defaultRate);
+                      }}
+                      className="px-2 py-1 bg-neutral-100 hover:bg-blue-600 hover:text-white rounded border border-neutral-300 text-[10px] font-bold whitespace-nowrap cursor-pointer transition-colors"
+                    >
+                      {srv.name} (₹{srv.defaultRate})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold block mb-1 text-neutral-800">સેવા / ફોર્મ / કામનું નામ *</label>
                 <input
-                  list="services-suggestion-list"
                   type="text"
-                  placeholder="દા.ત. i-ખેડૂત પોર્ટલ અરજી, પાન કાર્ડ, આધાર..."
+                  placeholder="દા.ત. i-ખેડૂત અરજી, વાસ્તુ ફોર્મ, ઝેરોક્ષ..."
                   value={newServiceName}
                   onChange={e => setNewServiceName(e.target.value)}
                   className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-600"
                   required
                 />
-                <datalist id="services-suggestion-list">
-                  {DEFAULT_SERVICES.map(s => (
-                    <option key={s.id} value={s.name} />
-                  ))}
-                </datalist>
               </div>
 
-              {/* Customer Name & Mobile */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold block mb-1 text-neutral-800">ગ્રાહકનું નામ</label>
                   <input
                     type="text"
-                    placeholder="દા.ત. રમેશભાઈ ચૌધરી"
+                    placeholder="દા.ત. રમેશભાઈ પટેલ"
                     value={newCustomerName}
                     onChange={e => setNewCustomerName(e.target.value)}
                     className="w-full font-bold p-2 border border-neutral-300 rounded-lg outline-none focus:border-blue-600"
                   />
                 </div>
-
                 <div>
-                  <label className="font-bold block mb-1 text-neutral-800">મોબાઇલ નંબર</label>
+                  <label className="font-bold block mb-1 text-neutral-800">ગ્રાહક મોબાઇલ નં</label>
                   <input
                     type="tel"
                     placeholder="દા.ત. 9876543210"
@@ -1207,7 +1251,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 </div>
               </div>
 
-              {/* Fee Amount & Payment Mode */}
               <div className="grid grid-cols-3 gap-2">
                 <div>
                   <label className="font-bold block mb-1 text-neutral-800">ભાવ / ફી (₹) *</label>
@@ -1253,7 +1296,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 </div>
               </div>
 
-              {/* Application / Token / Ref No */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="font-bold block mb-1 text-neutral-800">અરજી / એકનોલેજમેન્ટ નં (જો હોય તો)</label>
@@ -1277,7 +1319,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 </div>
               </div>
 
-              {/* Notes */}
               <div>
                 <label className="font-bold block mb-1 text-neutral-800">વિશેષ નોંધ (વૈકલ્પિક)</label>
                 <input
@@ -1289,7 +1330,6 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 />
               </div>
 
-              {/* Form Buttons */}
               <div className="pt-2 flex items-center justify-end gap-2 border-t">
                 <button
                   type="button"
@@ -1311,9 +1351,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
       {/* SUB-MODAL 2: EDIT JOB */}
-      {/* ========================================================================= */}
       {editingJob && (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-3 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-lg w-full p-5 shadow-2xl border-2 border-indigo-600 space-y-4 my-auto">
@@ -1452,9 +1490,7 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
       {/* SUB-MODAL 3: ADD EXPENSE */}
-      {/* ========================================================================= */}
       {showAddExpenseModal && (
         <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-3 overflow-y-auto">
           <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl border-2 border-red-600 space-y-4 my-auto">
@@ -1563,6 +1599,54 @@ export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* IN-APP CONFIRM DELETE MODAL */}
+      {deleteConfirmState && deleteConfirmState.isOpen && (
+        <div className="fixed inset-0 bg-black/75 z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-5 max-w-sm w-full border-2 border-red-600 shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
+            <div className="flex items-center gap-3 text-red-600">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center font-black">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-black text-sm text-neutral-900">ડિલીટ કરવાની પુષ્ટિ કરો</h3>
+                <p className="text-[10px] text-neutral-500 font-bold">આ રેકોર્ડ કાયમી ડિલીટ થશે</p>
+              </div>
+            </div>
+            <p className="text-xs font-bold text-neutral-700 bg-red-50 p-2.5 rounded-xl border border-red-200">
+              શું તમે <b>"{deleteConfirmState.title}"</b> રેકોર્ડમાંથી ડિલીટ કરવા માંગો છો?
+            </p>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmState(null)}
+                className="px-4 py-2 border rounded-xl text-xs font-bold text-neutral-700 hover:bg-neutral-100 cursor-pointer"
+              >
+                રદ કરો
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteConfirmState.type === 'catalog') {
+                    setCustomServices(prev => prev.filter(s => s.id !== deleteConfirmState.id));
+                    showToast('🗑️ સેવા માસ્ટર લિસ્ટમાંથી હટાવાઈ.');
+                  } else if (deleteConfirmState.type === 'job') {
+                    onUpdateJobs(prev => prev.filter(j => j.id !== deleteConfirmState.id));
+                    showToast('🗑️ ઓનલાઇન કામ ડિલીટ થઈ ગયું.');
+                  } else if (deleteConfirmState.type === 'expense') {
+                    onUpdateExpenses(prev => prev.filter(e => e.id !== deleteConfirmState.id));
+                    showToast('🗑️ ખર્ચ ડિલીટ થઈ ગયો.');
+                  }
+                  setDeleteConfirmState(null);
+                }}
+                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-black shadow-md cursor-pointer active:scale-95 transition-all"
+              >
+                હા, ડિલીટ કરો
+              </button>
+            </div>
           </div>
         </div>
       )}
