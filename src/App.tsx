@@ -58,10 +58,11 @@ import {
   RefreshCw,
   ShoppingBag,
   Landmark,
-  Database
+  Database,
+  Globe
 } from 'lucide-react';
 
-import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem, BankAccountEntry, ShopBillRecord } from './types';
+import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem, BankAccountEntry, ShopBillRecord, OnlineServiceJob, OnlineServiceExpense } from './types';
 import { DEFAULT_STORE_SETTINGS, INITIAL_PRODUCTS, INITIAL_STATS, INITIAL_ORDERS, INITIAL_PRINT_JOBS } from './data';
 import { InvoiceModal } from './components/InvoiceModal';
 import { CartDrawer } from './components/CartDrawer';
@@ -79,6 +80,7 @@ import { StoreSettingsModal } from './components/StoreSettingsModal';
 import { XeroxOrderWidget } from './components/XeroxOrderWidget';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
 import { OnlineOrdersModal } from './components/OnlineOrdersModal';
+import { OnlineServicesPortalModal } from './components/OnlineServicesPortalModal';
 import { BankCurrentAccountModal } from './components/BankCurrentAccountModal';
 import { ShopRentAndBillsModal } from './components/ShopRentAndBillsModal';
 import { CustomerUploadQrModal } from './components/CustomerUploadQrModal';
@@ -89,6 +91,7 @@ import { StoryWidget } from './components/StoryWidget';
 import { ProductDetailModal } from './components/ProductDetailModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
+import { getItemReviewStats } from './utils/reviewHelper';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll, clearAllDeletedIds } from './hooks/useFirebaseSync';
 import {
@@ -354,12 +357,17 @@ export default function App() {
   const getActiveKhataAccountsSetter = () => activeShopMode === 'professional' ? setProfessionalKhataAccounts : setKhataAccounts;
   const getActiveKhataTransactionsSetter = () => activeShopMode === 'professional' ? setProfessionalKhataTransactions : setKhataTransactions;
   
+  // Standalone Online Services / CSC Portal State (સ્ટેશનરીથી સંપૂર્ણ અલગ ખાતું & રોજમેળ)
+  const [onlineServicesJobs, setOnlineServicesJobs] = useFirebaseSync<OnlineServiceJob[]>('online_services_jobs', 'prisha_online_jobs_v1', []);
+  const [onlineServicesExpenses, setOnlineServicesExpenses] = useFirebaseSync<OnlineServiceExpense[]>('online_services_expenses', 'prisha_online_expenses_v1', []);
+  const [showOnlineServicesPortalModal, setShowOnlineServicesPortalModal] = useState<boolean>(false);
+
   const [showAdminMenuDropdown, setShowAdminMenuDropdown] = useState<boolean>(false);
 
   // Search & Filter Category
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [sortOption, setSortOption] = useState<'default' | 'price_low' | 'price_high' | 'latest' | 'wishlist'>('default');
+  const [sortOption, setSortOption] = useState<'default' | 'price_low' | 'price_high' | 'latest' | 'wishlist' | 'reviews_high'>('default');
   const [wishlist, setWishlist] = useState<string[]>(() => {
     try {
       const stored = localStorage.getItem('prisha_wishlist');
@@ -1031,12 +1039,6 @@ export default function App() {
       });
 
     getActivePosSetter()(updateUnitFn);
-    setPosItems(updateUnitFn);
-    setProfessionalPosItems(updateUnitFn);
-    if (activeStoreMode === 'gst') {
-      setGstPosItems(updateUnitFn);
-      setProfessionalGstPosItems(updateUnitFn);
-    }
     showToast(`🏷️ એકમ બદલાઈને "${cleanUnit}" થયો!`);
   };
 
@@ -1070,12 +1072,6 @@ export default function App() {
 
       const updateAllFn = (prev: ProductItem[]) => prev.map(p => (p.id === updatedItem.id ? updatedItem : p));
       getActivePosSetter()(updateAllFn);
-      setPosItems(updateAllFn);
-      setProfessionalPosItems(updateAllFn);
-      if (activeStoreMode === 'gst') {
-        setGstPosItems(updateAllFn);
-        setProfessionalGstPosItems(updateAllFn);
-      }
       showToast(`✏️ "${updatedItem.nameGu}" (${updatedItem.unit}) સેવ થઈ ગયું!`);
       setEditingItem(null);
     }
@@ -1261,7 +1257,7 @@ export default function App() {
     const totalProfit = cart.reduce((sum, item) => sum + (Math.max(0, item.product.price - item.product.costPrice) * item.quantity), 0);
 
     // Deduct stock
-    setPosItems(prev =>
+    getActivePosSetter()(prev =>
       prev.map(p => {
         const inC = cart.find(c => c.product.id === p.id);
         if (inC && typeof p.stock === 'number') {
@@ -1890,7 +1886,7 @@ export default function App() {
   const handleDirectStockUpdate = (productId: string, newStockVal: string) => {
     const parsed = Number(newStockVal);
     const validStock = isNaN(parsed) ? 0 : Math.max(0, parsed);
-    setPosItems(prev =>
+    getActivePosSetter()(prev =>
       prev.map(p => {
         if (p.id === productId) {
           return {
@@ -2282,6 +2278,11 @@ export default function App() {
     if (sortOption === 'price_low') return (a.price || 0) - (b.price || 0);
     if (sortOption === 'price_high') return (b.price || 0) - (a.price || 0);
     if (sortOption === 'latest') return (b.createdAt || 0) - (a.createdAt || 0);
+    if (sortOption === 'reviews_high') {
+      const revA = getItemReviewStats(a).reviewCount;
+      const revB = getItemReviewStats(b).reviewCount;
+      return revB - revA;
+    }
     // default
     return (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999);
   });
@@ -2525,6 +2526,16 @@ export default function App() {
             >
               <Truck className="w-3.5 h-3.5 text-white" />
               <span>ઓર્ડર ટ્રેક કરો (Track)</span>
+            </button>
+
+            {/* ONLINE SERVICES & CSC DIGITAL PORTAL BUTTON */}
+            <button
+              onClick={() => setShowOnlineServicesPortalModal(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+              title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
+            >
+              <Globe className="w-3.5 h-3.5 text-amber-300" />
+              <span>🌐 ઓનલાઇન સેવા પોર્ટલ</span>
             </button>
 
 
@@ -2889,6 +2900,7 @@ export default function App() {
                     className="appearance-none pl-8 pr-6 py-2 bg-neutral-50 border border-neutral-300 rounded-xl text-xs font-bold text-neutral-700 focus:border-blue-700 outline-none cursor-pointer"
                   >
                     <option value="default">ક્રમ મુજબ (Default)</option>
+                    <option value="reviews_high">⭐ સૌથી વધુ રિવ્યૂ & લોકપ્રિય (Popular)</option>
                     <option value="price_low">સસ્તું પહેલા (Price: Low - High)</option>
                     <option value="price_high">મોંઘુ પહેલા (Price: High - Low)</option>
                     <option value="latest">નવી પ્રોડક્ટ (Latest)</option>
@@ -3138,11 +3150,16 @@ export default function App() {
                       </p>
 
                       {/* 5-Star Rating & Review Count */}
-                      <div className="flex items-center gap-1 mt-1 text-[10px] font-bold text-amber-800">
-                        <span className="text-amber-500 text-xs leading-none">★</span>
-                        <span>4.9</span>
-                        <span className="text-neutral-400 font-medium">(7 રિવ્યૂ)</span>
-                      </div>
+                      {(() => {
+                        const reviewStats = getItemReviewStats(item);
+                        return (
+                          <div className="flex items-center gap-1 mt-1 text-[10px] font-bold text-amber-800">
+                            <span className="text-amber-500 text-xs leading-none">★</span>
+                            <span>{reviewStats.ratingFormatted}</span>
+                            <span className="text-neutral-400 font-medium">({reviewStats.reviewCount} રિવ્યૂ)</span>
+                          </div>
+                        );
+                      })()}
                       
                       {/* Bulk Pricing / Offer Note (Admin Only) */}
                       {isAdminUnlocked && item.bulkPricing && (
@@ -3370,6 +3387,17 @@ export default function App() {
 
             {/* ALL QUICK ADMIN ACTION BUTTONS - DISPLAYED DIRECTLY OUTSIDE IN THE OPEN */}
             <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+              {/* 0. 🌐 ઓનલાઇન સેવા & ડિજિટલ પોર્ટલ (સંપૂર્ણ અલગ ખાતું) */}
+              <button
+                type="button"
+                onClick={() => setShowOnlineServicesPortalModal(true)}
+                className="bg-indigo-900 hover:bg-indigo-800 text-amber-300 border-2 border-indigo-500 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95 ring-2 ring-indigo-400/30"
+                title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
+              >
+                <Globe className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>🌐 ઓનલાઇન સેવા પોર્ટલ ({onlineServicesJobs.length})</span>
+              </button>
+
               {/* 1. 📲 ફાઇલ અપલોડ QR & લિંક */}
               <button
                 type="button"
@@ -6362,6 +6390,21 @@ export default function App() {
           rojmelEntries={currentRojmel}
           storeSettings={storeSettings}
           showToast={showToast}
+        />
+      )}
+
+      {/* 13.D ONLINE SERVICES & CSC DIGITAL PORTAL MODAL */}
+      {showOnlineServicesPortalModal && (
+        <OnlineServicesPortalModal
+          isOpen={showOnlineServicesPortalModal}
+          onClose={() => setShowOnlineServicesPortalModal(false)}
+          jobs={onlineServicesJobs}
+          onUpdateJobs={setOnlineServicesJobs}
+          expenses={onlineServicesExpenses}
+          onUpdateExpenses={setOnlineServicesExpenses}
+          storeSettings={storeSettings}
+          showToast={showToast}
+          isAdminUnlocked={isAdminUnlocked}
         />
       )}
 

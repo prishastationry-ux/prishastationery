@@ -440,3 +440,30 @@ export interface ShopBillRecord {
   createdAt: number;
   syncToRojmel?: boolean;
 }
+
+export interface OnlineServiceJob {
+  id: string;
+  tokenNo: string;
+  serviceName: string;
+  customerName: string;
+  mobile: string;
+  amount: number;
+  paymentMode: 'Cash' | 'UPI' | 'બાકી';
+  paymentStatus: 'Paid' | 'Pending';
+  status: 'completed' | 'pending' | 'in_progress';
+  date: string; // DD/MM/YYYY
+  applicationNo?: string;
+  notes?: string;
+  createdAt: number;
+}
+
+export interface OnlineServiceExpense {
+  id: string;
+  title: string;
+  amount: number;
+  category: string;
+  date: string; // DD/MM/YYYY
+  paymentMode: 'Cash' | 'UPI' | 'Bank';
+  notes?: string;
+  createdAt: number;
+}
