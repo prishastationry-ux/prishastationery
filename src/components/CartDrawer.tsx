@@ -63,6 +63,7 @@ interface CartDrawerProps {
   onClearCart: () => void;
   storeSettings: StoreSettings;
   onConfirmOrder: (orderDetails: CustomerOrderPayload) => void;
+  isAdminUnlocked?: boolean;
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({
@@ -72,7 +73,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
   onUpdateQty,
   onRemoveItem,
   storeSettings,
-  onConfirmOrder
+  onConfirmOrder,
+  isAdminUnlocked = false
 }) => {
   // Step in Checkout: 1 = Review Cart, 2 = Customer Info & Payment
   const [step, setStep] = useState<1 | 2>(1);
@@ -122,6 +124,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     cartTotal >= storeSettings.deliveryFreeAbove
   );
 
+  // Is this order a shop counter / cash / admin logged-in order?
+  const isZeroFeeOrder = isAdminUnlocked === true || paymentMode === 'Cash' || deliveryType === 'pickup';
+
   const coverCharge = storeSettings.deliveryCoverCharge ?? 50;
   const parcelPerKgCharge = storeSettings.deliveryChargePerKg ?? 100;
   const rawDeliveryCharge = deliveryType === 'pickup'
@@ -129,18 +134,17 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     : deliveryType === 'cover'
       ? coverCharge
       : (parcelPerKgCharge * Math.max(1, packageWeightKg));
-  const deliveryCharge = (deliveryType === 'pickup' || storeSettings.deliveryChargeEnabled === false || isFreeDelivery)
+  const deliveryCharge = (isZeroFeeOrder || storeSettings.deliveryChargeEnabled === false || isFreeDelivery)
     ? 0
     : rawDeliveryCharge;
 
-  const isCashOrPickup = paymentMode === 'Cash' || deliveryType === 'pickup';
-  const platformFee = (storeSettings.platformFeeEnabled === true && (storeSettings.platformFeeAmount || 0) > 0 && !isCashOrPickup)
+  const platformFee = (storeSettings.platformFeeEnabled === true && (storeSettings.platformFeeAmount || 0) > 0 && !isZeroFeeOrder)
     ? (storeSettings.platformFeeAmount || 0)
     : 0;
-  const packingCharge = (deliveryType === 'pickup' || storeSettings.packingChargeEnabled === false)
+  const packingCharge = (isZeroFeeOrder || storeSettings.packingChargeEnabled === false)
     ? 0
     : (storeSettings.packingChargeAmount ?? 30);
-  const otherFee = (storeSettings.otherFeeEnabled && (storeSettings.otherFeeAmount || 0) > 0) ? (storeSettings.otherFeeAmount || 0) : 0;
+  const otherFee = (!isZeroFeeOrder && storeSettings.otherFeeEnabled && (storeSettings.otherFeeAmount || 0) > 0) ? (storeSettings.otherFeeAmount || 0) : 0;
   const discountAmount = appliedPromo ? appliedPromo.discount : 0;
 
   // Final Payable Grand Total (Before Payment)

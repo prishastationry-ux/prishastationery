@@ -4648,6 +4648,7 @@ export default function App() {
         onClearCart={() => setCart([])}
         storeSettings={storeSettings}
         onConfirmOrder={handleCustomerConfirmOrder}
+        isAdminUnlocked={isAdminUnlocked}
       />
 
       {/* ========================================================================= */}
