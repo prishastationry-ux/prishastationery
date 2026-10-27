@@ -5,7 +5,32 @@ import { initializeApp, getApps } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+// Parse command line arguments (e.g. tsx server.ts --port 3000 --host 0.0.0.0)
+const argv = process.argv.slice(2);
+let portFromArgs: number | null = null;
+let hostFromArgs: string | null = null;
+
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === '--port' || argv[i] === '-p') {
+    const val = parseInt(argv[i + 1], 10);
+    if (!isNaN(val)) portFromArgs = val;
+  }
+  if (argv[i] === '--host' || argv[i] === '-h') {
+    if (argv[i + 1]) hostFromArgs = argv[i + 1];
+  }
+}
+
+const PORT = portFromArgs || (process.env.PORT ? parseInt(process.env.PORT, 10) : 3000);
+const HOST = hostFromArgs || process.env.HOST || '0.0.0.0';
+
+process.on('uncaughtException', (err) => {
+  console.error('Server Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Server Unhandled Rejection at:', promise, 'reason:', reason);
+});
 
 // Increase body limit for large 4K file chunk uploads
 app.use(express.json({ limit: '50mb' }));
@@ -469,8 +494,8 @@ async function start() {
     }
   }
 
-  const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Prisha Stationery Multi-Platform Server active on http://0.0.0.0:${PORT}`);
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`Prisha Stationery Multi-Platform Server active on http://${HOST}:${PORT}`);
   });
 
   process.on('SIGTERM', () => {

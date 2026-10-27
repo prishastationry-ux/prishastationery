@@ -27,9 +27,8 @@ import {
 import * as XLSX from 'xlsx';
 import { OnlineServiceJob, OnlineServiceExpense, StoreSettings } from '../types';
 
-interface OnlineServicesPortalModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+interface OnlineServicesPortalProps {
+  onNavigateBack: () => void;
   jobs: OnlineServiceJob[];
   onUpdateJobs: (updater: (prev: OnlineServiceJob[]) => OnlineServiceJob[]) => void;
   expenses: OnlineServiceExpense[];
@@ -59,9 +58,8 @@ const DEFAULT_SERVICES = [
   { id: 'srv_16', name: 'સરકારી ભરતી ઓનલાઇન ફોર્મ', defaultRate: 100, category: 'ભરતી ફોર્મ' },
 ];
 
-export const OnlineServicesPortalModal: React.FC<OnlineServicesPortalModalProps> = ({
-  isOpen,
-  onClose,
+export const OnlineServicesPortal: React.FC<OnlineServicesPortalProps> = ({
+  onNavigateBack,
   jobs = [],
   onUpdateJobs,
   expenses = [],
@@ -70,7 +68,7 @@ export const OnlineServicesPortalModal: React.FC<OnlineServicesPortalModalProps>
   showToast,
   isAdminUnlocked
 }) => {
-  if (!isOpen) return null;
+  // if (!isOpen) return null; // Removed
 
   const todayStr = useMemo(() => {
     const d = new Date();
@@ -440,8 +438,8 @@ export const OnlineServicesPortalModal: React.FC<OnlineServicesPortalModalProps>
   }, [closingJobs, closingExpenses]);
 
   return (
-    <div className="fixed inset-0 bg-black/85 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto no-print">
-      <div className="bg-white rounded-2xl max-w-6xl w-full shadow-2xl border border-neutral-300 flex flex-col max-h-[92vh] overflow-hidden my-auto">
+    <div className="w-full h-full bg-white flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col w-full max-w-6xl mx-auto bg-white">
         
         {/* MODAL HEADER */}
         <div className="bg-gradient-to-r from-blue-950 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-blue-900 shrink-0">
@@ -475,7 +473,7 @@ export const OnlineServicesPortalModal: React.FC<OnlineServicesPortalModalProps>
             </button>
 
             <button
-              onClick={onClose}
+              onClick={onNavigateBack}
               className="text-neutral-400 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
             >
               <X className="w-6 h-6" />
@@ -1130,7 +1128,7 @@ export const OnlineServicesPortalModal: React.FC<OnlineServicesPortalModalProps>
           </div>
 
           <button
-            onClick={onClose}
+            onClick={onNavigateBack}
             className="px-4 py-1.5 bg-neutral-800 hover:bg-neutral-900 text-white rounded-xl text-xs font-black shadow-xs cursor-pointer"
           >
             બંધ કરો
@@ -1572,4 +1570,4 @@ export const OnlineServicesPortalModal: React.FC<OnlineServicesPortalModalProps>
     </div>
   );
 };
-export default OnlineServicesPortalModal;
+export default OnlineServicesPortal;

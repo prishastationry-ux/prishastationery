@@ -80,7 +80,7 @@ import { StoreSettingsModal } from './components/StoreSettingsModal';
 import { XeroxOrderWidget } from './components/XeroxOrderWidget';
 import { AdminPrintJobsModal } from './components/AdminPrintJobsModal';
 import { OnlineOrdersModal } from './components/OnlineOrdersModal';
-import { OnlineServicesPortalModal } from './components/OnlineServicesPortalModal';
+import { OnlineServicesPortal } from './components/OnlineServicesPortal';
 import { BankCurrentAccountModal } from './components/BankCurrentAccountModal';
 import { ShopRentAndBillsModal } from './components/ShopRentAndBillsModal';
 import { CustomerUploadQrModal } from './components/CustomerUploadQrModal';
@@ -142,7 +142,7 @@ export default function App() {
   const [orderFileProgress, setOrderFileProgress] = useState(0);
   const [orderFileBlobUrl, setOrderFileBlobUrl] = useState<string | null>(null);
   // Navigation View: Default to 'customer' for all visitors
-  const [activeTab, setActiveTab] = useState<'customer' | 'admin' | 'gst_bill' | 'purchase' | 'expenses' | 'settings'>('customer');
+  const [activeTab, setActiveTab] = useState<'customer' | 'admin' | 'gst_bill' | 'purchase' | 'expenses' | 'settings' | 'portal'>('customer');
   
   // Admin Password & Lock State (Default: Bharat@1994)
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(false);
@@ -360,7 +360,6 @@ export default function App() {
   // Standalone Online Services / CSC Portal State (સ્ટેશનરીથી સંપૂર્ણ અલગ ખાતું & રોજમેળ)
   const [onlineServicesJobs, setOnlineServicesJobs] = useFirebaseSync<OnlineServiceJob[]>('online_services_jobs', 'prisha_online_jobs_v1', []);
   const [onlineServicesExpenses, setOnlineServicesExpenses] = useFirebaseSync<OnlineServiceExpense[]>('online_services_expenses', 'prisha_online_expenses_v1', []);
-  const [showOnlineServicesPortalModal, setShowOnlineServicesPortalModal] = useState<boolean>(false);
 
   const [showAdminMenuDropdown, setShowAdminMenuDropdown] = useState<boolean>(false);
 
@@ -2339,6 +2338,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 1. PROFESSIONAL AMAZON / FLIPKART STYLE TOP HEADER */}
       {/* ========================================================================= */}
+      {activeTab !== 'portal' && (
       <header className="bg-white border-b border-neutral-300 shadow-xs no-print sticky top-0 z-40">
         <div className="max-w-[1550px] mx-auto px-2 sm:px-4 py-1.5 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-3">
           
@@ -2530,7 +2530,7 @@ export default function App() {
 
             {/* ONLINE SERVICES & CSC DIGITAL PORTAL BUTTON */}
             <button
-              onClick={() => setShowOnlineServicesPortalModal(true)}
+              onClick={() => setActiveTab('portal')}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
               title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
             >
@@ -2593,6 +2593,7 @@ export default function App() {
           </div>
         </div>
       </header>
+      )}
 
       {/* FLOATING ACTION NOTICES */}
       {toastMessage && (
@@ -2845,7 +2846,18 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 3. MAIN BODY: CUSTOMER E-COMMERCE VIEW (DEFAULT) */}
       {/* ========================================================================= */}
-      {activeTab === 'customer' ? (
+      {activeTab === 'portal' ? (
+        <OnlineServicesPortal
+          onNavigateBack={() => setActiveTab('customer')}
+          jobs={onlineServicesJobs}
+          onUpdateJobs={setOnlineServicesJobs}
+          expenses={onlineServicesExpenses}
+          onUpdateExpenses={setOnlineServicesExpenses}
+          storeSettings={storeSettings}
+          showToast={showToast}
+          isAdminUnlocked={isAdminUnlocked}
+        />
+      ) : (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
           {/* ROTATING BANNER SLIDER & STORIES WIDGET (Configured in Store Settings) */}
@@ -3276,13 +3288,7 @@ export default function App() {
 
           </div>
 
-        </main>
-      ) : (
-        /* ========================================================================= */
-        /* 5. ADMIN CONTROL DASHBOARD & BILLING COUNTER */
-        /* ========================================================================= */
-        <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
-          
+
           {/* ADMIN TOP CONTROL BAR */}
           {/* ADMIN TOP CONTROL BAR */}
           <div className="bg-white p-4 rounded-2xl border border-neutral-300 shadow-2xs space-y-3">
@@ -3390,7 +3396,7 @@ export default function App() {
               {/* 0. 🌐 ઓનલાઇન સેવા & ડિજિટલ પોર્ટલ (સંપૂર્ણ અલગ ખાતું) */}
               <button
                 type="button"
-                onClick={() => setShowOnlineServicesPortalModal(true)}
+                onClick={() => setActiveTab('portal')}
                 className="bg-indigo-900 hover:bg-indigo-800 text-amber-300 border-2 border-indigo-500 px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95 ring-2 ring-indigo-400/30"
                 title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
               >
@@ -6390,21 +6396,6 @@ export default function App() {
           rojmelEntries={currentRojmel}
           storeSettings={storeSettings}
           showToast={showToast}
-        />
-      )}
-
-      {/* 13.D ONLINE SERVICES & CSC DIGITAL PORTAL MODAL */}
-      {showOnlineServicesPortalModal && (
-        <OnlineServicesPortalModal
-          isOpen={showOnlineServicesPortalModal}
-          onClose={() => setShowOnlineServicesPortalModal(false)}
-          jobs={onlineServicesJobs}
-          onUpdateJobs={setOnlineServicesJobs}
-          expenses={onlineServicesExpenses}
-          onUpdateExpenses={setOnlineServicesExpenses}
-          storeSettings={storeSettings}
-          showToast={showToast}
-          isAdminUnlocked={isAdminUnlocked}
         />
       )}
 
