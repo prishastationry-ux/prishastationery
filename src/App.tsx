@@ -2535,15 +2535,17 @@ export default function App() {
               <span>ઓર્ડર ટ્રેક કરો (Track)</span>
             </button>
 
-            {/* ONLINE SERVICES & CSC DIGITAL PORTAL BUTTON */}
-            <button
-              onClick={() => setActiveTab('portal')}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
-              title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
-            >
-              <Globe className="w-3.5 h-3.5 text-amber-300" />
-              <span>ઓનલાઇન સેવા પોર્ટલ</span>
-            </button>
+            {/* ONLINE SERVICES & CSC DIGITAL PORTAL BUTTON (ADMIN ONLY) */}
+            {isAdminUnlocked && (
+              <button
+                onClick={() => setActiveTab('portal')}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all"
+                title="ઓનલાઇન સેવા કેન્દ્ર & CSC ડિજિટલ પોર્ટલ (i-ખેડૂત, પાન, આધાર, સરકારી ફોર્મ હિસાબ)"
+              >
+                <Globe className="w-3.5 h-3.5 text-amber-300" />
+                <span>ઓનલાઇન સેવા પોર્ટલ</span>
+              </button>
+            )}
 
 
 
@@ -2856,7 +2858,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 3. MAIN BODY: CUSTOMER E-COMMERCE VIEW (DEFAULT) */}
       {/* ========================================================================= */}
-      {activeTab === 'portal' && activeShopMode === 'general' ? (
+      {isAdminUnlocked && activeTab === 'portal' && activeShopMode === 'general' ? (
         <OnlineServicesPortal
           onNavigateBack={() => setActiveTab('customer')}
           jobs={onlineServicesJobs}
@@ -2867,7 +2869,7 @@ export default function App() {
           showToast={showToast}
           isAdminUnlocked={isAdminUnlocked}
         />
-      ) : activeTab === 'customer' ? (
+      ) : (activeTab === 'customer' || !isAdminUnlocked) ? (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
           
           {/* ROTATING BANNER SLIDER & STORIES WIDGET (Configured in Store Settings) */}
