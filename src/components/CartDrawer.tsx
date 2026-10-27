@@ -133,7 +133,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     ? 0
     : rawDeliveryCharge;
 
-  const platformFee = (storeSettings.platformFeeEnabled === true && (storeSettings.platformFeeAmount || 0) > 0)
+  const isCashOrPickup = paymentMode === 'Cash' || deliveryType === 'pickup';
+  const platformFee = (storeSettings.platformFeeEnabled === true && (storeSettings.platformFeeAmount || 0) > 0 && !isCashOrPickup)
     ? (storeSettings.platformFeeAmount || 0)
     : 0;
   const packingCharge = (deliveryType === 'pickup' || storeSettings.packingChargeEnabled === false)
@@ -230,11 +231,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
 
   const handleSubmitOrder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!customerName.trim()) {
-      setFormError('⚠️ કૃપા કરીને તમારું પૂરું નામ દાખલ કરો.');
-      return;
-    }
-    if (!mobile.trim() || mobile.trim().length < 10) {
+    
+    // Default name to "Happy Customer" if empty
+    const finalCustomerName = customerName.trim() || 'Happy Customer';
+    const finalMobile = mobile.trim();
+
+    if (finalMobile && finalMobile.length < 10) {
       setFormError('⚠️ કૃપા કરીને માન્ય ૧૦ આંકડાનો મોબાઇલ નંબર દાખલ કરો.');
       return;
     }
@@ -289,8 +291,8 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
     setFormError('');
 
     onConfirmOrder({
-      customerName: customerName.trim(),
-      mobile: mobile.trim(),
+      customerName: finalCustomerName,
+      mobile: finalMobile,
       address: fullAddress,
       state: stateVal,
       district: districtVal,
@@ -711,31 +713,38 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({
                 </h4>
 
                 <div>
-                  <label className="text-[11px] font-bold text-neutral-700 block mb-1">
-                    તમારું પૂરું નામ (Full Name) *
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-neutral-700 block">
+                      તમારું પૂરું નામ (Full Name)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setCustomerName('Happy Customer')}
+                      className="text-[10px] font-black bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-2 py-0.5 rounded transition-colors cursor-pointer"
+                    >
+                      😊 Happy Customer
+                    </button>
+                  </div>
                   <input
                     type="text"
-                    placeholder="દા.ત. ભરતભાઈ પટેલ"
+                    placeholder="ખાલી રાખશો તો 'Happy Customer' લખાશે"
                     value={customerName}
                     onChange={e => setCustomerName(e.target.value)}
                     className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                    required
                   />
                 </div>
 
                 <div>
                   <label className="text-[11px] font-bold text-neutral-700 block mb-1">
-                    મોબાઇલ નંબર (Mobile No) *
+                    મોબાઇલ નંબર (Mobile No - વૈકલ્પિક)
                   </label>
                   <input
                     type="tel"
-                    placeholder="દા.ત. 9825012345"
+                    placeholder="વૈકલ્પિક (ખાલી રાખી શકો છો)"
                     value={mobile}
                     maxLength={10}
                     onChange={e => setMobile(e.target.value.replace(/\D/g, ''))}
                     className="w-full text-xs font-bold p-2.5 bg-white border border-neutral-300 rounded-lg focus:border-blue-700 outline-none"
-                    required
                   />
                 </div>
               </div>

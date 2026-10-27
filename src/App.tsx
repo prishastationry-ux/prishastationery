@@ -2175,8 +2175,8 @@ export default function App() {
       id: `ord-${Date.now()}`,
       invoiceNo: orderId,
       date: dateFormatted,
-      customerName: posCustomerName || 'Walk-in Customer (કાઉન્ટર)',
-      mobile: posCustomerMobile || storeSettings.phone,
+      customerName: posCustomerName.trim() || 'Happy Customer',
+      mobile: posCustomerMobile.trim() || '',
       address: 'દુકાન કાઉન્ટર - થરાદ',
       items: billItems.map(b => {
         const prod = b.productId ? currentPosItems.find(p => p.id === b.productId) : undefined;
