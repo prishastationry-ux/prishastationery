@@ -278,14 +278,23 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     return val;
   };
 
+  const isLedgerCollection =
+    localKey.includes('orders') ||
+    localKey.includes('bank') ||
+    localKey.includes('rojmel') ||
+    localKey.includes('khata') ||
+    localKey.includes('expenses') ||
+    localKey.includes('purchases') ||
+    localKey.includes('trash');
+
   const [data, setData] = useState<T>(() => {
-    // Rescue orders: clear any auto-generated deleted IDs for order collections
-    if (typeof window !== 'undefined' && localKey.includes('orders')) {
+    // Rescue orders & financial ledgers: clear any auto-generated deleted IDs for ledger collections
+    if (typeof window !== 'undefined' && isLedgerCollection) {
       try {
         localStorage.removeItem(localKey + '_deleted_ids');
       } catch (e) {}
     }
-    const deletedIds = getDeletedIds(localKey);
+    const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
     let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
     let initialVal = initialData;
     if (saved) {
@@ -335,7 +344,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           const rawData = snapData?.data;
           const cloudDeletedIds: string[] = snapData?.deletedIds || [];
           
-          if (cloudDeletedIds.length > 0) {
+          if (cloudDeletedIds.length > 0 && !isLedgerCollection) {
             const curDeleted = getDeletedIds(localKey);
             let updated = false;
             cloudDeletedIds.forEach(id => {
@@ -350,7 +359,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           if (rawData !== undefined && rawData !== null) {
             const rawCleaned = filterMockData(rawData);
             setData((prevData) => {
-              const deletedIds = getDeletedIds(localKey);
+              const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
               if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
                 const isItemDeleted = (item: any) => {
                   if (!item) return true;

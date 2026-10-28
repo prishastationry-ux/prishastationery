@@ -837,8 +837,6 @@ export default function App() {
       });
 
     getActivePosSetter()(updateFn);
-    setPosItems(updateFn);
-    setProfessionalPosItems(updateFn);
 
     if (delta < 0) {
       const it = currentPosItems.find(p => p.id === itemId);
@@ -898,8 +896,6 @@ export default function App() {
     }));
 
     getActivePosSetter()(reindexed);
-    setPosItems(reindexed);
-    setProfessionalPosItems(reindexed);
   };
 
   // Direct numeric position setter (e.g. move directly to #1 or #5)
@@ -920,8 +916,6 @@ export default function App() {
     }));
 
     getActivePosSetter()(reindexed);
-    setPosItems(reindexed);
-    setProfessionalPosItems(reindexed);
     showToast(`🔢 "${targetItem.nameGu}" ક્રમ ${newPositionNumber} પર ગોઠવાઈ!`);
   };
 
@@ -1441,13 +1435,8 @@ export default function App() {
       notes: orderDetails.discountCode ? `પ્રોમો કોડ: ${orderDetails.discountCode}` : ''
     };
 
-    // Save order permanently across main & professional order stores so orders are never lost
-    setOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
-    setProfessionalOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
-    if (activeStoreMode === 'gst') {
-      setGstOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
-      setProfessionalGstOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
-    }
+    // Save order permanently to current active shop mode store
+    getActiveOrdersSetter()(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
     setAdminUnreadOrdersCount(prev => prev + 1);
     showToast(`🔔 નવો ઑર્ડર મળ્યો! ગ્રાહક: ${newOrder.customerName} (₹${newOrder.total})`);
 
@@ -1836,10 +1825,7 @@ export default function App() {
         return o;
       });
 
-    setOrders(updateFn);
-    setProfessionalOrders(updateFn);
-    setGstOrders(updateFn);
-    setProfessionalGstOrders(updateFn);
+    getActiveOrdersSetter()(updateFn);
 
     if (newStatus === 'delivered' && matchedOrder) {
       const custMobile = (matchedOrder.mobile || '').replace(/\D/g, '');
@@ -2212,12 +2198,7 @@ export default function App() {
       statusUpdatedAt: dateFormatted
     };
 
-    setOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
-    setProfessionalOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
-    if (activeStoreMode === 'gst') {
-      setGstOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
-      setProfessionalGstOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
-    }
+    getActiveOrdersSetter()(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
     setActiveInvoiceOrder(inv);
     setIsSuccessModal(false);
 
@@ -4528,8 +4509,6 @@ export default function App() {
                                 const updateCostFn = (prev: ProductItem[]) =>
                                   prev.map(p => (p.id === item.id ? { ...p, costPrice: newCost, updatedAt: Date.now() } : p));
                                 getActivePosSetter()(updateCostFn);
-                                setPosItems(updateCostFn);
-                                setProfessionalPosItems(updateCostFn);
                               }}
                               className="w-16 font-bold text-xs py-0.5 border border-transparent hover:border-neutral-300 focus:border-blue-500 outline-none bg-transparent"
                             />
