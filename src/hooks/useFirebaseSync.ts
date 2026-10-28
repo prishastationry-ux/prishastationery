@@ -238,31 +238,14 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     if (docName === 'printJobs') {
       return val.filter((j: any) => j && j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821' && j.jobNo !== 'PRN-6065');
     }
-    const staleOrderIds = new Set([
-      'ord-101', 'prisha000001',
-      'ord-1790243518565', 'prisha000064',
-      'ord-1789619617055', 'prisha000045',
-      'ord-prn-1789617045827', 'prisha000044',
-      'ord-1789560872066', 'prisha000043',
-      'ord-1789559671769', 'prisha000042',
-      'ord-1789559545392', 'prisha000040',
-      'ord-1789557527340', 'prisha000037',
-      'ord-prn-1789889379267', 'prisha000046',
-      'ord-1789559524696', 'prisha000039',
-      'ord-1790238420146', 'prisha000063',
-      'prisha000065'
-    ]);
     if (docName === 'orders') {
-      return val.filter((o: any) => o && !staleOrderIds.has(o.id) && !staleOrderIds.has(o.invoiceNo));
+      // Keep all user orders intact; only filter out explicit dummy test IDs if present
+      return val.filter((o: any) => o && o.id !== 'ord-demo-test');
     }
     if (docName === 'trash') {
       return val.filter((t: any) => {
         if (!t) return false;
-        if (t.id === 'trash-1790315079747' || t.id === 'trash-demo-1') return false;
-        const ordId = t.data?.id;
-        const ordInv = t.data?.invoiceNo;
-        if (ordId && staleOrderIds.has(ordId)) return false;
-        if (ordInv && staleOrderIds.has(ordInv)) return false;
+        if (t.id === 'trash-demo-1') return false;
         return true;
       });
     }
@@ -296,6 +279,12 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   };
 
   const [data, setData] = useState<T>(() => {
+    // Rescue orders: clear any auto-generated deleted IDs for order collections
+    if (typeof window !== 'undefined' && localKey.includes('orders')) {
+      try {
+        localStorage.removeItem(localKey + '_deleted_ids');
+      } catch (e) {}
+    }
     const deletedIds = getDeletedIds(localKey);
     let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
     let initialVal = initialData;
@@ -455,36 +444,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
       
-      // Force immediate deletion tracking (ONLY for orders/trash, NEVER for products)
-      if (Array.isArray(prev) && Array.isArray(next)) {
-        const deletedIds = getDeletedIds(localKey);
-        let changed = false;
-        const nextIds = new Set<string>();
-        next.forEach((item: any) => {
-          if (item?.id) nextIds.add(item.id);
-          if (item?.invoiceNo) nextIds.add(item.invoiceNo);
-        });
-        prev.forEach((item: any) => { 
-          if (item?.id && !nextIds.has(item.id)) { 
-            deletedIds.add(item.id); 
-            changed = true; 
-          }
-          if (item?.invoiceNo && !nextIds.has(item.invoiceNo)) {
-            deletedIds.add(item.invoiceNo);
-            changed = true;
-          }
-          if (item?.data?.id && !nextIds.has(item.data.id)) {
-            deletedIds.add(item.data.id);
-            changed = true;
-          }
-          if (item?.data?.invoiceNo && !nextIds.has(item.data.invoiceNo)) {
-            deletedIds.add(item.data.invoiceNo);
-            changed = true;
-          }
-        });
-        if (changed) saveDeletedIds(localKey, deletedIds);
-      }
-      
+      // Save state cleanly to local storage & queue cloud sync
       safeLocalStorageSet(localKey, next);
       
       // Attempt write to server safely with fast sync

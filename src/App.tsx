@@ -1441,7 +1441,13 @@ export default function App() {
       notes: orderDetails.discountCode ? `પ્રોમો કોડ: ${orderDetails.discountCode}` : ''
     };
 
-    getActiveOrdersSetter()(prev => [newOrder, ...prev]);
+    // Save order permanently across main & professional order stores so orders are never lost
+    setOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+    setProfessionalOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+    if (activeStoreMode === 'gst') {
+      setGstOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+      setProfessionalGstOrders(prev => [newOrder, ...prev.filter(o => o.id !== newOrder.id)]);
+    }
     setAdminUnreadOrdersCount(prev => prev + 1);
     showToast(`🔔 નવો ઑર્ડર મળ્યો! ગ્રાહક: ${newOrder.customerName} (₹${newOrder.total})`);
 
@@ -1817,19 +1823,23 @@ export default function App() {
     const timeFormatted = `${now.toLocaleDateString('en-GB')} ${now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     const matchedOrder = currentOrders.find(o => o.id === orderId);
 
-    getActiveOrdersSetter()(prev =>
+    const updateFn = (prev: OrderRecord[]) =>
       prev.map(o => {
         if (o.id === orderId) {
           return {
             ...o,
             orderStatus: newStatus,
             statusUpdatedAt: timeFormatted,
-            ...(newStatus === 'confirmed' ? { paymentStatus: 'Paid' } : {})
+            ...(newStatus === 'confirmed' ? { paymentStatus: 'Paid' as const } : {})
           };
         }
         return o;
-      })
-    );
+      });
+
+    setOrders(updateFn);
+    setProfessionalOrders(updateFn);
+    setGstOrders(updateFn);
+    setProfessionalGstOrders(updateFn);
 
     if (newStatus === 'delivered' && matchedOrder) {
       const custMobile = (matchedOrder.mobile || '').replace(/\D/g, '');
@@ -2202,7 +2212,12 @@ export default function App() {
       statusUpdatedAt: dateFormatted
     };
 
-    getActiveOrdersSetter()(prev => [inv, ...prev]);
+    setOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
+    setProfessionalOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
+    if (activeStoreMode === 'gst') {
+      setGstOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
+      setProfessionalGstOrders(prev => [inv, ...prev.filter(o => o.id !== inv.id)]);
+    }
     setActiveInvoiceOrder(inv);
     setIsSuccessModal(false);
 
