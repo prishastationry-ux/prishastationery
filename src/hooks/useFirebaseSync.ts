@@ -141,44 +141,56 @@ export async function executeBatchedFirestoreWrites() {
     }
   }
 
-  const validWrites: { docName: string; payload: any; deletedIds?: string[]; payloadStr: string }[] = [];
   for (const [docName, item] of docsToCommit) {
     delete pendingWrites[docName];
     try {
       const sanitized = sanitizeForFirestore(compressForStorage(item.data));
       const payloadStr = JSON.stringify(sanitized);
       if (lastWrittenPayloads[docName] === payloadStr) continue;
-      validWrites.push({ docName, payload: sanitized, deletedIds: item.deletedIds, payloadStr });
-    } catch (e) {}
-  }
 
-  if (validWrites.length === 0) return;
+      if (Array.isArray(sanitized) && sanitized.length > 35) {
+        // Chunk array into groups of 35 items to stay well under Firestore 1MB per-doc limit
+        const chunkSize = 35;
+        const chunks: any[][] = [];
+        for (let i = 0; i < sanitized.length; i += chunkSize) {
+          chunks.push(sanitized.slice(i, i + chunkSize));
+        }
 
-  try {
-    if (validWrites.length === 1) {
-      const { docName, payload, deletedIds, payloadStr } = validWrites[0];
-      await setDoc(doc(db, "store_data", docName), { 
-        data: payload, 
-        deletedIds: deletedIds || [], 
-        updatedAt: Date.now() 
-      });
-      lastWrittenPayloads[docName] = payloadStr;
-    } else {
-      const batch = writeBatch(db);
-      for (const { docName, payload, deletedIds } of validWrites) {
-        batch.set(doc(db, "store_data", docName), { 
-          data: payload, 
-          deletedIds: deletedIds || [], 
+        const batch = writeBatch(db);
+        // Main document has chunk 0 + chunk metadata
+        batch.set(doc(db, "store_data", docName), {
+          data: chunks[0],
+          isChunked: true,
+          chunkCount: chunks.length,
+          totalItems: sanitized.length,
+          deletedIds: item.deletedIds || [],
+          updatedAt: Date.now()
+        });
+
+        // Write additional chunk documents
+        for (let i = 1; i < chunks.length; i++) {
+          batch.set(doc(db, "store_data", `${docName}_c${i}`), {
+            data: chunks[i],
+            chunkIndex: i,
+            updatedAt: Date.now()
+          });
+        }
+
+        await batch.commit();
+        lastWrittenPayloads[docName] = payloadStr;
+      } else {
+        await setDoc(doc(db, "store_data", docName), { 
+          data: sanitized, 
+          isChunked: false,
+          chunkCount: 1,
+          deletedIds: item.deletedIds || [], 
           updatedAt: Date.now() 
         });
-      }
-      await batch.commit();
-      for (const { docName, payloadStr } of validWrites) {
         lastWrittenPayloads[docName] = payloadStr;
       }
+    } catch (err: any) {
+      handleQuotaError(err);
     }
-  } catch (err: any) {
-    handleQuotaError(err);
   }
 }
 
@@ -297,7 +309,20 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       } catch (e) {}
     }
     const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
+    
     let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
+    if (!saved && typeof window !== 'undefined') {
+      const baseKey = localKey.replace(/_v\d+$/, '');
+      saved = localStorage.getItem(baseKey) ||
+              localStorage.getItem(baseKey + '_v4') ||
+              localStorage.getItem(baseKey + '_v3') ||
+              localStorage.getItem(baseKey + '_v2') ||
+              localStorage.getItem('prisha_products_v4') ||
+              localStorage.getItem('prisha_products') ||
+              localStorage.getItem('products') ||
+              localStorage.getItem('prisha_pos_items');
+    }
+
     let initialVal = initialData;
     if (saved) {
       try {
@@ -334,15 +359,25 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   });
 
   useEffect(() => {
+    // Initial mount check: If local data exists and has items (e.g. 135 products), auto-register write to push to cloud
+    if (Array.isArray(data) && data.length > 0) {
+      registerPendingWrite(docName, data, localKey);
+      setTimeout(() => {
+        executeBatchedFirestoreWrites();
+      }, 500);
+    }
+  }, []);
+
+  useEffect(() => {
     if (isQuotaExhausted()) return;
 
     const docRef = doc(db, "store_data", docName);
     
-    const processCloudSnapshot = (snapshot: any) => {
+    const processCloudSnapshot = async (snapshot: any) => {
       if (!snapshot.exists()) return;
 
       const snapData = snapshot.data();
-      const rawData = snapData?.data;
+      let rawData = snapData?.data;
       const cloudDeletedIds: string[] = snapData?.deletedIds || [];
       
       if (cloudDeletedIds.length > 0 && !isLedgerCollection) {
@@ -355,6 +390,28 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
           }
         });
         if (updated) saveDeletedIds(localKey, curDeleted);
+      }
+
+      // Reassemble chunked documents if present
+      if (snapData?.isChunked && snapData?.chunkCount > 1 && Array.isArray(rawData)) {
+        try {
+          const count = snapData.chunkCount;
+          const chunkPromises: Promise<any>[] = [];
+          for (let i = 1; i < count; i++) {
+            chunkPromises.push(getDoc(doc(db, "store_data", `${docName}_c${i}`)));
+          }
+          const chunkSnaps = await Promise.all(chunkPromises);
+          const allChunks = [rawData];
+          chunkSnaps.forEach(cs => {
+            if (cs.exists()) {
+              const cData = cs.data()?.data;
+              if (Array.isArray(cData)) allChunks.push(cData);
+            }
+          });
+          rawData = allChunks.flat();
+        } catch (e) {
+          console.warn('Error reading chunks:', e);
+        }
       }
 
       if (rawData !== undefined && rawData !== null) {
@@ -377,20 +434,41 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
             };
 
             const validCloudItems = rawCleaned.filter((item: any) => !isItemDeleted(item));
-            const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
+            const cloudKeySet = new Set<string>();
+            validCloudItems.forEach((c: any) => {
+              if (c.id) cloudKeySet.add(String(c.id));
+              if (c.invoiceNo) cloudKeySet.add(String(c.invoiceNo));
+              if (c.nameEn) cloudKeySet.add(String(c.nameEn));
+              if (c.nameGu) cloudKeySet.add(String(c.nameGu));
+            });
+
             const cleanedPrev = Array.isArray(prevData) ? filterMockData(prevData) : [];
             
-            // Only preserve brand-new unsynced local items created in the last 10 minutes (prevents resurrecting 1-month-old stale items)
-            const recentCutoff = Date.now() - 10 * 60 * 1000;
+            // Preserve ALL local items that are NOT deleted and NOT present in Cloud Firestore
             const localUnsyncedItems = cleanedPrev.filter((localItem: any) => {
               if (isItemDeleted(localItem)) return false;
-              const key = localItem.id || localItem.invoiceNo;
-              if (cloudIds.has(key)) return false;
-              const created = localItem.createdAt || localItem.updatedAt || 0;
-              return created > recentCutoff;
+              const idKey = localItem.id ? String(localItem.id) : '';
+              const invKey = localItem.invoiceNo ? String(localItem.invoiceNo) : '';
+              const nameEnKey = localItem.nameEn ? String(localItem.nameEn) : '';
+              const nameGuKey = localItem.nameGu ? String(localItem.nameGu) : '';
+
+              if (idKey && cloudKeySet.has(idKey)) return false;
+              if (invKey && cloudKeySet.has(invKey)) return false;
+              if (nameEnKey && cloudKeySet.has(nameEnKey)) return false;
+              if (nameGuKey && cloudKeySet.has(nameGuKey)) return false;
+              return true;
             });
 
             const merged = [...validCloudItems, ...localUnsyncedItems];
+
+            // If local storage had unsynced items or merged set has more items than cloud, queue immediate push to Cloud Firestore
+            if (localUnsyncedItems.length > 0 || merged.length > validCloudItems.length) {
+              setTimeout(() => {
+                registerPendingWrite(docName, merged, localKey);
+                executeBatchedFirestoreWrites();
+              }, 300);
+            }
+
             safeLocalStorageSet(localKey, merged);
             return merged as unknown as T;
           }
