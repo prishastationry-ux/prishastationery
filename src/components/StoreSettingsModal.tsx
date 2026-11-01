@@ -28,7 +28,9 @@ import {
   Tag,
   RefreshCw,
   Lock,
-  Edit3
+  Edit3,
+  Clock,
+  Wrench
 } from 'lucide-react';
 import { StoreSettings } from '../types';
 import { compressAndResizeImage } from '../lib/invoiceUtils';
@@ -112,10 +114,15 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
     otherFeeAmount: settings.otherFeeAmount ?? 0,
     globalDiscount: settings.globalDiscount ?? 0,
     categoryDiscounts: settings.categoryDiscounts || {},
-    secondaryPasswords: settings.secondaryPasswords || []
+    secondaryPasswords: settings.secondaryPasswords || [],
+    // Maintenance Settings
+    maintenanceEnabled: settings.maintenanceEnabled ?? false,
+    autoMaintenanceEnabled: settings.autoMaintenanceEnabled !== false,
+    maintenanceMessage: settings.maintenanceMessage || '🛠️ પ્રિષા સ્ટેશનરી & ઓનલાઇન સેવા પોર્ટલ હાલ દૈનિક મેન્ટેનન્સ અને સ્ટોક અપડેટ અર્થે બંધ છે.',
+    maintenanceReopenTime: settings.maintenanceReopenTime || 'ટૂંક સમયમાં શરૂ થશે'
   });
 
-  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'delivery_fees' | 'xerox' | 'banners' | 'stories' | 'posters' | 'news' | 'offers' | 'security'>('store_info');
+  const [activeTab, setActiveTab] = useState<'store_info' | 'layout' | 'delivery_fees' | 'xerox' | 'banners' | 'stories' | 'posters' | 'news' | 'offers' | 'security' | 'maintenance'>('store_info');
   const [newSlideTitle, setNewSlideTitle] = useState<string>('');
   const [newSlideSubtitle, setNewSlideSubtitle] = useState<string>('');
   const [newSlideImageUrl, setNewSlideImageUrl] = useState<string>('');
@@ -407,6 +414,19 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
           >
             <ShieldCheck className="w-3.5 h-3.5 text-blue-500" />
             <span>🔐 પ્રાઈવસી & સિક્યોરિટી</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('maintenance')}
+            className={`px-3.5 py-1.5 rounded-xl cursor-pointer transition-all flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'maintenance'
+                ? 'bg-rose-700 text-white shadow-xs'
+                : 'bg-rose-50 text-rose-900 hover:bg-rose-100 border border-rose-300 font-bold'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+            <span>🛠️ મેન્ટેનન્સ & ઓટો શિડ્યુલ</span>
           </button>
         </div>
 
@@ -2106,6 +2126,101 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                       <span>ડેટા રિકવરી (વધારેલી વસ્તુઓ પાછી લાવો)</span>
                     </button>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 11: STORE MAINTENANCE & AUTO SCHEDULE */}
+          {activeTab === 'maintenance' && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="bg-rose-50 border-2 border-rose-300 p-4 rounded-2xl flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-rose-600 text-white flex items-center justify-center font-black text-2xl shadow">
+                    🛠️
+                  </div>
+                  <div>
+                    <h3 className="font-black text-sm text-rose-950">
+                      ઇમરજન્સી મેન્ટેનન્સ મોડ (Manual Maintenance Close)
+                    </h3>
+                    <p className="text-[11px] font-bold text-rose-800">
+                      કોઈ ભૂલ થઈ હોય કે તાત્કાલિક દુકાન બંધ કરવી હોય ત્યારે સ્વિચ ચાલુ કરો. તમામ ગ્રાહકો માટે એપ્લિકેશન બંધ થઈ જશે.
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={formData.maintenanceEnabled || false}
+                    onChange={e => setFormData({ ...formData, maintenanceEnabled: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-14 h-7 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-rose-600"></div>
+                </label>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-neutral-200 shadow-xs space-y-4">
+                <div className="flex items-center justify-between border-b pb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-indigo-600" />
+                    <div>
+                      <h4 className="font-black text-neutral-900 text-xs">
+                        દૈનિક ઓટોમેટિક મેન્ટેનન્સ શિડ્યુલ (Daily Auto Schedule)
+                      </h4>
+                      <p className="text-[10px] text-neutral-500 font-bold">
+                        બપોરે ૨:૦૦ થી ૨:૩૦ અને રાત્રે ૧૧:૦0 થી સવારે ૬:૦૦ ઓટોમેટિક બંધ રાખવું
+                      </p>
+                    </div>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.autoMaintenanceEnabled !== false}
+                      onChange={e => setFormData({ ...formData, autoMaintenanceEnabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-neutral-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-neutral-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                  </label>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-black block mb-1 text-neutral-800 flex items-center gap-1">
+                      <span>⏰ શરૂ થવાનો સમય (જે ગ્રાહકની સ્ક્રીન પર બતાવવો છે):</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder='દા.ત. "બપોરે ૨:૩૦ વાગ્યે" અથવા "સવારે ૬:૦૦ વાગ્યે" અથવા "સાંજે ૪:૦૦ વાગ્યે"'
+                      value={formData.maintenanceReopenTime || ''}
+                      onChange={e => setFormData({ ...formData, maintenanceReopenTime: e.target.value })}
+                      className="w-full text-xs font-black p-2.5 border-2 border-neutral-300 rounded-xl focus:border-rose-600 outline-none"
+                    />
+                    <p className="text-[10px] text-neutral-500 font-bold mt-1">
+                      💡 તમે જે સમય અહિયાં લખશો, તે જ સમય ગ્રાહકને સ્ક્રીન પર દેખાશે.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-black block mb-1 text-neutral-800">
+                      📝 મેન્ટેનન્સ મેસેજ (ગ્રાહકને બતાવવાની વિગત):
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="ગ્રાહક માટે સંદેશ..."
+                      value={formData.maintenanceMessage || ''}
+                      onChange={e => setFormData({ ...formData, maintenanceMessage: e.target.value })}
+                      className="w-full text-xs font-bold p-2.5 border-2 border-neutral-300 rounded-xl focus:border-rose-600 outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 p-3 rounded-xl border border-amber-200 text-amber-900 text-[11px] font-bold space-y-1">
+                  <p className="font-black text-amber-950">🔑 સંચાલક માટે અગત્યની સૂચના:</p>
+                  <p>
+                    જ્યારે પણ એપ્લિકેશન મેન્ટેનન્સ માટે બંધ હશે, ત્યારે ગ્રાહકો ખરીદી નહીં કરી શકે, પરંતુ <b>તમે એડમિન પાસવર્ડથી લોગિન કરીને કોઈપણ સમયે દુકાન ચલાવી શકશો, સ્ટોક સુધારી શકશો અને મેન્ટેનન્સ મોડ બંધ કરી શકશો</b>.
+                  </p>
                 </div>
               </div>
             </div>

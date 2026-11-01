@@ -263,6 +263,12 @@ export interface StoreSettings {
   globalDiscount?: number; // આખી સાઇટ પર ડિસ્કાઉન્ટ % (Default 0)
   categoryDiscounts?: Record<string, number>; // કેટેગરી વાઈઝ ડિસ્કાઉન્ટ %
   secondaryPasswords?: string[]; // વધારાના પાસવર્ડ્સ (e.g. 0123, 2626)
+
+  // STORE MAINTENANCE & AUTOMATIC SCHEDULE SYSTEM
+  maintenanceEnabled?: boolean; // Emergency Manual Maintenance ON/OFF
+  autoMaintenanceEnabled?: boolean; // Automatic Afternoon (14:00-14:30) & Night (23:00-06:00) maintenance schedule
+  maintenanceMessage?: string; // Custom maintenance notice displayed to customers
+  maintenanceReopenTime?: string; // Reopening time string (e.g. "બપોરે ૨:૩૦ વાગ્યે" or "સવારે ૬:૦૦ વાગ્યે")
 }
 
 export interface RojmelEntry {

@@ -86,7 +86,12 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   otherFeeAmount: 0,
   globalDiscount: 0,
   categoryDiscounts: {},
-  secondaryPasswords: ['0123', '2626', 'Prisha@2024']
+  secondaryPasswords: ['0123', '2626', 'Prisha@2024'],
+  // Maintenance Defaults
+  maintenanceEnabled: false,
+  autoMaintenanceEnabled: true,
+  maintenanceMessage: '🛠️ પ્રિષા સ્ટેશનરી & ઓનલાઇન પોર્ટલ હાલ મેન્ટેનન્સ અર્થે બંધ છે.',
+  maintenanceReopenTime: 'ટૂંક સમયમાં શરૂ થશે'
 };
 
 export const INITIAL_PRODUCTS: ProductItem[] = [

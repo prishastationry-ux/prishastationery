@@ -239,11 +239,35 @@ export function clearAllDeletedIds(): void {
   }
 }
 
+export function deduplicateArray<T>(items: T[]): T[] {
+  if (!Array.isArray(items)) return items;
+  const seenKeys = new Set<string>();
+  const result: T[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const key = (item as any).id || 
+                (item as any).invoiceNo || 
+                ((item as any).nameGu && (item as any).category ? `${(item as any).nameGu}_${(item as any).category}` : null);
+    if (key) {
+      const strKey = String(key);
+      if (seenKeys.has(strKey)) continue;
+      seenKeys.add(strKey);
+    }
+    result.push(item);
+  }
+  return result;
+}
+
+export function markItemAsDeleted(localKey: string, itemId: string): void {
+  if (!itemId) return;
+  const current = getDeletedIds(localKey);
+  current.add(String(itemId));
+  saveDeletedIds(localKey, current);
+}
+
 export function useFirebaseSync<T>(docName: string, localKey: string, initialData: T) {
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
-
-  // Deleted IDs tracking is now enabled for all collections including products
 
   const filterMockData = (val: any): any => {
     if (!Array.isArray(val)) return val;
@@ -251,7 +275,6 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       return val.filter((j: any) => j && j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821' && j.jobNo !== 'PRN-6065');
     }
     if (docName === 'orders') {
-      // Keep all user orders intact; only filter out explicit dummy test IDs if present
       return val.filter((o: any) => o && o.id !== 'ord-demo-test');
     }
     if (docName === 'trash') {
@@ -264,7 +287,6 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     if (docName === 'expenses') {
       return val.filter((e: any) => {
         if (!e) return false;
-        // Filter out the 2 user-requested expenses (દુકાન ચા-નાસ્તો ₹120 & લાઈટ બિલ / ઇન્ટરનેટ ₹450)
         if (
           e.title === 'દુકાન ચા-નાસ્તો' ||
           e.title === 'લાઈટ બિલ / ઇન્ટરનેટ' ||
@@ -279,8 +301,6 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       });
     }
     if (docName === 'purchases') {
-      // User explicitly requested to delete the 1 purchase bill in CA audit
-      // We only filter out the specific PUR-1 or invalid test bills
       return val.filter((p: any) => {
         if (!p) return false;
         if (p.billNo === 'PUR-1' || !p.supplierName || p.totalAmount <= 0 || p.supplierName === 'ટેસ્ટ સપ્લાયર') return false;
@@ -290,25 +310,9 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     return val;
   };
 
-  const isLedgerCollection =
-    localKey.includes('orders') ||
-    localKey.includes('bank') ||
-    localKey.includes('rojmel') ||
-    localKey.includes('khata') ||
-    localKey.includes('expenses') ||
-    localKey.includes('purchases') ||
-    localKey.includes('trash') ||
-    localKey.includes('pos_items') ||
-    localKey.includes('products');
-
   const [data, setData] = useState<T>(() => {
-    // Rescue orders, inventory & financial ledgers: clear any auto-generated deleted IDs
-    if (typeof window !== 'undefined' && isLedgerCollection) {
-      try {
-        localStorage.removeItem(localKey + '_deleted_ids');
-      } catch (e) {}
-    }
-    const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
+    // Preserve deleted IDs at all times so deleted items NEVER resurrect!
+    const deletedIds = getDeletedIds(localKey);
     
     let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
     if (!saved && typeof window !== 'undefined') {
@@ -329,37 +333,39 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         const parsed = JSON.parse(saved);
         const cleaned = filterMockData(parsed);
         if (Array.isArray(cleaned)) {
-          initialVal = cleaned.filter((item: any) => {
+          const filtered = cleaned.filter((item: any) => {
             if (!item) return false;
-            const id = item.id;
-            const inv = item.invoiceNo;
-            const dataId = item.data?.id;
-            const dataInv = item.data?.invoiceNo;
+            const id = String(item.id || '');
+            const inv = String(item.invoiceNo || '');
+            const dataId = String(item.data?.id || '');
+            const dataInv = String(item.data?.invoiceNo || '');
             if (id && deletedIds.has(id)) return false;
             if (inv && deletedIds.has(inv)) return false;
             if (dataId && deletedIds.has(dataId)) return false;
             if (dataInv && deletedIds.has(dataInv)) return false;
             return true;
-          }) as unknown as T;
+          });
+          initialVal = deduplicateArray(filtered) as unknown as T;
         } else if (cleaned !== undefined && cleaned !== null) {
           initialVal = cleaned as T;
         }
       } catch (e) {}
     } else if (Array.isArray(initialData)) {
-      initialVal = (initialData as any[]).filter((item: any) => {
+      const filtered = (initialData as any[]).filter((item: any) => {
         if (!item) return false;
-        const id = item.id;
-        const inv = item.invoiceNo;
+        const id = String(item.id || '');
+        const inv = String(item.invoiceNo || '');
         if (id && deletedIds.has(id)) return false;
         if (inv && deletedIds.has(inv)) return false;
         return true;
-      }) as unknown as T;
+      });
+      initialVal = deduplicateArray(filtered) as unknown as T;
     }
     return initialVal;
   });
 
   useEffect(() => {
-    // Initial mount check: If local data exists and has items (e.g. 135 products), auto-register write to push to cloud
+    // Initial mount check: If local data exists and has items, auto-register write to push to cloud
     if (Array.isArray(data) && data.length > 0) {
       registerPendingWrite(docName, data, localKey);
       setTimeout(() => {
@@ -380,12 +386,13 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       let rawData = snapData?.data;
       const cloudDeletedIds: string[] = snapData?.deletedIds || [];
       
-      if (cloudDeletedIds.length > 0 && !isLedgerCollection) {
+      // Update local deleted IDs with any newly deleted IDs from cloud
+      if (cloudDeletedIds.length > 0) {
         const curDeleted = getDeletedIds(localKey);
         let updated = false;
         cloudDeletedIds.forEach(id => {
-          if (id && !curDeleted.has(id)) {
-            curDeleted.add(id);
+          if (id && !curDeleted.has(String(id))) {
+            curDeleted.add(String(id));
             updated = true;
           }
         });
@@ -417,15 +424,15 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       if (rawData !== undefined && rawData !== null) {
         const rawCleaned = filterMockData(rawData);
         setData((prevData) => {
-          const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
+          const deletedIds = getDeletedIds(localKey);
           
           if (Array.isArray(rawCleaned)) {
             const isItemDeleted = (item: any) => {
               if (!item) return true;
-              const id = item.id;
-              const inv = item.invoiceNo;
-              const dataId = item.data?.id;
-              const dataInv = item.data?.invoiceNo;
+              const id = String(item.id || '');
+              const inv = String(item.invoiceNo || '');
+              const dataId = String(item.data?.id || '');
+              const dataInv = String(item.data?.invoiceNo || '');
               if (id && deletedIds.has(id)) return true;
               if (inv && deletedIds.has(inv)) return true;
               if (dataId && deletedIds.has(dataId)) return true;
@@ -443,31 +450,17 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
             });
 
             const cleanedPrev = Array.isArray(prevData) ? filterMockData(prevData) : [];
-            
-            // Preserve ALL local items that are NOT deleted and NOT present in Cloud Firestore
-            const localUnsyncedItems = cleanedPrev.filter((localItem: any) => {
-              if (isItemDeleted(localItem)) return false;
-              const idKey = localItem.id ? String(localItem.id) : '';
-              const invKey = localItem.invoiceNo ? String(localItem.invoiceNo) : '';
-              const nameEnKey = localItem.nameEn ? String(localItem.nameEn) : '';
-              const nameGuKey = localItem.nameGu ? String(localItem.nameGu) : '';
+            const validPrev = cleanedPrev.filter((item: any) => !isItemDeleted(item));
 
-              if (idKey && cloudKeySet.has(idKey)) return false;
-              if (invKey && cloudKeySet.has(invKey)) return false;
-              if (nameEnKey && cloudKeySet.has(nameEnKey)) return false;
-              if (nameGuKey && cloudKeySet.has(nameGuKey)) return false;
-              return true;
-            });
+            // Merge local state first (so imported backup/edited local items take priority!), then append any new cloud items
+            const mergedRaw = [...validPrev, ...validCloudItems];
+            const merged = deduplicateArray(mergedRaw);
 
-            const merged = [...validCloudItems, ...localUnsyncedItems];
-
-            // If local storage had unsynced items or merged set has more items than cloud, queue immediate push to Cloud Firestore
-            if (localUnsyncedItems.length > 0 || merged.length > validCloudItems.length) {
-              setTimeout(() => {
-                registerPendingWrite(docName, merged, localKey);
-                executeBatchedFirestoreWrites();
-              }, 300);
-            }
+            // Always write merged state to Cloud Firestore so cloud is kept in 100% sync
+            registerPendingWrite(docName, merged, localKey);
+            setTimeout(() => {
+              executeBatchedFirestoreWrites();
+            }, 300);
 
             safeLocalStorageSet(localKey, merged);
             return merged as unknown as T;
