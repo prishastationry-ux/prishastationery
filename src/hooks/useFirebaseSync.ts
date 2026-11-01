@@ -285,10 +285,12 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
     localKey.includes('khata') ||
     localKey.includes('expenses') ||
     localKey.includes('purchases') ||
-    localKey.includes('trash');
+    localKey.includes('trash') ||
+    localKey.includes('pos_items') ||
+    localKey.includes('products');
 
   const [data, setData] = useState<T>(() => {
-    // Rescue orders & financial ledgers: clear any auto-generated deleted IDs for ledger collections
+    // Rescue orders, inventory & financial ledgers: clear any auto-generated deleted IDs
     if (typeof window !== 'undefined' && isLedgerCollection) {
       try {
         localStorage.removeItem(localKey + '_deleted_ids');

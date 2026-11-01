@@ -393,6 +393,13 @@ export default function App() {
     localStorage.setItem('prisha_wishlist', JSON.stringify(wishlist));
   }, [wishlist]);
 
+  // Security Lock Guard: Force non-logged-in visitors to customer tab at all times
+  useEffect(() => {
+    if (!isAdminUnlocked && activeTab !== 'customer') {
+      setActiveTab('customer');
+    }
+  }, [isAdminUnlocked, activeTab]);
+
   // Clean up the 2 test expenses and 1 purchase bill requested by user
   useEffect(() => {
     setExpenses(prev =>
@@ -2274,7 +2281,12 @@ export default function App() {
     const matchesSearch =
       (item.nameGu || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.nameEn || '').toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCat = selectedCategory === 'all' || item.category === selectedCategory;
+    const matchesCat =
+      selectedCategory === 'all'
+        ? true
+        : selectedCategory === 'low_stock'
+        ? typeof item.stock === 'number' && item.stock <= 5
+        : item.category === selectedCategory;
     return matchesSearch && matchesCat;
   }).sort((a, b) => {
     if (sortOption === 'price_low') return (a.price || 0) - (b.price || 0);
@@ -2948,6 +2960,23 @@ export default function App() {
 
             {/* Category Filter Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-black">
+              {isAdminUnlocked && activeShopMode === 'general' && (
+                <button
+                  key="low_stock"
+                  type="button"
+                  onClick={() => setSelectedCategory(selectedCategory === 'low_stock' ? 'all' : 'low_stock')}
+                  className={`px-3 py-1.5 rounded-xl whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer border ${
+                    selectedCategory === 'low_stock'
+                      ? 'bg-amber-600 text-white border-amber-700 shadow-2xs font-black'
+                      : 'bg-amber-50 text-amber-900 border-amber-300 hover:bg-amber-100 font-bold'
+                  }`}
+                >
+                  <span>⚠️ ઓછો સ્ટોક (≤5)</span>
+                  <span className="opacity-80 text-[10px]">
+                    ({(currentPosItems || []).filter(p => p && typeof p.stock === 'number' && p.stock <= 5).length})
+                  </span>
+                </button>
+              )}
 
               {['all', ...Array.from(new Set((currentPosItems || []).filter(p => p && p.category).map(p => p.category)))].map(cat => (
                 <button
@@ -3146,9 +3175,13 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                      ) : (
+                      ) : isAdminUnlocked ? (
                         <span className="text-neutral-800 bg-white/95 px-2 py-0.5 rounded-md border border-neutral-300 font-extrabold backdrop-blur-xs">
                           સ્ટોક: {item.stock} {item.unit || 'નંગ'}
+                        </span>
+                      ) : (
+                        <span className="text-emerald-800 bg-emerald-50/95 px-2 py-0.5 rounded-md border border-emerald-300 font-extrabold backdrop-blur-xs">
+                          ✅ સ્ટોક ઉપલબ્ધ
                         </span>
                       )}
                     </div>
@@ -3292,7 +3325,7 @@ export default function App() {
           </div>
 
         </main>
-      ) : activeTab === 'admin' ? (
+      ) : (isAdminUnlocked && activeTab === 'admin') ? (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
 
           {/* ADMIN TOP CONTROL BAR */}
@@ -5692,7 +5725,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 15. TRASH / RECYCLE BIN MODAL */}
       {/* ========================================================================= */}
-      {showTrashModal && (
+      {showTrashModal && isAdminUnlocked && (
         <TrashModal
           isOpen={showTrashModal}
           onClose={() => setShowTrashModal(false)}
@@ -5994,7 +6027,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 18. BILL / INVOICE DESIGN & CUSTOMIZATION MODAL (Admin Bill Editor) */}
       {/* ========================================================================= */}
-      {showBillSettingsModal && (
+      {showBillSettingsModal && isAdminUnlocked && (
         <BillSettingsModal
           isOpen={showBillSettingsModal}
           onClose={() => setShowBillSettingsModal(false)}
@@ -6025,7 +6058,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 20. MULTI-PLATFORM ECOSYSTEM & REAL-TIME SYNC MODAL */}
       {/* ========================================================================= */}
-      {showMultiPlatformSyncModal && (
+      {showMultiPlatformSyncModal && isAdminUnlocked && (
         <MultiPlatformSyncModal
           isOpen={showMultiPlatformSyncModal}
           onClose={() => setShowMultiPlatformSyncModal(false)}
@@ -6036,7 +6069,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 20B. DEDICATED ONLINE ORDERS & DELIVERIES MODAL */}
       {/* ========================================================================= */}
-      {showOnlineOrdersModal && (
+      {showOnlineOrdersModal && isAdminUnlocked && (
         <OnlineOrdersModal
           isOpen={showOnlineOrdersModal}
           onClose={() => setShowOnlineOrdersModal(false)}
@@ -6057,7 +6090,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 20C. DEDICATED BANK CURRENT ACCOUNT & UPI PASSBOOK MODAL */}
       {/* ========================================================================= */}
-      {showBankCurrentAccountModal && (
+      {showBankCurrentAccountModal && isAdminUnlocked && (
         <BankCurrentAccountModal
           isOpen={showBankCurrentAccountModal}
           onClose={() => setShowBankCurrentAccountModal(false)}
@@ -6097,7 +6130,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 21. ADMIN PRINT JOBS & CUSTOMER DOCUMENTS MODAL (PDF, JPG, PNG, EXCEL) */}
       {/* ========================================================================= */}
-      {showPrintJobsModal && (
+      {showPrintJobsModal && isAdminUnlocked && (
         <AdminPrintJobsModal
           isOpen={showPrintJobsModal}
           onClose={() => setShowPrintJobsModal(false)}
@@ -6154,7 +6187,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 23. ROJMEL & KHATA ERP MODAL */}
       {/* ========================================================================= */}
-      {showRojmelModal && (
+      {showRojmelModal && isAdminUnlocked && (
         <RojmelKhataModal
           isOpen={showRojmelModal}
           onClose={() => setShowRojmelModal(false)}
@@ -6311,7 +6344,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 24. SHOP RENT & BILLS LEDGER MODAL */}
       {/* ========================================================================= */}
-      {showShopRentModal && (
+      {showShopRentModal && isAdminUnlocked && (
         <ShopRentAndBillsModal
           isOpen={showShopRentModal}
           onClose={() => setShowShopRentModal(false)}
@@ -6363,7 +6396,7 @@ export default function App() {
       )}
 
       {/* 13.B CA AUDIT & GST REPORT MODAL */}
-      {showCaAuditModal && (
+      {showCaAuditModal && isAdminUnlocked && (
         <CaAuditModal
           isOpen={showCaAuditModal}
           onClose={() => setShowCaAuditModal(false)}
@@ -6406,7 +6439,7 @@ export default function App() {
       )}
 
       {/* 13.C DAILY CASH DRAWER CLOSING MODAL */}
-      {showDailyCashClosingModal && (
+      {showDailyCashClosingModal && isAdminUnlocked && (
         <DailyCashClosingModal
           isOpen={showDailyCashClosingModal}
           onClose={() => setShowDailyCashClosingModal(false)}
@@ -6705,7 +6738,7 @@ export default function App() {
       />
 
       {/* DEDICATED GeM PORTAL BILL GENERATOR MODAL */}
-      {showGemBillModal && (
+      {showGemBillModal && isAdminUnlocked && (
         <GemBillGeneratorModal
           storeSettings={storeSettings}
           orders={currentOrders}
@@ -6718,7 +6751,7 @@ export default function App() {
       )}
 
       {/* 5-FIRM MULTI-VENDOR TENDER QUOTATION MODAL */}
-      {showMultiQuotationModal && (
+      {showMultiQuotationModal && isAdminUnlocked && (
         <MultiQuotationModal
           storeSettings={storeSettings}
           onClose={() => setShowMultiQuotationModal(false)}
@@ -6727,8 +6760,9 @@ export default function App() {
       )}
 
       {/* STOCK POPUP MODAL */}
-      <StockPopupModal
-        isOpen={showStockPopupModal}
+      {showStockPopupModal && isAdminUnlocked && (
+        <StockPopupModal
+          isOpen={showStockPopupModal}
         onClose={() => setShowStockPopupModal(false)}
         products={currentPosItems}
         onUpdateStock={(id, newStock) => {
@@ -6739,6 +6773,7 @@ export default function App() {
         storeSettings={storeSettings}
         isAdminUnlocked={isAdminUnlocked}
       />
+      )}
     </div>
   );
 }

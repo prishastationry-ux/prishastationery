@@ -979,6 +979,19 @@ export const RojmelKhataModal: React.FC<RojmelKhataModalProps> = ({
                             <Edit2 className="w-3.5 h-3.5" />
                             <span>✏️ એડિટ વિગત</span>
                           </button>
+                          {selectedAccount.balance > 0 && selectedAccount.phone && (
+                            <a
+                              href={`https://wa.me/91${selectedAccount.phone.replace(/\D/g, '')}?text=${encodeURIComponent(
+                                `નમસ્તે ${selectedAccount.name} જી, પ્રિશા સ્ટેશનરીમાંથી આપનું ઉધાર ખાતાનું બાકી લેણું ₹${selectedAccount.balance.toFixed(2)} છે. કૃપા કરીને અનુકૂળતા મુજબ ચૂકવણી કરવા નમ્ર વિનંતી. આભાર!`
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg text-xs font-black flex items-center gap-1 cursor-pointer transition border border-emerald-400/40 shadow-xs"
+                              title="ગ્રાહકને વોટ્સએપ પર ઉધાર બાકી યાદ અપાવો"
+                            >
+                              <span>📲 WhatsApp યાદ આપો</span>
+                            </a>
+                          )}
                           <button
                             type="button"
                             onClick={() => {
