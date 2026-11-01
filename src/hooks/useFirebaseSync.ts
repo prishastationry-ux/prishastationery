@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { doc, setDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, writeBatch, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 
 // Global Quota & Resource Exhaustion Backoff Tracker
@@ -334,120 +334,110 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   });
 
   useEffect(() => {
+    if (isQuotaExhausted()) return;
+
     const docRef = doc(db, "store_data", docName);
     
-    // Real-time polling & synchronization function
-    const syncDocFromCloud = async () => {
-      if (isQuotaExhausted()) return;
+    const processCloudSnapshot = (snapshot: any) => {
+      if (!snapshot.exists()) return;
+
+      const snapData = snapshot.data();
+      const rawData = snapData?.data;
+      const cloudDeletedIds: string[] = snapData?.deletedIds || [];
+      
+      if (cloudDeletedIds.length > 0 && !isLedgerCollection) {
+        const curDeleted = getDeletedIds(localKey);
+        let updated = false;
+        cloudDeletedIds.forEach(id => {
+          if (id && !curDeleted.has(id)) {
+            curDeleted.add(id);
+            updated = true;
+          }
+        });
+        if (updated) saveDeletedIds(localKey, curDeleted);
+      }
+
+      if (rawData !== undefined && rawData !== null) {
+        const rawCleaned = filterMockData(rawData);
+        setData((prevData) => {
+          const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
+          
+          if (Array.isArray(rawCleaned)) {
+            const isItemDeleted = (item: any) => {
+              if (!item) return true;
+              const id = item.id;
+              const inv = item.invoiceNo;
+              const dataId = item.data?.id;
+              const dataInv = item.data?.invoiceNo;
+              if (id && deletedIds.has(id)) return true;
+              if (inv && deletedIds.has(inv)) return true;
+              if (dataId && deletedIds.has(dataId)) return true;
+              if (dataInv && deletedIds.has(dataInv)) return true;
+              return false;
+            };
+
+            const validCloudItems = rawCleaned.filter((item: any) => !isItemDeleted(item));
+            const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
+            const cleanedPrev = Array.isArray(prevData) ? filterMockData(prevData) : [];
+            
+            // Only preserve brand-new unsynced local items created in the last 10 minutes (prevents resurrecting 1-month-old stale items)
+            const recentCutoff = Date.now() - 10 * 60 * 1000;
+            const localUnsyncedItems = cleanedPrev.filter((localItem: any) => {
+              if (isItemDeleted(localItem)) return false;
+              const key = localItem.id || localItem.invoiceNo;
+              if (cloudIds.has(key)) return false;
+              const created = localItem.createdAt || localItem.updatedAt || 0;
+              return created > recentCutoff;
+            });
+
+            const merged = [...validCloudItems, ...localUnsyncedItems];
+            safeLocalStorageSet(localKey, merged);
+            return merged as unknown as T;
+          }
+
+          safeLocalStorageSet(localKey, rawCleaned);
+          return rawCleaned as T;
+        });
+      }
+    };
+
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = onSnapshot(docRef, (snapshot) => {
+        processCloudSnapshot(snapshot);
+      }, (err) => {
+        handleQuotaError(err);
+      });
+    } catch (e) {
+      handleQuotaError(e);
+    }
+
+    const handleForceSync = async () => {
       try {
         const snapshot = await getDoc(docRef);
-        if (snapshot.exists()) {
-          const snapData = snapshot.data();
-          const rawData = snapData?.data;
-          const cloudDeletedIds: string[] = snapData?.deletedIds || [];
-          
-          if (cloudDeletedIds.length > 0 && !isLedgerCollection) {
-            const curDeleted = getDeletedIds(localKey);
-            let updated = false;
-            cloudDeletedIds.forEach(id => {
-              if (id && !curDeleted.has(id)) {
-                curDeleted.add(id);
-                updated = true;
-              }
-            });
-            if (updated) saveDeletedIds(localKey, curDeleted);
-          }
-
-          if (rawData !== undefined && rawData !== null) {
-            const rawCleaned = filterMockData(rawData);
-            setData((prevData) => {
-              const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
-              if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
-                const isItemDeleted = (item: any) => {
-                  if (!item) return true;
-                  const id = item.id;
-                  const inv = item.invoiceNo;
-                  const dataId = item.data?.id;
-                  const dataInv = item.data?.invoiceNo;
-                  if (id && deletedIds.has(id)) return true;
-                  if (inv && deletedIds.has(inv)) return true;
-                  if (dataId && deletedIds.has(dataId)) return true;
-                  if (dataInv && deletedIds.has(dataInv)) return true;
-                  return false;
-                };
-
-                const validCloudItems = rawCleaned.filter((item: any) => !isItemDeleted(item));
-                const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
-                const cleanedPrev = filterMockData(prevData);
-                const localUnsyncedItems = cleanedPrev.filter((localItem: any) => !isItemDeleted(localItem) && !cloudIds.has(localItem.id || localItem.invoiceNo));
-                const localMap = new Map();
-                cleanedPrev.forEach((item: any) => { 
-                  if (item) {
-                    if (item.id) localMap.set(item.id, item);
-                    if (item.invoiceNo) localMap.set(item.invoiceNo, item);
-                  }
-                });
-                
-                // Union merge: Keeps all valid non-deleted items from cloud
-                // plus any local items, merging non-destructively
-                const merged = [
-                  ...validCloudItems.map((c: any) => {
-                    const local = (c.id && localMap.get(c.id)) || (c.invoiceNo && localMap.get(c.invoiceNo));
-                    if (!local) return c;
-                    const localTs = local.updatedAt || local.lastModified || 0;
-                    const cloudTs = c.updatedAt || c.lastModified || 0;
-                    if (localTs > cloudTs && localTs > 0) {
-                      return local;
-                    }
-                    return c;
-                  }),
-                  ...localUnsyncedItems
-                ];
-                safeLocalStorageSet(localKey, merged);
-                return merged as unknown as T;
-              }
-              safeLocalStorageSet(localKey, rawCleaned);
-              return rawCleaned as T;
-            });
-          }
-        }
+        processCloudSnapshot(snapshot);
       } catch (e) {
         handleQuotaError(e);
       }
     };
 
-    syncDocFromCloud();
-
-    // Fast polling every 45 seconds to keep all devices & Vercel in real-time sync
-    const pollInterval = setInterval(syncDocFromCloud, 45 * 1000);
-
-    // Instant sync on tab focus or visibility change (switching back to app)
-    const handleFocusOrVisible = () => {
-      syncDocFromCloud();
-    };
-
-    window.addEventListener('focus', handleFocusOrVisible);
-    window.addEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
-    
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        syncDocFromCloud();
+        handleForceSync();
       }
     };
+
+    window.addEventListener('focus', handleForceSync);
+    window.addEventListener('prisha_force_cloud_sync', handleForceSync);
+    window.addEventListener('prisha_rescue_deleted_ids', handleForceSync);
     document.addEventListener('visibilitychange', handleVisibility);
-    
-    const handleRescue = () => {
-      // For rescue, we temporarily ignore deleted IDs and re-sync
-      syncDocFromCloud();
-    };
-    window.addEventListener('prisha_rescue_deleted_ids', handleRescue);
-    
+
     return () => {
-      clearInterval(pollInterval);
-      window.removeEventListener('focus', handleFocusOrVisible);
-      window.removeEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
+      if (unsub) unsub();
+      window.removeEventListener('focus', handleForceSync);
+      window.removeEventListener('prisha_force_cloud_sync', handleForceSync);
+      window.removeEventListener('prisha_rescue_deleted_ids', handleForceSync);
       document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('prisha_rescue_deleted_ids', handleRescue);
     };
   }, [docName, localKey]);
 
