@@ -105,12 +105,11 @@ export const MaintenanceScreen: React.FC<MaintenanceScreenProps> = ({
             </div>
           </div>
           <a
-            href={`https://wa.me/91${storeSettings.phone || '8140430395'}?text=${encodeURIComponent('નમસ્તે ભરતભાઈ, ઓનલાઇન મેન્ટેનન્સ બાબતે વિગત મેળવવી હતી.')}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-black px-4 py-2 rounded-xl text-xs shadow-md transition-all active:scale-95 shrink-0"
+            href={`tel:${storeSettings.phone || '8140430395'}`}
+            className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black px-4 py-2 rounded-xl text-xs shadow-md transition-all active:scale-95 shrink-0 flex items-center gap-1.5"
           >
-            💬 WhatsApp સંપર્ક
+            <Phone className="w-3.5 h-3.5" />
+            <span>📞 સીધો ફોન કરો: {storeSettings.phoneDisplay || '+91 81404 30395'}</span>
           </a>
         </div>
       </main>

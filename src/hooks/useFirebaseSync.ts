@@ -56,23 +56,36 @@ export function handleQuotaError(err: any): void {
   }
 }
 
-export function sanitizeForFirestore(val: any): any {
+// Strictly strip large base64 data URIs from Firestore documents to prevent exceeding
+// Firestore's hard 1,048,576 bytes (1 MB) document limit.
+export function sanitizeForFirestore(val: any, stripDataUris = false): any {
   if (val === undefined) return null;
+  if (typeof val === 'string') {
+    if (val.startsWith('data:') && (stripDataUris || val.length > 500000)) {
+      return '';
+    }
+    return val;
+  }
   if (val === null || typeof val !== 'object') return val;
-  if (Array.isArray(val)) return val.filter(item => item !== undefined).map(item => sanitizeForFirestore(item));
+  if (Array.isArray(val)) return val.filter(item => item !== undefined).map(item => sanitizeForFirestore(item, stripDataUris));
   const result: Record<string, any> = {};
   for (const [k, v] of Object.entries(val)) {
-    if (v !== undefined) result[k] = sanitizeForFirestore(v);
+    if (v !== undefined) {
+      if (typeof v === 'string' && v.startsWith('data:') && (stripDataUris || v.length > 500000)) {
+        result[k] = '';
+      } else {
+        result[k] = sanitizeForFirestore(v, stripDataUris);
+      }
+    }
   }
   return result;
 }
 
-// Compress large binary data URIs (e.g. photos, base64 images, PDFs) for LocalStorage
-// so that LocalStorage NEVER exceeds the browser 5MB limit.
+// Compress large PDF / file attachment data URIs for LocalStorage while preserving product photos intact
 function compressForStorage(val: any): any {
   if (!val) return val;
   if (typeof val === 'string') {
-    if (val.startsWith('data:') && val.length > 4000) {
+    if (val.startsWith('data:') && val.length > 300000 && (val.includes('application/pdf') || val.includes('octet-stream'))) {
       return val.slice(0, 50) + '...[IDB_STORED]';
     }
     return val;
@@ -81,7 +94,7 @@ function compressForStorage(val: any): any {
   if (typeof val === 'object') {
     const copy: Record<string, any> = {};
     for (const [k, v] of Object.entries(val)) {
-      if (typeof v === 'string' && v.startsWith('data:') && v.length > 4000) {
+      if ((k === 'fileDataUrl' || k === 'paymentScreenshot' || k === 'fileData') && typeof v === 'string' && v.startsWith('data:') && v.length > 300000) {
         copy[k] = v.slice(0, 50) + '...[IDB_STORED]';
         continue;
       }
@@ -163,8 +176,18 @@ export async function executeBatchedFirestoreWrites(onSyncStatusChange?: (docNam
     try {
       const sanitized = sanitizeForFirestore(compressForStorage(item.data));
       const payloadStr = JSON.stringify(sanitized);
-      if (lastWrittenPayloads[docName] === payloadStr) continue;
-      validWrites.push({ docName, payload: sanitized, deletedIds: item.deletedIds, payloadStr });
+
+      // Strict Firestore 1MB (1,048,576 bytes) document size guard
+      if (payloadStr.length > 900000) {
+        console.warn(`[Firestore Safe Guard] Payload for ${docName} is ${payloadStr.length} bytes, stripping large fields`);
+        const aggressiveSanitized = sanitizeForFirestore(sanitized, true);
+        const aggPayloadStr = JSON.stringify(aggressiveSanitized);
+        if (lastWrittenPayloads[docName] === aggPayloadStr) continue;
+        validWrites.push({ docName, payload: aggressiveSanitized, deletedIds: item.deletedIds, payloadStr: aggPayloadStr });
+      } else {
+        if (lastWrittenPayloads[docName] === payloadStr) continue;
+        validWrites.push({ docName, payload: sanitized, deletedIds: item.deletedIds, payloadStr });
+      }
       
       // Start tracking write
       activeWriteOperations[docName] = true;

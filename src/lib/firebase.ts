@@ -15,6 +15,7 @@ if (typeof window !== 'undefined') {
       msg.includes('WebChannelConnection') ||
       msg.includes('transport errored') ||
       msg.includes('RPC \'Listen\'') ||
+      msg.includes('Disconnecting idle stream') ||
       msg.includes('resource-exhausted') ||
       msg.includes('Quota limit') ||
       msg.includes('Using maximum backoff delay') ||
@@ -35,6 +36,9 @@ if (typeof window !== 'undefined') {
       msg.includes('Quota exceeded') ||
       msg.includes('429') ||
       msg.includes('RPC \'Write\'') ||
+      msg.includes('RPC \'Listen\'') ||
+      msg.includes('Disconnecting idle stream') ||
+      msg.includes('exceeds the maximum allowed size') ||
       msg.includes('Using maximum backoff delay') ||
       msg.includes('@firebase/firestore') ||
       msg.includes('WebSocket')

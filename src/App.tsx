@@ -3324,11 +3324,12 @@ export default function App() {
 
                   {/* Product Image / Icon Area */}
                   <div className={`${isListView ? 'w-24 h-24 sm:w-32 sm:h-32 rounded-xl shrink-0' : 'h-44 sm:h-52 w-full border-b border-neutral-200'} bg-slate-100 flex items-center justify-center overflow-hidden relative group/img`}>
-                    {item.imageUrl ? (
+                    {item.imageUrl && !item.imageUrl.includes('[IDB_STORED]') && item.imageUrl.length > 20 ? (
                       <img
                         src={item.imageUrl}
                         alt={item.nameGu}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                       />
                     ) : (
                       <div className="w-full h-full bg-gradient-to-br from-amber-50/90 via-orange-50/50 to-blue-50/50 flex items-center justify-center">
@@ -4713,11 +4714,12 @@ export default function App() {
                         </div>
                       </td>
                       <td className="p-2 font-black text-neutral-900 flex items-center gap-2">
-                        {item.imageUrl ? (
+                        {item.imageUrl && !item.imageUrl.includes('[IDB_STORED]') && item.imageUrl.length > 20 ? (
                           <img
                             src={item.imageUrl}
                             alt={item.nameGu}
                             className="w-8 h-8 rounded-lg object-contain bg-white border border-neutral-300 shrink-0"
+                            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
                           />
                         ) : (
                           <span className="text-lg">{item.icon || '📦'}</span>

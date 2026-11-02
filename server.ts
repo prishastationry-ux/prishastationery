@@ -213,10 +213,18 @@ app.post('/api/products/bulk', (req, res) => {
       writeMasterProductsToDisk(products);
       console.log(`✅ Saved ${products.length} master products to server disk (${MASTER_PRODUCTS_FILE})`);
       
-      // Also try writing to Firestore in background without blocking
+      // Also try writing to Firestore in background without blocking, respecting 1MB limit
       const { db } = getCloudDb();
       if (db) {
-        setDoc(doc(db, 'store_data', 'products'), { data: products, updatedAt: Date.now() }).catch(() => {});
+        const firestoreCleanProducts = products.map((p: any) => {
+          if (!p || typeof p !== 'object') return p;
+          const copy = { ...p };
+          if (typeof copy.imageUrl === 'string' && copy.imageUrl.startsWith('data:')) {
+            copy.imageUrl = '';
+          }
+          return copy;
+        });
+        setDoc(doc(db, 'store_data', 'products'), { data: firestoreCleanProducts, updatedAt: Date.now() }).catch(() => {});
       }
 
       return res.json({ success: true, count: products.length, message: 'Products saved permanently to server disk' });
