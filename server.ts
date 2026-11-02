@@ -147,44 +147,110 @@ app.post('/api/dev/save-icons', (req, res) => {
 // =========================================================================
 // 2. PRODUCTS & PRINT JOBS REST API (For Desktop & Mobile Clients)
 // =========================================================================
+// Server-side persistent storage on disk to prevent Firestore quota limits from losing products
+const DATA_DIR = path.join(process.cwd(), 'data');
+const MASTER_PRODUCTS_FILE = path.join(DATA_DIR, 'master_products.json');
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function readMasterProductsFromDisk(): any[] | null {
+  try {
+    if (fs.existsSync(MASTER_PRODUCTS_FILE)) {
+      const content = fs.readFileSync(MASTER_PRODUCTS_FILE, 'utf8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not read master products from disk:', e);
+  }
+  return null;
+}
+
+function writeMasterProductsToDisk(products: any[]): void {
+  try {
+    if (Array.isArray(products) && products.length > 0) {
+      fs.writeFileSync(MASTER_PRODUCTS_FILE, JSON.stringify(products, null, 2), 'utf8');
+    }
+  } catch (e) {
+    console.error('Error writing master products to disk:', e);
+  }
+}
+
 app.get('/api/products', async (req, res) => {
+  // 1. Check if server disk has master products (bypasses Firestore quota limits)
+  const diskProducts = readMasterProductsFromDisk();
+  if (diskProducts && diskProducts.length > 0) {
+    return res.json({ success: true, count: diskProducts.length, products: diskProducts, source: 'server_disk' });
+  }
+
+  // 2. Fallback to Firestore
   const { db } = getCloudDb();
-  if (!db) return res.status(503).json({ error: 'Cloud database not initialized' });
+  if (!db) {
+    return res.json({ success: true, count: 0, products: [], source: 'empty' });
+  }
 
   try {
     const snap = await getDoc(doc(db, 'store_data', 'products'));
     const products = snap.exists() ? snap.data()?.data || [] : [];
-    res.json({ success: true, count: products.length, products });
+    if (products.length > 0) {
+      writeMasterProductsToDisk(products);
+    }
+    res.json({ success: true, count: products.length, products, source: 'firestore' });
   } catch (err: any) {
-    res.status(500).json({ error: 'Failed to fetch products', details: err.message });
+    res.json({ success: true, count: 0, products: [], error: err.message, source: 'error_fallback' });
+  }
+});
+
+// Bulk update endpoint for saving all imported items directly to server disk
+app.post('/api/products/bulk', (req, res) => {
+  try {
+    const { products } = req.body || {};
+    if (Array.isArray(products) && products.length > 0) {
+      writeMasterProductsToDisk(products);
+      console.log(`✅ Saved ${products.length} master products to server disk (${MASTER_PRODUCTS_FILE})`);
+      
+      // Also try writing to Firestore in background without blocking
+      const { db } = getCloudDb();
+      if (db) {
+        setDoc(doc(db, 'store_data', 'products'), { data: products, updatedAt: Date.now() }).catch(() => {});
+      }
+
+      return res.json({ success: true, count: products.length, message: 'Products saved permanently to server disk' });
+    }
+    res.status(400).json({ error: 'Invalid products array' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to save master products', details: err.message });
   }
 });
 
 app.post('/api/products', async (req, res) => {
-  const { db } = getCloudDb();
-  if (!db) return res.status(503).json({ error: 'Cloud database not initialized' });
-
-  try {
-    const newProduct = req.body;
-    if (!newProduct || !newProduct.nameGu) {
-      return res.status(400).json({ error: 'Product name is required' });
-    }
-
-    const snap = await getDoc(doc(db, 'store_data', 'products'));
-    const currentProducts: any[] = snap.exists() ? snap.data()?.data || [] : [];
-
-    const existingIdx = currentProducts.findIndex((p: any) => p.id === newProduct.id);
-    if (existingIdx >= 0) {
-      currentProducts[existingIdx] = { ...currentProducts[existingIdx], ...newProduct };
-    } else {
-      currentProducts.unshift(newProduct);
-    }
-
-    await setDoc(doc(db, 'store_data', 'products'), { data: currentProducts });
-    res.json({ success: true, product: newProduct, count: currentProducts.length });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Failed to save product', details: err.message });
+  const newProduct = req.body;
+  if (!newProduct || !newProduct.nameGu) {
+    return res.status(400).json({ error: 'Product name is required' });
   }
+
+  let currentProducts = readMasterProductsFromDisk() || [];
+
+  const existingIdx = currentProducts.findIndex((p: any) => p.id === newProduct.id);
+  if (existingIdx >= 0) {
+    currentProducts[existingIdx] = { ...currentProducts[existingIdx], ...newProduct };
+  } else {
+    currentProducts.unshift(newProduct);
+  }
+
+  writeMasterProductsToDisk(currentProducts);
+
+  // Background cloud write if possible
+  const { db } = getCloudDb();
+  if (db) {
+    setDoc(doc(db, 'store_data', 'products'), { data: currentProducts, updatedAt: Date.now() }).catch(() => {});
+  }
+
+  res.json({ success: true, product: newProduct, count: currentProducts.length });
 });
 
 app.get('/api/jobs', async (req, res) => {

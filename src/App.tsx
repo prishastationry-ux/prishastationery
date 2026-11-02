@@ -301,6 +301,29 @@ export default function App() {
     return activeStoreMode === 'gst' ? setGstOrders : setOrders;
   };
 
+  // Automatically fetch master products from server disk storage (ensures Mobile & other devices get all items)
+  useEffect(() => {
+    fetch('/api/products')
+      .then(res => res.json())
+      .then(result => {
+        if (result?.success && Array.isArray(result.products) && result.products.length > currentPosItems.length) {
+          const prods = result.products;
+          setPosItems(prods);
+          setProfessionalPosItems(prods);
+          safeLocalStorageSet('prisha_products_v4', prods);
+          safeLocalStorageSet('prisha_products_v4_backup', prods);
+          safeLocalStorageSet('prof_products', prods);
+          safeLocalStorageSet('prof_products_backup', prods);
+          try {
+            localStorage.setItem('prisha_products_locked', JSON.stringify(prods));
+          } catch (e) {}
+          idbSet('prisha_products_v4', prods).catch(() => {});
+          idbSet('prof_products', prods).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, [currentPosItems.length]);
+
   // Online Print Jobs & Customer Uploaded Documents
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
   const [professionalPrintJobs, setProfessionalPrintJobs] = useFirebaseSync<PrintJobRecord[]>('prof_print_jobs', 'prisha_prof_print_jobs_v1', INITIAL_PRINT_JOBS);
@@ -832,6 +855,13 @@ export default function App() {
       // Directly update React state for both store modes
       setPosItems(finalProducts);
       setProfessionalPosItems(finalProducts);
+
+      // Send directly to server disk storage so Mobile & other devices get all items immediately
+      fetch('/api/products/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ products: finalProducts })
+      }).catch(() => {});
     }
 
     // 3. Process Orders if included
