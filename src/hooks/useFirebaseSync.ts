@@ -1,16 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import { doc, setDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { idbSet, idbGet } from '../lib/idbStore';
 
 // Global Quota & Resource Exhaustion Backoff Tracker
 const QUOTA_EXHAUSTED_KEY = 'prisha_firestore_quota_exhausted_until';
 let quotaExhaustedUntil = 0;
 
-// Immediately clear any stale 24-hour locks from previous versions
 if (typeof window !== 'undefined') {
   try {
-    localStorage.removeItem(QUOTA_EXHAUSTED_KEY);
-    quotaExhaustedUntil = 0;
+    const saved = localStorage.getItem(QUOTA_EXHAUSTED_KEY);
+    if (saved) {
+      const until = parseInt(saved, 10);
+      if (Date.now() < until) {
+        quotaExhaustedUntil = until;
+      }
+    }
   } catch (e) {}
 }
 
@@ -41,8 +46,8 @@ export function handleQuotaError(err: any): void {
     msg.includes('Quota exceeded') ||
     msg.includes('429')
   ) {
-    // Back off cloud writes/reads for 5 minutes when quota is exhausted
-    quotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
+    // Back off cloud writes/reads for 30 minutes when quota is exhausted
+    quotaExhaustedUntil = Date.now() + 30 * 60 * 1000;
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(QUOTA_EXHAUSTED_KEY, quotaExhaustedUntil.toString());
@@ -62,11 +67,13 @@ export function sanitizeForFirestore(val: any): any {
   return result;
 }
 
+// Compress large binary data URIs (e.g. photos, base64 images, PDFs) for LocalStorage
+// so that LocalStorage NEVER exceeds the browser 5MB limit.
 function compressForStorage(val: any): any {
   if (!val) return val;
   if (typeof val === 'string') {
-    if (val.startsWith('data:') && val.length > 50000 && (val.includes('application/pdf') || val.includes('octet-stream'))) {
-      return val.slice(0, 100) + '...[IDB_STORED]';
+    if (val.startsWith('data:') && val.length > 4000) {
+      return val.slice(0, 50) + '...[IDB_STORED]';
     }
     return val;
   }
@@ -74,11 +81,9 @@ function compressForStorage(val: any): any {
   if (typeof val === 'object') {
     const copy: Record<string, any> = {};
     for (const [k, v] of Object.entries(val)) {
-      if (k === 'fileDataUrl' || k === 'paymentScreenshot' || k === 'fileData') {
-        if (typeof v === 'string' && v.startsWith('data:') && v.length > 50000) {
-          copy[k] = v.slice(0, 100) + '...[IDB_STORED]';
-          continue;
-        }
+      if (typeof v === 'string' && v.startsWith('data:') && v.length > 4000) {
+        copy[k] = v.slice(0, 50) + '...[IDB_STORED]';
+        continue;
       }
       copy[k] = compressForStorage(v);
     }
@@ -87,7 +92,14 @@ function compressForStorage(val: any): any {
   return val;
 }
 
+// Dual storage: saves compressed data to LocalStorage + full high-capacity uncompressed data to IndexedDB
 export function safeLocalStorageSet(key: string, value: any): void {
+  // 1. Asynchronously persist full uncompressed data to IndexedDB (virtually unlimited capacity)
+  if (typeof window !== 'undefined') {
+    idbSet(key, value).catch(() => {});
+  }
+
+  // 2. Save compressed data to LocalStorage for instant synchronous reload
   try {
     const str = JSON.stringify(compressForStorage(value));
     localStorage.setItem(key, str);
@@ -253,8 +265,25 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
 
+  const isProducts = docName.includes('product') || docName === 'products';
+  const isOrders = docName.includes('order');
+
   const [data, setData] = useState<T>(() => {
-    let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
+    // 1. For products, check if there is a locked master product list
+    if (isProducts && typeof window !== 'undefined') {
+      try {
+        const lockedRaw = localStorage.getItem('prisha_products_locked');
+        if (lockedRaw) {
+          const parsedLocked = JSON.parse(lockedRaw);
+          if (Array.isArray(parsedLocked) && parsedLocked.length > 0) {
+            return parsedLocked as unknown as T;
+          }
+        }
+      } catch (e) {}
+    }
+
+    // 2. Normal localStorage / backup load
+    let saved = typeof window !== 'undefined' ? (localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup')) : null;
     let initialVal = initialData;
     if (saved) {
       try {
@@ -262,7 +291,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         const cleaned = filterMockData(parsed, docName);
         if (Array.isArray(cleaned)) {
           // If this is orders, respect deleted IDs
-          if (docName === 'orders' || docName === 'gst_orders' || docName === 'prof_orders' || docName === 'prof_gst_orders') {
+          if (isOrders) {
             const deletedIds = getDeletedIds(localKey);
             initialVal = cleaned.filter((item: any) => {
               if (!item) return false;
@@ -288,6 +317,36 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const [isWriting, setIsWriting] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
 
+  // Asynchronous IndexedDB Recovery on Mount (supports >5MB storage without browser limits)
+  useEffect(() => {
+    let isMounted = true;
+    if (typeof window !== 'undefined') {
+      idbGet<any>(localKey).then((idbVal) => {
+        if (!isMounted || !idbVal) return;
+        if (Array.isArray(idbVal)) {
+          const cleanedIdb = filterMockData(idbVal, docName);
+          setData((prev) => {
+            if (Array.isArray(prev)) {
+              // If IndexedDB has MORE products than current state, restore from IndexedDB immediately!
+              if (cleanedIdb.length > prev.length) {
+                console.log(`📦 Restored ${cleanedIdb.length} master items from IndexedDB for ${localKey}`);
+                safeLocalStorageSet(localKey, cleanedIdb);
+                if (isProducts) {
+                  try {
+                    localStorage.setItem('prisha_products_locked', JSON.stringify(compressForStorage(cleanedIdb)));
+                  } catch (e) {}
+                }
+                return cleanedIdb as unknown as T;
+              }
+            }
+            return prev;
+          });
+        }
+      }).catch(() => {});
+    }
+    return () => { isMounted = false; };
+  }, [localKey, docName, isProducts]);
+
   useEffect(() => {
     const docRef = doc(db, "store_data", docName);
     
@@ -310,42 +369,33 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
             const rawCleaned = filterMockData(rawData, docName);
             setData((prevData) => {
               if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
-                const isProducts = docName.includes('product') || docName === 'products';
-                const isOrders = docName.includes('order');
                 const cleanedPrev = filterMockData(prevData, docName);
 
-                // 1. ABSOLUTE PRODUCT SAFETY: Local products must NEVER be reduced by cloud sync!
+                // 1. ABSOLUTE PRODUCT SAFETY: Local products must NEVER be reduced or overwritten by cloud sync!
                 if (isProducts) {
-                  // If local has 135 items and cloud has 60 items, local ALWAYS wins!
-                  if (cleanedPrev.length >= rawCleaned.length && cleanedPrev.length > 0) {
+                  // If local has items (e.g. 135 items), LOCAL ALWAYS WINS and is never reduced to 60!
+                  if (cleanedPrev.length > 0) {
                     const localIdMap = new Map();
                     cleanedPrev.forEach((p: any) => { if (p && p.id) localIdMap.set(p.id, p); });
                     
-                    // Add any genuinely new item from cloud if it wasn't already here
+                    // Only add genuinely new items from cloud if they do not exist locally:
                     const missingFromLocal = rawCleaned.filter((c: any) => c && c.id && !localIdMap.has(c.id));
+                    if (missingFromLocal.length === 0) {
+                      // Local items remain 100% sacred and unchanged!
+                      return cleanedPrev;
+                    }
                     const safeResult = [...cleanedPrev, ...missingFromLocal];
                     safeLocalStorageSet(localKey, safeResult);
                     safeLocalStorageSet(localKey + '_backup', safeResult);
+                    idbSet(localKey, safeResult).catch(() => {});
                     return safeResult as unknown as T;
                   }
 
-                  // If cloud actually has more items, merge carefully
-                  const localIdMap = new Map();
-                  cleanedPrev.forEach((p: any) => { if (p && p.id) localIdMap.set(p.id, p); });
-                  const merged = [
-                    ...rawCleaned.map((c: any) => {
-                      if (!c || !c.id) return c;
-                      const local = localIdMap.get(c.id);
-                      if (!local) return c;
-                      const localTs = local.updatedAt || local.lastModified || 0;
-                      const cloudTs = c.updatedAt || c.lastModified || cloudUpdatedAt || 0;
-                      return localTs >= cloudTs ? local : c;
-                    }),
-                    ...cleanedPrev.filter((l: any) => l && l.id && !rawCleaned.some((c: any) => c && c.id === l.id))
-                  ];
-                  safeLocalStorageSet(localKey, merged);
-                  safeLocalStorageSet(localKey + '_backup', merged);
-                  return merged as unknown as T;
+                  // If local was completely empty, and only then, accept cloud data:
+                  safeLocalStorageSet(localKey, rawCleaned);
+                  safeLocalStorageSet(localKey + '_backup', rawCleaned);
+                  idbSet(localKey, rawCleaned).catch(() => {});
+                  return rawCleaned as unknown as T;
                 }
 
                 // 2. ORDER HANDLING: Respect deleted order IDs so deleted orders NEVER return
@@ -357,6 +407,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
                   const merged = [...validCloud, ...localUnsynced];
                   safeLocalStorageSet(localKey, merged);
                   safeLocalStorageSet(localKey + '_backup', merged);
+                  idbSet(localKey, merged).catch(() => {});
                   return merged as unknown as T;
                 }
 
@@ -386,6 +437,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
                 safeLocalStorageSet(localKey, merged);
                 safeLocalStorageSet(localKey + '_backup', merged);
+                idbSet(localKey, merged).catch(() => {});
                 return merged as unknown as T;
               }
               
@@ -398,6 +450,7 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
 
               safeLocalStorageSet(localKey, rawCleaned);
               safeLocalStorageSet(localKey + '_backup', rawCleaned);
+              idbSet(localKey, rawCleaned).catch(() => {});
               return rawCleaned as T;
             });
           }
@@ -421,14 +474,21 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
       window.removeEventListener('focus', handleFocusOrVisible);
       window.removeEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
     };
-  }, [docName, localKey]);
+  }, [docName, localKey, isProducts, isOrders]);
 
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
-      // Force persistence to localStorage immediately with backup
+      // Force persistence to localStorage immediately with backup and IndexedDB
       safeLocalStorageSet(localKey, next);
       safeLocalStorageSet(localKey + '_backup', next);
+      idbSet(localKey, next).catch(() => {});
+
+      if (isProducts && Array.isArray(next)) {
+        try {
+          localStorage.setItem('prisha_products_locked', JSON.stringify(compressForStorage(next)));
+        } catch (e) {}
+      }
       
       const onStatusChange = (dName: string, writing: boolean) => {
         if (dName === docName) setIsWriting(writing);

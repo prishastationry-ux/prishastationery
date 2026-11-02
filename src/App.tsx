@@ -95,6 +95,7 @@ import { OfflineIndicator } from './components/OfflineIndicator';
 import { getItemReviewStats } from './utils/reviewHelper';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
 import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll, clearAllDeletedIds, safeLocalStorageSet } from './hooks/useFirebaseSync';
+import { idbSet } from './lib/idbStore';
 import {
   deleteFileFromCloudStorage,
   downloadFileSafely,
@@ -817,11 +818,16 @@ export default function App() {
         finalProducts = [...currentPosItems, ...newItems];
       }
 
-      // Synchronously write directly into localStorage
+      // Synchronously write directly into localStorage and IndexedDB
       safeLocalStorageSet('prisha_products_v4', finalProducts);
       safeLocalStorageSet('prisha_products_v4_backup', finalProducts);
       safeLocalStorageSet('prof_products', finalProducts);
       safeLocalStorageSet('prof_products_backup', finalProducts);
+      try {
+        localStorage.setItem('prisha_products_locked', JSON.stringify(finalProducts));
+      } catch (e) {}
+      idbSet('prisha_products_v4', finalProducts).catch(() => {});
+      idbSet('prof_products', finalProducts).catch(() => {});
 
       // Directly update React state for both store modes
       setPosItems(finalProducts);
