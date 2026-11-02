@@ -59,8 +59,7 @@ import {
   ShoppingBag,
   Landmark,
   Database,
-  Globe,
-  Wrench
+  Globe
 } from 'lucide-react';
 
 import { ProductItem, CartItem, OrderRecord, StoreSettings, BusinessStats, ExpenseRecord, PurchaseRecord, TrashRecord, PrintJobRecord, PrintJobFile, BillItem, BankAccountEntry, ShopBillRecord, OnlineServiceJob, OnlineServiceExpense } from './types';
@@ -93,11 +92,9 @@ import { ProductDetailModal } from './components/ProductDetailModal';
 import { StockPopupModal } from './components/StockPopupModal';
 import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
-import { MaintenanceScreen } from './components/MaintenanceScreen';
-import { checkStoreMaintenance } from './utils/maintenanceHelper';
 import { getItemReviewStats } from './utils/reviewHelper';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
-import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll, clearAllDeletedIds, deduplicateArray } from './hooks/useFirebaseSync';
+import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll, clearAllDeletedIds } from './hooks/useFirebaseSync';
 import {
   deleteFileFromCloudStorage,
   downloadFileSafely,
@@ -396,13 +393,6 @@ export default function App() {
     localStorage.setItem('prisha_wishlist', JSON.stringify(wishlist));
   }, [wishlist]);
 
-  // Security Lock Guard: Force non-logged-in visitors to customer tab at all times
-  useEffect(() => {
-    if (!isAdminUnlocked && activeTab !== 'customer') {
-      setActiveTab('customer');
-    }
-  }, [isAdminUnlocked, activeTab]);
-
   // Clean up the 2 test expenses and 1 purchase bill requested by user
   useEffect(() => {
     setExpenses(prev =>
@@ -498,12 +488,6 @@ export default function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState<boolean>(false);
   const [activeInvoiceOrder, setActiveInvoiceOrder] = useState<OrderRecord | null>(null);
-  const [customerOrderSuccess, setCustomerOrderSuccess] = useState<{
-    invoiceNo: string;
-    customerName: string;
-    mobile?: string;
-    total: number;
-  } | null>(null);
   const [isSuccessModal, setIsSuccessModal] = useState<boolean>(false);
 
   // Modals and interactive editing state for Admin
@@ -764,47 +748,48 @@ export default function App() {
     if (!pendingImportData) return;
     const data = pendingImportData;
 
-    const applyData = (setter: any, backupArr: any[], currentArr: any[], localKeyName?: string) => {
-      if (!backupArr || !Array.isArray(backupArr) || backupArr.length === 0) return;
+    const applyData = (setter: any, backupArr: any[], currentArr: any[]) => {
+      if (!backupArr || !Array.isArray(backupArr)) return;
       if (mode === 'overwrite') {
-        if (localKeyName && typeof window !== 'undefined') {
-          try { localStorage.removeItem(localKeyName + '_deleted_ids'); } catch (e) {}
-        }
-        setter(deduplicateArray(backupArr));
+        setter(backupArr);
       } else {
-        // Merge Logic: Local current items + new backup items
-        const merged = deduplicateArray([...backupArr, ...currentArr]);
-        setter(merged);
+        // Merge Logic: Keep current items + add new ones from backup
+        const currentIds = new Set(currentArr.map(i => i.id || i.invoiceNo));
+        const newItems = backupArr.filter(i => !currentIds.has(i.id || i.invoiceNo));
+        setter([...currentArr, ...newItems]);
       }
     };
 
     // Product collections
+    const prodKey = activeShopMode === 'professional' 
+      ? (activeStoreMode === 'gst' ? 'prof_gst_products' : 'prof_products')
+      : (activeStoreMode === 'gst' ? 'gst_products' : 'products');
+    
+    // The backup file might use different keys or the standard ones
+    // We try to find products in various possible keys
     const backupProducts = data.products || data.prisha_products_v4 || data.prisha_gst_products_v1 || data.prof_products || data.prof_gst_products || [];
-    applyData(getActivePosSetter(), backupProducts, currentPosItems, currentProductCollection);
+    applyData(getActivePosSetter(), backupProducts, currentPosItems);
 
     // Orders
     const backupOrders = data.currentOrders || data.orders || data.prisha_orders_v4 || data.prisha_gst_orders_v1 || [];
-    applyData(getActiveOrdersSetter(), backupOrders, currentOrders, currentOrderCollection);
+    applyData(getActiveOrdersSetter(), backupOrders, currentOrders);
 
     // Rojmel, Expenses, etc.
-    if (data.expenses) applyData(getActiveExpensesSetter(), data.expenses, currentExpenses, 'prisha_expenses_v5');
-    if (data.purchases) applyData(getActivePurchasesSetter(), data.purchases, currentPurchases, 'prisha_purchases_v5');
-    if (data.rojmelEntries) applyData(getActiveRojmelSetter(), data.rojmelEntries, currentRojmel, 'prisha_rojmel_v1');
-    if (data.khataAccounts) applyData(getActiveKhataAccountsSetter(), data.khataAccounts, currentKhataAccounts, 'prisha_khata_accounts_v2');
-    if (data.khataTransactions) applyData(getActiveKhataTransactionsSetter(), data.khataTransactions, currentKhataTransactions, 'prisha_khata_tx_v1');
-    if (data.bankEntries) applyData(getActiveBankEntriesSetter(), data.bankEntries, currentBankEntries, 'prisha_bank_entries_v1');
-    if (data.shopBills) applyData(getActiveShopBillsSetter(), data.shopBills, currentShopBills, 'prisha_shop_bills_v1');
+    if (data.expenses) applyData(getActiveExpensesSetter(), data.expenses, currentExpenses);
+    if (data.purchases) applyData(getActivePurchasesSetter(), data.purchases, currentPurchases);
+    if (data.rojmelEntries) applyData(getActiveRojmelSetter(), data.rojmelEntries, currentRojmel);
+    if (data.khataAccounts) applyData(getActiveKhataAccountsSetter(), data.khataAccounts, currentKhataAccounts);
+    if (data.khataTransactions) applyData(getActiveKhataTransactionsSetter(), data.khataTransactions, currentKhataTransactions);
+    if (data.bankEntries) applyData(getActiveBankEntriesSetter(), data.bankEntries, currentBankEntries);
+    if (data.shopBills) applyData(getActiveShopBillsSetter(), data.shopBills, currentShopBills);
     
     if (data.storeSettings) {
       setStoreSettings(prev => ({ ...prev, ...data.storeSettings }));
     }
 
     setPendingImportData(null);
-    showToast(mode === 'overwrite' ? '✅ બેકઅપ ફાઇલમાંથી ડેટા સંપૂર્ણ ઓવરરાઇટ થઈ ગયો!' : '✅ બેકઅપ અને તમારી વિગતો સફળતાપૂર્વક સિન્ક (Merge) થઈ ગઈ!');
-    setTimeout(() => {
-      forceCloudSyncAll();
-      executeBatchedFirestoreWrites();
-    }, 300);
+    showToast(mode === 'overwrite' ? '✅ બેકઅપ સંપૂર્ણ ઓવરરાઇટ થઈ ગયો!' : '✅ બેકઅપ અને તમારી વસ્તુઓ સફળતાપૂર્વક ભેગી (Merge) થઈ ગઈ!');
+    forceCloudSyncAll();
   };
 
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -1511,21 +1496,11 @@ export default function App() {
       netProfit: Number((s.netProfit + totalProfit).toFixed(2))
     }));
 
-    // Clear Cart, Close Drawer & Show Order Confirmation
+    // Clear Cart, Close Drawer & Show Instant Invoice
     setCart([]);
     setIsCartDrawerOpen(false);
-    if (isAdminUnlocked) {
-      setActiveInvoiceOrder(newOrder);
-      showToast(`🎉 ઓર્ડર #${newOrder.invoiceNo} સફળતાપૂર્વક નોંધાઈ ગયો! ડિલિવરી રસીદ તૈયાર છે.`);
-    } else {
-      setCustomerOrderSuccess({
-        invoiceNo: newOrder.invoiceNo,
-        customerName: newOrder.customerName,
-        mobile: newOrder.mobile,
-        total: newOrder.total
-      });
-      showToast(`🎉 ઓર્ડર #${newOrder.invoiceNo} સફળતાપૂર્વક નોંધાઈ ગયો!`);
-    }
+    setActiveInvoiceOrder(newOrder);
+    showToast(`🎉 ઓર્ડર #${newOrder.invoiceNo} સફળતાપૂર્વક નોંધાઈ ગયો! ડિલિવરી રસીદ તૈયાર છે.`);
 
   };
 
@@ -2351,8 +2326,6 @@ export default function App() {
     }
   };
 
-  const storeMaintenanceStatus = checkStoreMaintenance(storeSettings);
-
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white">
       
@@ -2370,23 +2343,11 @@ export default function App() {
         />
       )}
 
-      {storeMaintenanceStatus.isMaintenance && !isAdminUnlocked ? (
-        <MaintenanceScreen
-          status={storeMaintenanceStatus}
-          storeSettings={storeSettings}
-          onAdminLoginClick={() => {
-            setEnteredPassword('');
-            setPasswordError('');
-            setShowPasswordModal(true);
-          }}
-        />
-      ) : (
-        <>
-          {/* ========================================================================= */}
-          {/* 1. PROFESSIONAL AMAZON / FLIPKART STYLE TOP HEADER */}
-          {/* ========================================================================= */}
-          {activeTab !== 'portal' && (
-          <header className="bg-white border-b border-neutral-300 shadow-xs no-print sticky top-0 z-40">
+      {/* ========================================================================= */}
+      {/* 1. PROFESSIONAL AMAZON / FLIPKART STYLE TOP HEADER */}
+      {/* ========================================================================= */}
+      {activeTab !== 'portal' && (
+      <header className="bg-white border-b border-neutral-300 shadow-xs no-print sticky top-0 z-40">
         <div className="max-w-[1550px] mx-auto px-2 sm:px-4 py-1.5 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-3">
           
           {/* LEFT LOGO (Admin Upload Triggerable - Clean Fixed Ratio) */}
@@ -2584,22 +2545,6 @@ export default function App() {
               >
                 <Globe className="w-3.5 h-3.5 text-amber-300" />
                 <span>ઓનલાઇન સેવા પોર્ટલ</span>
-              </button>
-            )}
-
-            {/* STORE MAINTENANCE QUICK BUTTON (ADMIN ONLY) */}
-            {isAdminUnlocked && (
-              <button
-                onClick={() => setShowStoreSettingsModal(true)}
-                className={`px-3 py-1 rounded-lg text-xs font-black cursor-pointer shadow-xs flex items-center gap-1 transition-all ${
-                  storeSettings.maintenanceEnabled
-                    ? 'bg-red-600 hover:bg-red-700 text-white animate-pulse font-black'
-                    : 'bg-amber-500 hover:bg-amber-600 text-slate-950 font-black'
-                }`}
-                title="મેન્ટેનન્સ સેટિંગ્સ & ઓટો શિડ્યુલ ખોલો"
-              >
-                <Wrench className="w-3.5 h-3.5" />
-                <span>{storeSettings.maintenanceEnabled ? '🛠️ મેન્ટેનન્સ (ON)' : '🛠️ મેન્ટેનન્સ સેટિંગ્સ'}</span>
               </button>
             )}
 
@@ -3008,7 +2953,7 @@ export default function App() {
 
             {/* Category Filter Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-black">
-              {isAdminUnlocked && activeShopMode === 'general' && (
+              {activeShopMode === 'general' && (
                 <button
                   key="low_stock"
                   type="button"
@@ -3071,15 +3016,14 @@ export default function App() {
               ? "flex flex-col gap-3" 
               : "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-3 sm:gap-4"
             }`}>
-              {filteredItems.map((item, index) => {
+              {filteredItems.map(item => {
                 const inCart = cart.find(c => c.product.id === item.id);
                 const isOutOfStock = typeof item.stock === 'number' && item.stock <= 0;
                 const isListView = storeSettings.productLayoutMode === 'list';
-                const cardKey = item.id ? `${item.id}-${index}` : `prod-${index}`;
 
               return (
                 <div
-                  key={cardKey}
+                  key={item.id}
                   className={`bg-white rounded-xl border border-neutral-200 hover:border-blue-400 shadow-sm hover:shadow-lg transition-all flex justify-between overflow-hidden group relative ${isListView ? 'flex-row items-center p-2 gap-3' : 'flex-col'}`}
                   onClick={() => setSelectedProductForModal(item)}
                 >
@@ -3224,13 +3168,9 @@ export default function App() {
                             </span>
                           )}
                         </div>
-                      ) : isAdminUnlocked ? (
+                      ) : (
                         <span className="text-neutral-800 bg-white/95 px-2 py-0.5 rounded-md border border-neutral-300 font-extrabold backdrop-blur-xs">
                           સ્ટોક: {item.stock} {item.unit || 'નંગ'}
-                        </span>
-                      ) : (
-                        <span className="text-emerald-800 bg-emerald-50/95 px-2 py-0.5 rounded-md border border-emerald-300 font-extrabold backdrop-blur-xs">
-                          ✅ સ્ટોક ઉપલબ્ધ
                         </span>
                       )}
                     </div>
@@ -3374,7 +3314,7 @@ export default function App() {
           </div>
 
         </main>
-      ) : (isAdminUnlocked && activeTab === 'admin') ? (
+      ) : activeTab === 'admin' ? (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
 
           {/* ADMIN TOP CONTROL BAR */}
@@ -5774,7 +5714,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 15. TRASH / RECYCLE BIN MODAL */}
       {/* ========================================================================= */}
-      {showTrashModal && isAdminUnlocked && (
+      {showTrashModal && (
         <TrashModal
           isOpen={showTrashModal}
           onClose={() => setShowTrashModal(false)}
@@ -6076,7 +6016,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 18. BILL / INVOICE DESIGN & CUSTOMIZATION MODAL (Admin Bill Editor) */}
       {/* ========================================================================= */}
-      {showBillSettingsModal && isAdminUnlocked && (
+      {showBillSettingsModal && (
         <BillSettingsModal
           isOpen={showBillSettingsModal}
           onClose={() => setShowBillSettingsModal(false)}
@@ -6107,7 +6047,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 20. MULTI-PLATFORM ECOSYSTEM & REAL-TIME SYNC MODAL */}
       {/* ========================================================================= */}
-      {showMultiPlatformSyncModal && isAdminUnlocked && (
+      {showMultiPlatformSyncModal && (
         <MultiPlatformSyncModal
           isOpen={showMultiPlatformSyncModal}
           onClose={() => setShowMultiPlatformSyncModal(false)}
@@ -6118,7 +6058,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 20B. DEDICATED ONLINE ORDERS & DELIVERIES MODAL */}
       {/* ========================================================================= */}
-      {showOnlineOrdersModal && isAdminUnlocked && (
+      {showOnlineOrdersModal && (
         <OnlineOrdersModal
           isOpen={showOnlineOrdersModal}
           onClose={() => setShowOnlineOrdersModal(false)}
@@ -6139,7 +6079,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 20C. DEDICATED BANK CURRENT ACCOUNT & UPI PASSBOOK MODAL */}
       {/* ========================================================================= */}
-      {showBankCurrentAccountModal && isAdminUnlocked && (
+      {showBankCurrentAccountModal && (
         <BankCurrentAccountModal
           isOpen={showBankCurrentAccountModal}
           onClose={() => setShowBankCurrentAccountModal(false)}
@@ -6179,7 +6119,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 21. ADMIN PRINT JOBS & CUSTOMER DOCUMENTS MODAL (PDF, JPG, PNG, EXCEL) */}
       {/* ========================================================================= */}
-      {showPrintJobsModal && isAdminUnlocked && (
+      {showPrintJobsModal && (
         <AdminPrintJobsModal
           isOpen={showPrintJobsModal}
           onClose={() => setShowPrintJobsModal(false)}
@@ -6236,7 +6176,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 23. ROJMEL & KHATA ERP MODAL */}
       {/* ========================================================================= */}
-      {showRojmelModal && isAdminUnlocked && (
+      {showRojmelModal && (
         <RojmelKhataModal
           isOpen={showRojmelModal}
           onClose={() => setShowRojmelModal(false)}
@@ -6393,7 +6333,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 24. SHOP RENT & BILLS LEDGER MODAL */}
       {/* ========================================================================= */}
-      {showShopRentModal && isAdminUnlocked && (
+      {showShopRentModal && (
         <ShopRentAndBillsModal
           isOpen={showShopRentModal}
           onClose={() => setShowShopRentModal(false)}
@@ -6445,7 +6385,7 @@ export default function App() {
       )}
 
       {/* 13.B CA AUDIT & GST REPORT MODAL */}
-      {showCaAuditModal && isAdminUnlocked && (
+      {showCaAuditModal && (
         <CaAuditModal
           isOpen={showCaAuditModal}
           onClose={() => setShowCaAuditModal(false)}
@@ -6488,7 +6428,7 @@ export default function App() {
       )}
 
       {/* 13.C DAILY CASH DRAWER CLOSING MODAL */}
-      {showDailyCashClosingModal && isAdminUnlocked && (
+      {showDailyCashClosingModal && (
         <DailyCashClosingModal
           isOpen={showDailyCashClosingModal}
           onClose={() => setShowDailyCashClosingModal(false)}
@@ -6602,8 +6542,6 @@ export default function App() {
           © 2026 {storeSettings.storeNameEn}. All Rights Reserved. • Powered by AI Studio
         </div>
       </footer>
-        </>
-      )}
 
       {/* OFFLINE STATE NOTIFICATION TOAST */}
       <OfflineIndicator />
@@ -6789,7 +6727,7 @@ export default function App() {
       />
 
       {/* DEDICATED GeM PORTAL BILL GENERATOR MODAL */}
-      {showGemBillModal && isAdminUnlocked && (
+      {showGemBillModal && (
         <GemBillGeneratorModal
           storeSettings={storeSettings}
           orders={currentOrders}
@@ -6802,7 +6740,7 @@ export default function App() {
       )}
 
       {/* 5-FIRM MULTI-VENDOR TENDER QUOTATION MODAL */}
-      {showMultiQuotationModal && isAdminUnlocked && (
+      {showMultiQuotationModal && (
         <MultiQuotationModal
           storeSettings={storeSettings}
           onClose={() => setShowMultiQuotationModal(false)}
@@ -6810,58 +6748,19 @@ export default function App() {
         />
       )}
 
-      {/* CUSTOMER STOREFRONT ORDER CONFIRMATION MODAL (SHOWS ORDER NUMBER ONLY) */}
-      {customerOrderSuccess && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-3xl p-6 max-w-md w-full border-4 border-emerald-500 shadow-2xl text-center space-y-4">
-            <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 font-black text-3xl mx-auto shadow-inner">
-              🎉
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-neutral-900">ઓર્ડર સફળતાપૂર્વક નોંધાઈ ગયો!</h3>
-              <p className="text-xs font-bold text-neutral-500 mt-1">{storeSettings.storeNameGu || 'પ્રિષા સ્ટેશનરી અને ઓનલાઇન સર્વિસ - થરાદ'}</p>
-            </div>
-
-            <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 space-y-2 text-left">
-              <div className="flex items-center justify-between border-b border-emerald-200 pb-2">
-                <span className="text-xs font-bold text-emerald-800">ઓર્ડર નંબર:</span>
-                <span className="text-base font-black text-emerald-950 font-mono">#{customerOrderSuccess.invoiceNo}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-neutral-600">ગ્રાહકનું નામ:</span>
-                <span className="font-black text-neutral-900">{customerOrderSuccess.customerName}</span>
-              </div>
-              {customerOrderSuccess.mobile && (
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-neutral-600">મોબાઇલ નંબર:</span>
-                  <span className="font-black text-neutral-900">📞 {customerOrderSuccess.mobile}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-xs pt-1 border-t border-emerald-200 font-black">
-                <span className="text-neutral-700">કુલ ચૂકવવાપાત્ર રકમ:</span>
-                <span className="text-sm text-emerald-800">₹{customerOrderSuccess.total}/-</span>
-              </div>
-            </div>
-
-            <div className="bg-amber-50 p-3.5 rounded-xl border border-amber-200 text-left text-xs font-bold text-amber-900 space-y-1">
-              <p className="font-black text-amber-950 flex items-center gap-1">
-                <span>📲 બિલ / પાવતીની વિગત:</span>
-              </p>
-              <p className="text-[11px] leading-relaxed">
-                તમારો ઓર્ડર નંબર <span className="font-black">#{customerOrderSuccess.invoiceNo}</span> છે. સંચાલક દ્વારા ચકાસણી કરીને ટૂંક સમયમાં તમને પાવતી/બિલ WhatsApp પર મોકલી આપશે.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setCustomerOrderSuccess(null)}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3 rounded-2xl text-sm shadow-md transition-all active:scale-95 cursor-pointer"
-            >
-              ✅ ઓકે, સમજાયું (OK)
-            </button>
-          </div>
-        </div>
-      )}
+      {/* STOCK POPUP MODAL */}
+      <StockPopupModal
+        isOpen={showStockPopupModal}
+        onClose={() => setShowStockPopupModal(false)}
+        products={currentPosItems}
+        onUpdateStock={(id, newStock) => {
+          getActivePosSetter()(prev => prev.map(p => p.id === id ? { ...p, stock: newStock } : p));
+          showToast('✅ સ્ટોક સફળતાપૂર્વક અપડેટ થયો');
+        }}
+        showToast={showToast}
+        storeSettings={storeSettings}
+        isAdminUnlocked={isAdminUnlocked}
+      />
     </div>
   );
 }

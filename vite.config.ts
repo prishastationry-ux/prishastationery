@@ -46,7 +46,7 @@ export default defineConfig(() => {
         },
         workbox: {
           globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,json}'],
-          maximumFileSizeToCacheInBytes: 15 * 1024 * 1024, // Allow caching files up to 15MB
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // Allow caching files up to 5MB (index bundle size is 2.3MB)
           runtimeCaching: [
             {
               urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

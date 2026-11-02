@@ -189,9 +189,17 @@ export const OrderTrackingModal: React.FC<OrderTrackingModalProps> = ({
                           {order.paymentMode} ({order.paymentStatus === 'Paid' ? 'પેમેન્ટ જમા' : 'પેન્ડિંગ'})
                         </span>
                       </div>
-                      <span className="text-[11px] font-black text-orange-700 bg-orange-50 px-2 py-1 rounded-lg border border-orange-200">
-                        આઇટમ્સ: {order.items.length}
-                      </span>
+                      <button
+                        onClick={() => {
+                          onViewInvoice(order);
+                          onClose();
+                        }}
+                        className="bg-neutral-100 hover:bg-neutral-200 text-neutral-800 p-2 rounded-xl border text-xs font-bold flex items-center gap-1 shadow-2xs"
+                        title="બિલ જુઓ / પ્રિન્ટ કરો"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span className="hidden sm:inline text-[11px] font-black">બિલ જુઓ</span>
+                      </button>
                     </div>
                   </div>
 
