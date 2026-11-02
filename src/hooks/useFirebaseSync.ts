@@ -41,8 +41,8 @@ export function handleQuotaError(err: any): void {
     msg.includes('Quota exceeded') ||
     msg.includes('429')
   ) {
-    // Back off cloud writes/reads for only 20 seconds (instead of 24 hours!)
-    quotaExhaustedUntil = Date.now() + 20 * 1000;
+    // Back off cloud writes/reads for 5 minutes when quota is exhausted
+    quotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(QUOTA_EXHAUSTED_KEY, quotaExhaustedUntil.toString());
@@ -87,7 +87,7 @@ function compressForStorage(val: any): any {
   return val;
 }
 
-function safeLocalStorageSet(key: string, value: any): void {
+export function safeLocalStorageSet(key: string, value: any): void {
   try {
     const str = JSON.stringify(compressForStorage(value));
     localStorage.setItem(key, str);
@@ -106,6 +106,7 @@ function safeLocalStorageSet(key: string, value: any): void {
     }
   }
 }
+
 
 export function getDeletedIds(localKey: string): Set<string> {
   try {
@@ -128,7 +129,10 @@ const pendingWrites: Record<string, { data: any; deletedIds?: string[] }> = {};
 const writeDebounceTimers: Record<string, any> = {};
 const lastWrittenPayloads: Record<string, string> = {};
 
-export async function executeBatchedFirestoreWrites() {
+// Global tracker for currently active write operations to provide UI feedback
+const activeWriteOperations: Record<string, boolean> = {};
+
+export async function executeBatchedFirestoreWrites(onSyncStatusChange?: (docName: string, isWriting: boolean) => void): Promise<void> {
   if (isQuotaExhausted()) return;
 
   const docsToCommit = Object.entries(pendingWrites);
@@ -149,6 +153,10 @@ export async function executeBatchedFirestoreWrites() {
       const payloadStr = JSON.stringify(sanitized);
       if (lastWrittenPayloads[docName] === payloadStr) continue;
       validWrites.push({ docName, payload: sanitized, deletedIds: item.deletedIds, payloadStr });
+      
+      // Start tracking write
+      activeWriteOperations[docName] = true;
+      if (onSyncStatusChange) onSyncStatusChange(docName, true);
     } catch (e) {}
   }
 
@@ -177,24 +185,38 @@ export async function executeBatchedFirestoreWrites() {
         lastWrittenPayloads[docName] = payloadStr;
       }
     }
+    console.log('✅ Firestore sync successful for:', validWrites.map(w => w.docName).join(', '));
   } catch (err: any) {
     handleQuotaError(err);
+    console.error('❌ Firestore sync failed:', err);
+    throw err;
+  } finally {
+    for (const { docName } of validWrites) {
+      delete activeWriteOperations[docName];
+      if (onSyncStatusChange) onSyncStatusChange(docName, false);
+    }
   }
 }
 
-function registerPendingWrite(docName: string, data: any, localKey?: string) {
+export function registerPendingWrite(docName: string, data: any, localKey?: string, immediate = false, onSyncStatusChange?: (docName: string, isWriting: boolean) => void) {
   const deletedIds = localKey ? Array.from(getDeletedIds(localKey)) : [];
   pendingWrites[docName] = { data, deletedIds };
   if (writeDebounceTimers[docName]) {
     clearTimeout(writeDebounceTimers[docName]);
+    delete writeDebounceTimers[docName];
   }
   
+  if (immediate) {
+    executeBatchedFirestoreWrites(onSyncStatusChange);
+    return;
+  }
+
   // Fast 2-second debounce for quick cloud synchronization
   const delay = 2000; 
   
   writeDebounceTimers[docName] = setTimeout(() => {
     delete writeDebounceTimers[docName];
-    executeBatchedFirestoreWrites();
+    executeBatchedFirestoreWrites(onSyncStatusChange);
   }, delay);
 }
 
@@ -231,240 +253,229 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
   const initialDataRef = useRef(initialData);
   initialDataRef.current = initialData;
 
-  // Deleted IDs tracking is now enabled for all collections including products
-
-  const filterMockData = (val: any): any => {
-    if (!Array.isArray(val)) return val;
-    if (docName === 'printJobs') {
-      return val.filter((j: any) => j && j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821' && j.jobNo !== 'PRN-6065');
-    }
-    if (docName === 'orders') {
-      // Keep all user orders intact; only filter out explicit dummy test IDs if present
-      return val.filter((o: any) => o && o.id !== 'ord-demo-test');
-    }
-    if (docName === 'trash') {
-      return val.filter((t: any) => {
-        if (!t) return false;
-        if (t.id === 'trash-demo-1') return false;
-        return true;
-      });
-    }
-    if (docName === 'expenses') {
-      return val.filter((e: any) => {
-        if (!e) return false;
-        // Filter out the 2 user-requested expenses (દુકાન ચા-નાસ્તો ₹120 & લાઈટ બિલ / ઇન્ટરનેટ ₹450)
-        if (
-          e.title === 'દુકાન ચા-નાસ્તો' ||
-          e.title === 'લાઈટ બિલ / ઇન્ટરનેટ' ||
-          e.title?.includes('ચા-નાસ્તો') ||
-          e.title?.includes('લાઈટ બિલ') ||
-          (e.amount === 120 && e.category === 'દૈનિક ખર્ચ') ||
-          (e.amount === 450 && e.category === 'યુટિલિટી')
-        ) {
-          return false;
-        }
-        return true;
-      });
-    }
-    if (docName === 'purchases') {
-      // User explicitly requested to delete the 1 purchase bill in CA audit
-      // We only filter out the specific PUR-1 or invalid test bills
-      return val.filter((p: any) => {
-        if (!p) return false;
-        if (p.billNo === 'PUR-1' || !p.supplierName || p.totalAmount <= 0 || p.supplierName === 'ટેસ્ટ સપ્લાયર') return false;
-        return true;
-      });
-    }
-    return val;
-  };
-
-  const isLedgerCollection =
-    localKey.includes('orders') ||
-    localKey.includes('bank') ||
-    localKey.includes('rojmel') ||
-    localKey.includes('khata') ||
-    localKey.includes('expenses') ||
-    localKey.includes('purchases') ||
-    localKey.includes('trash') ||
-    localKey.includes('pos_items') ||
-    localKey.includes('products');
-
   const [data, setData] = useState<T>(() => {
-    // Rescue orders, inventory & financial ledgers: clear any auto-generated deleted IDs
-    if (typeof window !== 'undefined' && isLedgerCollection) {
-      try {
-        localStorage.removeItem(localKey + '_deleted_ids');
-      } catch (e) {}
-    }
-    const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
     let saved = localStorage.getItem(localKey) || localStorage.getItem(localKey + '_backup');
     let initialVal = initialData;
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const cleaned = filterMockData(parsed);
+        const cleaned = filterMockData(parsed, docName);
         if (Array.isArray(cleaned)) {
-          initialVal = cleaned.filter((item: any) => {
-            if (!item) return false;
-            const id = item.id;
-            const inv = item.invoiceNo;
-            const dataId = item.data?.id;
-            const dataInv = item.data?.invoiceNo;
-            if (id && deletedIds.has(id)) return false;
-            if (inv && deletedIds.has(inv)) return false;
-            if (dataId && deletedIds.has(dataId)) return false;
-            if (dataInv && deletedIds.has(dataInv)) return false;
-            return true;
-          }) as unknown as T;
+          // If this is orders, respect deleted IDs
+          if (docName === 'orders' || docName === 'gst_orders' || docName === 'prof_orders' || docName === 'prof_gst_orders') {
+            const deletedIds = getDeletedIds(localKey);
+            initialVal = cleaned.filter((item: any) => {
+              if (!item) return false;
+              if (item.id && deletedIds.has(item.id)) return false;
+              if (item.invoiceNo && deletedIds.has(item.invoiceNo)) return false;
+              return true;
+            }) as unknown as T;
+          } else {
+            // For products and all other collections: NEVER filter out saved products!
+            initialVal = cleaned as unknown as T;
+          }
         } else if (cleaned !== undefined && cleaned !== null) {
           initialVal = cleaned as T;
         }
       } catch (e) {}
     } else if (Array.isArray(initialData)) {
-      initialVal = (initialData as any[]).filter((item: any) => {
-        if (!item) return false;
-        const id = item.id;
-        const inv = item.invoiceNo;
-        if (id && deletedIds.has(id)) return false;
-        if (inv && deletedIds.has(inv)) return false;
-        return true;
-      }) as unknown as T;
+      initialVal = initialData as unknown as T;
     }
     return initialVal;
   });
 
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isWriting, setIsWriting] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+
   useEffect(() => {
     const docRef = doc(db, "store_data", docName);
     
-    // Real-time polling & synchronization function
     const syncDocFromCloud = async () => {
       if (isQuotaExhausted()) return;
+      
+      // If we are currently writing THIS document, don't fetch and overwrite
+      if (activeWriteOperations[docName]) return;
+
+      setIsSyncing(true);
       try {
         const snapshot = await getDoc(docRef);
+        setLastSyncTime(Date.now());
         if (snapshot.exists()) {
           const snapData = snapshot.data();
           const rawData = snapData?.data;
-          const cloudDeletedIds: string[] = snapData?.deletedIds || [];
-          
-          if (cloudDeletedIds.length > 0 && !isLedgerCollection) {
-            const curDeleted = getDeletedIds(localKey);
-            let updated = false;
-            cloudDeletedIds.forEach(id => {
-              if (id && !curDeleted.has(id)) {
-                curDeleted.add(id);
-                updated = true;
-              }
-            });
-            if (updated) saveDeletedIds(localKey, curDeleted);
-          }
+          const cloudUpdatedAt = snapData?.updatedAt || 0;
 
           if (rawData !== undefined && rawData !== null) {
-            const rawCleaned = filterMockData(rawData);
+            const rawCleaned = filterMockData(rawData, docName);
             setData((prevData) => {
-              const deletedIds = isLedgerCollection ? new Set<string>() : getDeletedIds(localKey);
               if (Array.isArray(rawCleaned) && Array.isArray(prevData)) {
-                const isItemDeleted = (item: any) => {
-                  if (!item) return true;
-                  const id = item.id;
-                  const inv = item.invoiceNo;
-                  const dataId = item.data?.id;
-                  const dataInv = item.data?.invoiceNo;
-                  if (id && deletedIds.has(id)) return true;
-                  if (inv && deletedIds.has(inv)) return true;
-                  if (dataId && deletedIds.has(dataId)) return true;
-                  if (dataInv && deletedIds.has(dataInv)) return true;
-                  return false;
-                };
+                const isProducts = docName.includes('product') || docName === 'products';
+                const isOrders = docName.includes('order');
+                const cleanedPrev = filterMockData(prevData, docName);
 
-                const validCloudItems = rawCleaned.filter((item: any) => !isItemDeleted(item));
-                const cloudIds = new Set(validCloudItems.map((c: any) => c.id || c.invoiceNo));
-                const cleanedPrev = filterMockData(prevData);
-                const localUnsyncedItems = cleanedPrev.filter((localItem: any) => !isItemDeleted(localItem) && !cloudIds.has(localItem.id || localItem.invoiceNo));
-                const localMap = new Map();
-                cleanedPrev.forEach((item: any) => { 
-                  if (item) {
-                    if (item.id) localMap.set(item.id, item);
-                    if (item.invoiceNo) localMap.set(item.invoiceNo, item);
+                // 1. ABSOLUTE PRODUCT SAFETY: Local products must NEVER be reduced by cloud sync!
+                if (isProducts) {
+                  // If local has 135 items and cloud has 60 items, local ALWAYS wins!
+                  if (cleanedPrev.length >= rawCleaned.length && cleanedPrev.length > 0) {
+                    const localIdMap = new Map();
+                    cleanedPrev.forEach((p: any) => { if (p && p.id) localIdMap.set(p.id, p); });
+                    
+                    // Add any genuinely new item from cloud if it wasn't already here
+                    const missingFromLocal = rawCleaned.filter((c: any) => c && c.id && !localIdMap.has(c.id));
+                    const safeResult = [...cleanedPrev, ...missingFromLocal];
+                    safeLocalStorageSet(localKey, safeResult);
+                    safeLocalStorageSet(localKey + '_backup', safeResult);
+                    return safeResult as unknown as T;
                   }
+
+                  // If cloud actually has more items, merge carefully
+                  const localIdMap = new Map();
+                  cleanedPrev.forEach((p: any) => { if (p && p.id) localIdMap.set(p.id, p); });
+                  const merged = [
+                    ...rawCleaned.map((c: any) => {
+                      if (!c || !c.id) return c;
+                      const local = localIdMap.get(c.id);
+                      if (!local) return c;
+                      const localTs = local.updatedAt || local.lastModified || 0;
+                      const cloudTs = c.updatedAt || c.lastModified || cloudUpdatedAt || 0;
+                      return localTs >= cloudTs ? local : c;
+                    }),
+                    ...cleanedPrev.filter((l: any) => l && l.id && !rawCleaned.some((c: any) => c && c.id === l.id))
+                  ];
+                  safeLocalStorageSet(localKey, merged);
+                  safeLocalStorageSet(localKey + '_backup', merged);
+                  return merged as unknown as T;
+                }
+
+                // 2. ORDER HANDLING: Respect deleted order IDs so deleted orders NEVER return
+                if (isOrders) {
+                  const deletedIds = getDeletedIds(localKey);
+                  const validCloud = rawCleaned.filter((o: any) => o && !deletedIds.has(o.id) && !deletedIds.has(o.invoiceNo));
+                  const cloudIds = new Set(validCloud.map((c: any) => c.id || c.invoiceNo));
+                  const localUnsynced = cleanedPrev.filter((l: any) => l && !deletedIds.has(l.id) && !deletedIds.has(l.invoiceNo) && !cloudIds.has(l.id || l.invoiceNo));
+                  const merged = [...validCloud, ...localUnsynced];
+                  safeLocalStorageSet(localKey, merged);
+                  safeLocalStorageSet(localKey + '_backup', merged);
+                  return merged as unknown as T;
+                }
+
+                // 3. OTHER COLLECTIONS: General safe merge
+                const localMap = new Map();
+                cleanedPrev.forEach((item: any) => {
+                  if (item && item.id) localMap.set(item.id, item);
                 });
-                
-                // Union merge: Keeps all valid non-deleted items from cloud
-                // plus any local items, merging non-destructively
+                const cloudIds = new Set(rawCleaned.map((c: any) => c && c.id));
+                const localUnsynced = cleanedPrev.filter((l: any) => l && l.id && !cloudIds.has(l.id));
+
                 const merged = [
-                  ...validCloudItems.map((c: any) => {
-                    const local = (c.id && localMap.get(c.id)) || (c.invoiceNo && localMap.get(c.invoiceNo));
+                  ...rawCleaned.map((c: any) => {
+                    if (!c || !c.id) return c;
+                    const local = localMap.get(c.id);
                     if (!local) return c;
-                    const localTs = local.updatedAt || local.lastModified || 0;
-                    const cloudTs = c.updatedAt || c.lastModified || 0;
-                    if (localTs > cloudTs && localTs > 0) {
-                      return local;
-                    }
-                    return c;
+                    const localTs = local.updatedAt || 0;
+                    const cloudTs = c.updatedAt || cloudUpdatedAt || 0;
+                    return localTs >= cloudTs ? local : c;
                   }),
-                  ...localUnsyncedItems
+                  ...localUnsynced
                 ];
+
+                if (cleanedPrev.length > merged.length) {
+                  return cleanedPrev;
+                }
+
                 safeLocalStorageSet(localKey, merged);
+                safeLocalStorageSet(localKey + '_backup', merged);
                 return merged as unknown as T;
               }
+              
+              // For non-array objects (like settings)
+              if (typeof rawCleaned === 'object' && typeof prevData === 'object' && rawCleaned && prevData) {
+                const localTs = (prevData as any).updatedAt || 0;
+                const cloudTs = (rawCleaned as any).updatedAt || cloudUpdatedAt || 0;
+                if (localTs > cloudTs) return prevData;
+              }
+
               safeLocalStorageSet(localKey, rawCleaned);
+              safeLocalStorageSet(localKey + '_backup', rawCleaned);
               return rawCleaned as T;
             });
           }
         }
       } catch (e) {
         handleQuotaError(e);
+      } finally {
+        setIsSyncing(false);
       }
     };
 
     syncDocFromCloud();
 
-    // Fast polling every 45 seconds to keep all devices & Vercel in real-time sync
-    const pollInterval = setInterval(syncDocFromCloud, 45 * 1000);
-
-    // Instant sync on tab focus or visibility change (switching back to app)
-    const handleFocusOrVisible = () => {
-      syncDocFromCloud();
-    };
-
+    const pollInterval = setInterval(syncDocFromCloud, 120 * 1000);
+    const handleFocusOrVisible = () => syncDocFromCloud();
     window.addEventListener('focus', handleFocusOrVisible);
     window.addEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
-    
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        syncDocFromCloud();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    
-    const handleRescue = () => {
-      // For rescue, we temporarily ignore deleted IDs and re-sync
-      syncDocFromCloud();
-    };
-    window.addEventListener('prisha_rescue_deleted_ids', handleRescue);
     
     return () => {
       clearInterval(pollInterval);
       window.removeEventListener('focus', handleFocusOrVisible);
       window.removeEventListener('prisha_force_cloud_sync', handleFocusOrVisible);
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('prisha_rescue_deleted_ids', handleRescue);
     };
   }, [docName, localKey]);
 
   const setSyncData = (value: T | ((val: T) => T)) => {
     setData((prev) => {
       const next = typeof value === 'function' ? (value as any)(prev) : value;
-      
-      // Save state cleanly to local storage & queue cloud sync
+      // Force persistence to localStorage immediately with backup
       safeLocalStorageSet(localKey, next);
+      safeLocalStorageSet(localKey + '_backup', next);
       
-      // Attempt write to server safely with fast sync
-      registerPendingWrite(docName, next, localKey);
-      executeBatchedFirestoreWrites(); 
-      
+      const onStatusChange = (dName: string, writing: boolean) => {
+        if (dName === docName) setIsWriting(writing);
+      };
+
+      registerPendingWrite(docName, next, localKey, true, onStatusChange);
       return next;
     });
   };
 
-  return [data, setSyncData] as const;
+  return [data, setSyncData, isSyncing, lastSyncTime, isWriting] as const;
+}
+
+// Helper to filter out mock/test data from production collections
+function filterMockData(val: any, docName: string): any {
+  if (!Array.isArray(val)) return val;
+  if (docName === 'printJobs') {
+    return val.filter((j: any) => j && j.id !== 'prn-demo-1' && j.jobNo !== 'PRN-8821' && j.jobNo !== 'PRN-6065');
+  }
+  if (docName === 'orders') {
+    return val.filter((o: any) => o && o.id !== 'ord-demo-test');
+  }
+  if (docName === 'trash') {
+    return val.filter((t: any) => t && t.id !== 'trash-demo-1');
+  }
+  if (docName === 'expenses') {
+    return val.filter((e: any) => {
+      if (!e) return false;
+      if (
+        e.title === 'દુકાન ચા-નાસ્તો' ||
+        e.title === 'લાઈટ બિલ / ઇન્ટરનેટ' ||
+        e.title?.includes('ચા-નાસ્તો') ||
+        e.title?.includes('લાઈટ બિલ') ||
+        (e.amount === 120 && e.category === 'દૈનિક ખર્ચ') ||
+        (e.amount === 450 && e.category === 'યુટિલિટી')
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }
+  if (docName === 'purchases') {
+    return val.filter((p: any) => {
+      if (!p) return false;
+      if (p.billNo === 'PUR-1' || !p.supplierName || p.totalAmount <= 0 || p.supplierName === 'ટેસ્ટ સપ્લાયર') return false;
+      return true;
+    });
+  }
+  return val;
 }

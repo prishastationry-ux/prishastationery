@@ -94,7 +94,7 @@ import { PWAInstallButton } from './components/PWAInstallButton';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { getItemReviewStats } from './utils/reviewHelper';
 import { RojmelEntry, KhataAccount, KhataTransaction } from './types';
-import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll, clearAllDeletedIds } from './hooks/useFirebaseSync';
+import { useFirebaseSync, isQuotaExhausted, handleQuotaError, getDeletedIds, saveDeletedIds, executeBatchedFirestoreWrites, forceCloudSyncAll, clearAllDeletedIds, safeLocalStorageSet } from './hooks/useFirebaseSync';
 import {
   deleteFileFromCloudStorage,
   downloadFileSafely,
@@ -153,6 +153,9 @@ export default function App() {
   const [passwordError, setPasswordError] = useState<string>('');
   const [showCostPrices, setShowCostPrices] = useState<boolean>(false);
   const [pendingImportData, setPendingImportData] = useState<any | null>(null);
+
+  // Store Settings (Full editable from Admin)
+  const [storeSettings, setStoreSettings] = useFirebaseSync<StoreSettings>('storeSettings', 'prisha_store_settings_v4', DEFAULT_STORE_SETTINGS);
 
   // Dedicated In-App Secondary Password Security Verification Modal
   const [securityModalState, setSecurityModalState] = useState<{
@@ -236,8 +239,6 @@ export default function App() {
   // In-App Confirm Delete Modal State (Works 100% reliably in all browsers/iframes)
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<DeleteTargetInfo | null>(null);
 
-  // Store Settings (Full editable from Admin)
-  const [storeSettings, setStoreSettings] = useFirebaseSync<StoreSettings>('storeSettings', 'prisha_store_settings_v4', DEFAULT_STORE_SETTINGS);
 
   // SHOP & STORE MODE: 'general' (General Store) vs 'professional' ('Prisha' Professional Shop Copy with separate inventory & hisab)
   const [activeShopMode, setActiveShopMode] = useState<'general' | 'professional'>('general');
@@ -248,7 +249,7 @@ export default function App() {
   const [activeStoreMode, setActiveStoreMode] = useState<'regular' | 'gst'>('regular');
 
   // General Store Products & GST Store Products
-  const [posItems, setPosItems] = useFirebaseSync<ProductItem[]>('products', 'prisha_products_v4', INITIAL_PRODUCTS);
+  const [posItems, setPosItems, isPosSyncing, lastPosSync, isPosWriting] = useFirebaseSync<ProductItem[]>('products', 'prisha_products_v4', INITIAL_PRODUCTS);
   const [gstPosItems, setGstPosItems] = useFirebaseSync<ProductItem[]>('gst_products', 'prisha_gst_products_v1', []);
   
   // Professional "Prisha" Shop Independent Store Products & Inventory Copy
@@ -411,6 +412,33 @@ export default function App() {
       (prev || []).filter(p => p && p.billNo !== 'PUR-1' && p.totalAmount > 0 && p.supplierName !== 'ટેસ્ટ સપ્લાયર')
     );
   }, []);
+
+  // MAINTENANCE MODE AUTO-SCHEDULE LOGIC
+  useEffect(() => {
+    if (!storeSettings.autoMaintenanceEnabled) return;
+    
+    const checkMaintenance = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const mins = now.getMinutes();
+      const currentTime = hour * 60 + mins;
+      
+      // Afternoon: 14:00 - 14:30 (840 - 870)
+      const isAfternoon = currentTime >= 840 && currentTime < 870;
+      // Night: 23:00 - 06:00 (1380 - 1440 OR 0 - 360)
+      const isNight = currentTime >= 1380 || currentTime < 360;
+      
+      if (isAfternoon || isNight) {
+        if (!storeSettings.maintenanceEnabled) {
+          setStoreSettings(prev => ({ ...prev, maintenanceEnabled: true }));
+        }
+      }
+    };
+    
+    const interval = setInterval(checkMaintenance, 60000);
+    checkMaintenance();
+    return () => clearInterval(interval);
+  }, [storeSettings.autoMaintenanceEnabled, storeSettings.maintenanceEnabled]);
 
   const toggleWishlist = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -728,68 +756,141 @@ export default function App() {
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data && (data.products || data.data)) {
-          // Detect if it's a "full backup" with nested .data or a flat backup
-          const importData = data.data || data;
-          setPendingImportData(importData);
+        const rawText = event.target?.result as string;
+        const data = JSON.parse(rawText);
+        if (data) {
+          if (Array.isArray(data)) {
+            setPendingImportData({ products: data });
+          } else if (data.data && typeof data.data === 'object') {
+            setPendingImportData(data.data);
+          } else {
+            setPendingImportData(data);
+          }
         } else {
-          alert('❌ અમાન્ય બેકઅપ ફાઇલ!');
+          showToast('❌ અમાન્ય બેકઅપ ફાઇલ!');
         }
       } catch (err) {
-        alert('❌ બેકઅપ ફાઇલ વાંચવામાં ભૂલ છે.');
+        showToast('❌ બેકઅપ ફાઇલ વાંચવામાં ભૂલ છે.');
       }
     };
     reader.readAsText(file);
     e.target.value = ''; // Reset input
   };
 
-  const processImport = (mode: 'overwrite' | 'merge') => {
+  const processImport = async (mode: 'overwrite' | 'merge') => {
     if (!pendingImportData) return;
     const data = pendingImportData;
 
-    const applyData = (setter: any, backupArr: any[], currentArr: any[]) => {
-      if (!backupArr || !Array.isArray(backupArr)) return;
+    // 1. CLEAR ALL PRODUCT DELETED IDS SO NO PRODUCT CAN EVER BE BLOCKED OR FILTERED OUT
+    const deletedIdKeys = [
+      'prisha_products_v4_deleted_ids',
+      'prisha_gst_products_v1_deleted_ids',
+      'prof_products_deleted_ids',
+      'prof_gst_products_deleted_ids'
+    ];
+    deletedIdKeys.forEach(k => localStorage.removeItem(k));
+
+    // 2. Extract products from any format
+    const backupProducts = 
+      (Array.isArray(data) ? data : null) ||
+      data.products || 
+      data.prisha_products_v4 || 
+      data.prisha_gst_products_v1 || 
+      data.prof_products || 
+      data.prof_gst_products || 
+      data.items || 
+      [];
+
+    let finalProducts: ProductItem[] = currentPosItems;
+
+    if (Array.isArray(backupProducts) && backupProducts.length > 0) {
+      const itemsWithTs = backupProducts.map(item => ({
+        ...item,
+        updatedAt: Date.now()
+      }));
+
       if (mode === 'overwrite') {
-        setter(backupArr);
+        finalProducts = itemsWithTs;
       } else {
-        // Merge Logic: Keep current items + add new ones from backup
-        const currentIds = new Set(currentArr.map(i => i.id || i.invoiceNo));
-        const newItems = backupArr.filter(i => !currentIds.has(i.id || i.invoiceNo));
-        setter([...currentArr, ...newItems]);
+        const currentIds = new Set(currentPosItems.map(i => i.id));
+        const newItems = itemsWithTs.filter(i => !currentIds.has(i.id));
+        finalProducts = [...currentPosItems, ...newItems];
       }
-    };
 
-    // Product collections
-    const prodKey = activeShopMode === 'professional' 
-      ? (activeStoreMode === 'gst' ? 'prof_gst_products' : 'prof_products')
-      : (activeStoreMode === 'gst' ? 'gst_products' : 'products');
-    
-    // The backup file might use different keys or the standard ones
-    // We try to find products in various possible keys
-    const backupProducts = data.products || data.prisha_products_v4 || data.prisha_gst_products_v1 || data.prof_products || data.prof_gst_products || [];
-    applyData(getActivePosSetter(), backupProducts, currentPosItems);
+      // Synchronously write directly into localStorage
+      safeLocalStorageSet('prisha_products_v4', finalProducts);
+      safeLocalStorageSet('prisha_products_v4_backup', finalProducts);
+      safeLocalStorageSet('prof_products', finalProducts);
+      safeLocalStorageSet('prof_products_backup', finalProducts);
 
-    // Orders
-    const backupOrders = data.currentOrders || data.orders || data.prisha_orders_v4 || data.prisha_gst_orders_v1 || [];
-    applyData(getActiveOrdersSetter(), backupOrders, currentOrders);
+      // Directly update React state for both store modes
+      setPosItems(finalProducts);
+      setProfessionalPosItems(finalProducts);
+    }
 
-    // Rojmel, Expenses, etc.
-    if (data.expenses) applyData(getActiveExpensesSetter(), data.expenses, currentExpenses);
-    if (data.purchases) applyData(getActivePurchasesSetter(), data.purchases, currentPurchases);
-    if (data.rojmelEntries) applyData(getActiveRojmelSetter(), data.rojmelEntries, currentRojmel);
-    if (data.khataAccounts) applyData(getActiveKhataAccountsSetter(), data.khataAccounts, currentKhataAccounts);
-    if (data.khataTransactions) applyData(getActiveKhataTransactionsSetter(), data.khataTransactions, currentKhataTransactions);
-    if (data.bankEntries) applyData(getActiveBankEntriesSetter(), data.bankEntries, currentBankEntries);
-    if (data.shopBills) applyData(getActiveShopBillsSetter(), data.shopBills, currentShopBills);
-    
+    // 3. Process Orders if included
+    const backupOrders = data.currentOrders || data.orders || data.prisha_orders_v4 || [];
+    if (Array.isArray(backupOrders) && backupOrders.length > 0) {
+      const ordersWithTs = backupOrders.map(o => ({ ...o, updatedAt: Date.now() }));
+      const finalOrders = mode === 'overwrite' 
+        ? ordersWithTs 
+        : [...currentOrders, ...ordersWithTs.filter(o => !currentOrders.some(co => co.id === o.id || (co.invoiceNo && co.invoiceNo === o.invoiceNo)))];
+      
+      safeLocalStorageSet('prisha_orders_v4', finalOrders);
+      safeLocalStorageSet('prisha_orders_v4_backup', finalOrders);
+      setOrders(finalOrders);
+      setProfessionalOrders(finalOrders);
+    }
+
+    // 4. Process Expenses, Purchases, Khata, Rojmel, Bank
+    if (data.expenses && Array.isArray(data.expenses)) {
+      safeLocalStorageSet('prisha_expenses_v5', data.expenses);
+      setExpenses(data.expenses);
+      setProfessionalExpenses(data.expenses);
+    }
+    if (data.purchases && Array.isArray(data.purchases)) {
+      safeLocalStorageSet('prisha_purchases_v5', data.purchases);
+      setPurchases(data.purchases);
+      setProfessionalPurchases(data.purchases);
+    }
+    if (data.rojmelEntries && Array.isArray(data.rojmelEntries)) {
+      safeLocalStorageSet('prisha_rojmel_v1', data.rojmelEntries);
+      setRojmelEntries(data.rojmelEntries);
+      setProfessionalRojmelEntries(data.rojmelEntries);
+    }
+    if (data.khataAccounts && Array.isArray(data.khataAccounts)) {
+      safeLocalStorageSet('prisha_khata_accounts_v2', data.khataAccounts);
+      setKhataAccounts(data.khataAccounts);
+      setProfessionalKhataAccounts(data.khataAccounts);
+    }
+    if (data.khataTransactions && Array.isArray(data.khataTransactions)) {
+      safeLocalStorageSet('prisha_khata_tx_v1', data.khataTransactions);
+      setKhataTransactions(data.khataTransactions);
+      setProfessionalKhataTransactions(data.khataTransactions);
+    }
+    if (data.bankEntries && Array.isArray(data.bankEntries)) {
+      safeLocalStorageSet('prisha_bank_entries_v1', data.bankEntries);
+      setBankEntries(data.bankEntries);
+      setProfessionalBankEntries(data.bankEntries);
+    }
+    if (data.shopBills && Array.isArray(data.shopBills)) {
+      safeLocalStorageSet('prisha_shop_bills_v1', data.shopBills);
+      setShopBills(data.shopBills);
+      setProfessionalShopBills(data.shopBills);
+    }
     if (data.storeSettings) {
       setStoreSettings(prev => ({ ...prev, ...data.storeSettings }));
     }
 
     setPendingImportData(null);
-    showToast(mode === 'overwrite' ? '✅ બેકઅપ સંપૂર્ણ ઓવરરાઇટ થઈ ગયો!' : '✅ બેકઅપ અને તમારી વસ્તુઓ સફળતાપૂર્વક ભેગી (Merge) થઈ ગઈ!');
-    forceCloudSyncAll();
+    showToast(`✅ ${finalProducts.length} વસ્તુઓ સફળતાપૂર્વક સાચવાઈ ગઈ! સ્ટોક અપડેટ થઈ ગયો છે.`);
+
+    // Try cloud write in background without blocking or reloading
+    try {
+      await executeBatchedFirestoreWrites();
+    } catch (err) {
+      // Local persistence is 100% complete
+    }
   };
 
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -1496,11 +1597,12 @@ export default function App() {
       netProfit: Number((s.netProfit + totalProfit).toFixed(2))
     }));
 
-    // Clear Cart, Close Drawer & Show Instant Invoice
+    // Clear Cart, Close Drawer & Show Instant Success Modal (without full invoice for customer privacy)
     setCart([]);
     setIsCartDrawerOpen(false);
-    setActiveInvoiceOrder(newOrder);
-    showToast(`🎉 ઓર્ડર #${newOrder.invoiceNo} સફળતાપૂર્વક નોંધાઈ ગયો! ડિલિવરી રસીદ તૈયાર છે.`);
+    setIsSuccessModal(true);
+    setActiveInvoiceOrder(null); // Explicitly hide invoice from customer
+    showToast(`🎉 ઓર્ડર #${newOrder.invoiceNo} સફળતાપૂર્વક નોંધાઈ ગયો!`);
 
   };
 
@@ -1712,14 +1814,33 @@ export default function App() {
         markCloudFileAsDeleted(orderToDelete.id);
         if (orderToDelete.invoiceNo) markCloudFileAsDeleted(orderToDelete.invoiceNo);
 
-        const collName = activeShopMode === 'professional' ? (activeStoreMode === 'gst' ? 'prof_gst_currentOrders' : 'prof_currentOrders') : (activeStoreMode === 'gst' ? 'gst_currentOrders' : 'prisha_currentOrders_v4');
-        const ordDeleted = getDeletedIds(collName);
-        ordDeleted.add(orderToDelete.id);
-        if (orderToDelete.invoiceNo) ordDeleted.add(orderToDelete.invoiceNo);
-        saveDeletedIds(collName, ordDeleted);
+        // Record deleted IDs across all order collection keys so it NEVER returns
+        const orderCollections = ['prisha_orders_v4', 'prof_orders', 'gst_orders', 'prof_gst_orders'];
+        orderCollections.forEach(cName => {
+          const ordDel = getDeletedIds(cName);
+          ordDel.add(orderToDelete.id);
+          if (orderToDelete.invoiceNo) ordDel.add(orderToDelete.invoiceNo);
+          saveDeletedIds(cName, ordDel);
+
+          const cur = localStorage.getItem(cName);
+          if (cur) {
+            try {
+              const list = JSON.parse(cur);
+              if (Array.isArray(list)) {
+                safeLocalStorageSet(cName, list.filter((o: any) => o.id !== id && o.invoiceNo !== orderToDelete.invoiceNo));
+                safeLocalStorageSet(cName + '_backup', list.filter((o: any) => o.id !== id && o.invoiceNo !== orderToDelete.invoiceNo));
+              }
+            } catch (e) {}
+          }
+        });
+
+        // Remove from state immediately
+        setOrders(prev => prev.filter(o => o.id !== id && o.invoiceNo !== orderToDelete.invoiceNo));
+        setProfessionalOrders(prev => prev.filter(o => o.id !== id && o.invoiceNo !== orderToDelete.invoiceNo));
+        setGstOrders(prev => prev.filter(o => o.id !== id && o.invoiceNo !== orderToDelete.invoiceNo));
+        setProfessionalGstOrders(prev => prev.filter(o => o.id !== id && o.invoiceNo !== orderToDelete.invoiceNo));
 
         setTrashList(prev => [trashRec, ...prev]);
-        getActiveOrdersSetter()(prev => prev.filter(o => o.id !== id));
         showToast(`🗑️ બિલ #${orderToDelete.invoiceNo} ડિલીટ થયું અને માલ સ્ટોકમાં જમા થયો!`);
       }
     } else if (type === 'expense') {
@@ -2329,7 +2450,66 @@ export default function App() {
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 text-neutral-900 font-sans flex flex-col justify-between selection:bg-orange-500 selection:text-white">
       
-      
+      {/* MAINTENANCE OVERLAY */}
+      {storeSettings.maintenanceEnabled && !isAdminUnlocked && (
+        <div className="fixed inset-0 z-[10000] bg-[#0B1E48] flex flex-col items-center justify-center p-6 text-center animate-fade-in no-print">
+          <div className="max-w-md w-full bg-white rounded-3xl p-8 border-4 border-orange-500 shadow-2xl space-y-6 relative overflow-hidden">
+            <div className="absolute -top-10 -right-10 opacity-10">
+              <Settings className="w-40 h-40 text-orange-500 animate-spin-slow" />
+            </div>
+            
+            <div className="relative z-10 space-y-4">
+              <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                <RefreshCw className="w-10 h-10 animate-spin" />
+              </div>
+              
+              <h1 className="text-2xl font-black text-neutral-900 leading-tight">
+                🛠️ મેન્ટેનન્સ અને સ્ટોક અપડેટ ચાલુ છે
+              </h1>
+              
+              <p className="text-sm font-bold text-neutral-600 leading-relaxed">
+                {storeSettings.maintenanceMessage || 'પ્રિષા સ્ટેશનરી & ઓનલાઇન સેવા પોર્ટલ હાલ દૈનિક મેન્ટેનન્સ અને સ્ટોક અપડેટ અર્થે બંધ છે.'}
+              </p>
+              
+              <div className="bg-orange-50 p-4 rounded-2xl border-2 border-orange-200">
+                <p className="text-xs font-black text-orange-800 mb-1">⏰ ફરી ક્યારે ખુલશે?</p>
+                <p className="text-lg font-black text-orange-950">
+                  {storeSettings.maintenanceReopenTime || 'ટૂંક સમયમાં શરૂ થશે'}
+                </p>
+              </div>
+
+              <div className="pt-4 space-y-3">
+                <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">
+                  અસુવિધા બદલ દિલગીર છીએ
+                </p>
+                
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => {
+                      setEnteredPassword('');
+                      setPasswordError('');
+                      setShowPasswordModal(true);
+                    }}
+                    className="w-full bg-white hover:bg-neutral-100 text-[#0B1E48] py-3 rounded-xl text-xs font-black shadow-lg flex items-center justify-center gap-2 cursor-pointer border-2 border-[#0B1E48] transition-all active:scale-95"
+                  >
+                    <Unlock className="w-4 h-4 text-orange-600" />
+                    <span>એડમિન લૉગિન (Unlock Panel)</span>
+                  </button>
+                  
+                  <a
+                    href={`https://wa.me/91${storeSettings.whatsappNumber || storeSettings.phone || '8140430395'}?text=નમસ્તે ભરતભાઈ, ઓનલાઇન પોર્ટલ ક્યારે ખુલશે?`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-bold text-emerald-600 hover:underline"
+                  >
+                    💬 WhatsApp સંપર્ક (Help)
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       {showStoreSettingsModal && (
         <StoreSettingsModal
           isOpen={showStoreSettingsModal}
@@ -2598,8 +2778,10 @@ export default function App() {
             </div>
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 text-[10px] text-neutral-300">
-            <span>📍 થરાદ સેન્ટર</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-[10px] text-neutral-300">
+              <span>📍 થરાદ સેન્ટર</span>
+            </div>
           </div>
         </div>
       </header>
@@ -2617,7 +2799,7 @@ export default function App() {
       {/* 2. ADMIN PASSWORD LOGIN MODAL */}
       {/* ========================================================================= */}
       {showPasswordModal && (
-        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-black/85 z-[20000] flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full border-2 border-black shadow-2xl space-y-4 animate-in fade-in zoom-in duration-150">
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-2">
@@ -3314,7 +3496,7 @@ export default function App() {
           </div>
 
         </main>
-      ) : activeTab === 'admin' ? (
+      ) : activeTab === 'admin' && isAdminUnlocked ? (
         <main className="max-w-[1550px] mx-auto w-full px-3 sm:px-5 py-4 flex-1 space-y-4 no-print">
 
           {/* ADMIN TOP CONTROL BAR */}
@@ -3389,6 +3571,25 @@ export default function App() {
                 >
                   {showCostPrices ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   <span>{showCostPrices ? 'ખરીદ ભાવ છુપાવો' : 'ખરીદ ભાવ જુઓ'}</span>
+                </button>
+
+                {/* 🛠️ ADMIN PORTAL MAINTENANCE TOGGLE BUTTON */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = !storeSettings.maintenanceEnabled;
+                    setStoreSettings(prev => ({ ...prev, maintenanceEnabled: next }));
+                    showToast(next ? '🛠️ મેન્ટેનન્સ ચાલુ કર્યું (ગ્રાહક માટે પોર્ટલ બંધ)' : '✅ મેન્ટેનન્સ બંધ કર્યું (ગ્રાહક માટે પોર્ટલ લાઈવ ચાલુ)');
+                  }}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border-2 transition-all ${
+                    storeSettings.maintenanceEnabled
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white border-rose-300 animate-pulse'
+                      : 'bg-neutral-800 hover:bg-neutral-900 text-emerald-400 border-emerald-500'
+                  }`}
+                  title="દુકાન / વેબસાઇટ મેન્ટેનન્સ ચાલુ કે બંધ કરો"
+                >
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>{storeSettings.maintenanceEnabled ? '🛠️ મેન્ટેનન્સ: ચાલુ (પોર્ટલ બંધ)' : '✅ મેન્ટેનન્સ: બંધ (પોર્ટલ ચાલુ)'}</span>
                 </button>
 
                 {/* DEDICATED ONLINE ORDERS BUTTON */}
@@ -6119,7 +6320,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 21. ADMIN PRINT JOBS & CUSTOMER DOCUMENTS MODAL (PDF, JPG, PNG, EXCEL) */}
       {/* ========================================================================= */}
-      {showPrintJobsModal && (
+      {isAdminUnlocked && showPrintJobsModal && (
         <AdminPrintJobsModal
           isOpen={showPrintJobsModal}
           onClose={() => setShowPrintJobsModal(false)}
@@ -6176,7 +6377,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 23. ROJMEL & KHATA ERP MODAL */}
       {/* ========================================================================= */}
-      {showRojmelModal && (
+      {isAdminUnlocked && showRojmelModal && (
         <RojmelKhataModal
           isOpen={showRojmelModal}
           onClose={() => setShowRojmelModal(false)}
@@ -6333,7 +6534,7 @@ export default function App() {
       {/* ========================================================================= */}
       {/* 24. SHOP RENT & BILLS LEDGER MODAL */}
       {/* ========================================================================= */}
-      {showShopRentModal && (
+      {isAdminUnlocked && showShopRentModal && (
         <ShopRentAndBillsModal
           isOpen={showShopRentModal}
           onClose={() => setShowShopRentModal(false)}
@@ -6385,7 +6586,7 @@ export default function App() {
       )}
 
       {/* 13.B CA AUDIT & GST REPORT MODAL */}
-      {showCaAuditModal && (
+      {isAdminUnlocked && showCaAuditModal && (
         <CaAuditModal
           isOpen={showCaAuditModal}
           onClose={() => setShowCaAuditModal(false)}
@@ -6428,7 +6629,7 @@ export default function App() {
       )}
 
       {/* 13.C DAILY CASH DRAWER CLOSING MODAL */}
-      {showDailyCashClosingModal && (
+      {isAdminUnlocked && showDailyCashClosingModal && (
         <DailyCashClosingModal
           isOpen={showDailyCashClosingModal}
           onClose={() => setShowDailyCashClosingModal(false)}
@@ -6459,6 +6660,23 @@ export default function App() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MAINTENANCE TOGGLE FOR ADMIN (Floating Action Button) */}
+      {/* ========================================================================= */}
+      {isAdminUnlocked && (
+        <div className="fixed top-20 right-4 z-[9999] flex flex-col gap-2 no-print">
+          <button
+            onClick={() => setStoreSettings(prev => ({ ...prev, maintenanceEnabled: !prev.maintenanceEnabled }))}
+            className={`px-4 py-3 rounded-2xl font-black text-xs shadow-2xl flex items-center gap-2 transition-all cursor-pointer ${
+              storeSettings.maintenanceEnabled ? 'bg-rose-600 text-white animate-pulse' : 'bg-emerald-600 text-white'
+            }`}
+          >
+            <ShieldCheck className="w-5 h-5" />
+            {storeSettings.maintenanceEnabled ? 'મેન્ટેનન્સ ચાલુ છે (Maintenance ON)' : 'મેન્ટેનન્સ બંધ છે (Maintenance OFF)'}
+          </button>
         </div>
       )}
 

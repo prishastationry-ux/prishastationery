@@ -351,21 +351,28 @@ app.post('/api/sync/push', async (req, res) => {
           jobsList.unshift(newJob);
         }
         processed++;
-      } else if (m.entity === 'products') {
-        const prodRef = doc(db, 'store_data', 'products');
-        const prodSnap = await getDoc(prodRef);
-        const prodList: any[] = prodSnap.exists() ? prodSnap.data()?.data || [] : [];
-        const existingProdIdx = prodList.findIndex((p: any) => p.id === m.id);
+        await setDoc(pjRef, { data: jobsList });
+        processed++;
+      } else if (m.entity === 'orders') {
+        const ordRef = doc(db, 'store_data', 'orders');
+        const ordSnap = await getDoc(ordRef);
+        const ordList: any[] = ordSnap.exists() ? ordSnap.data()?.data || [] : [];
+        const existingOrdIdx = ordList.findIndex((o: any) => o.id === m.id || o.invoiceNo === m.id);
 
-        if (existingProdIdx >= 0) {
-          prodList[existingProdIdx] = { ...prodList[existingProdIdx], ...m.data };
+        if (existingOrdIdx >= 0) {
+          ordList[existingOrdIdx] = { ...ordList[existingOrdIdx], ...m.data };
         } else {
-          prodList.unshift(m.data);
+          ordList.unshift(m.data);
         }
-        await setDoc(prodRef, { data: prodList });
+        await setDoc(ordRef, { data: ordList });
         processed++;
       }
     }
+
+    // Ensure we preserve deletedIds if they were sent in the payload or exist in the cloud
+    // This is handled by the client-side batched writes primarily, 
+    // but the REST API should ideally be aware of them.
+    // For now, we focus on ensuring the main data array is updated.
 
     await setDoc(pjRef, { data: jobsList });
 

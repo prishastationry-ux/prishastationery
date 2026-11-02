@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Printer, X, Share2, FileDown, Loader2, ArrowRight } from 'lucide-react';
+import { Printer, X, Share2, FileDown, Loader2, ArrowRight, CheckCircle2, FileText } from 'lucide-react';
 import { OrderRecord, StoreSettings } from '../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -25,6 +25,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   onClose,
   isSuccessView = false
 }) => {
+  const [showFullBill, setShowFullBill] = useState<boolean>(!isSuccessView);
+
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [upiQrDataUrl, setUpiQrDataUrl] = useState<string>('');
   const [billFormat, setBillFormat] = useState<'a4' | 'corporate_gst' | 'gem_portal' | 'thermal'>(
@@ -1228,6 +1230,41 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
     <div className="invoice-modal-overlay fixed inset-0 bg-black/80 backdrop-blur-xs z-50 flex items-center justify-center p-2 sm:p-4 overflow-y-auto print:p-0 print:bg-white print:static">
       <div className="invoice-modal-card bg-white rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden border border-neutral-300 print:border-none print:shadow-none my-auto">
         
+        {isSuccessView && !showFullBill ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-8 sm:p-12 bg-emerald-50/30 space-y-6 animate-in fade-in zoom-in duration-500">
+            <div className="w-24 h-24 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-200/50">
+              <CheckCircle2 className="w-12 h-12" />
+            </div>
+            
+            <div className="text-center space-y-2">
+              <h2 className="text-2xl sm:text-3xl font-black text-neutral-900">ઓર્ડર સફળતાપૂર્વક નોંધાઈ ગયો!</h2>
+              <p className="text-sm font-bold text-neutral-500 uppercase tracking-widest">Order Placed Successfully</p>
+            </div>
+
+            <div className="bg-white border-2 border-dashed border-emerald-500 rounded-2xl p-6 w-full max-w-xs text-center shadow-xl transform transition-transform hover:scale-105">
+              <p className="text-xs font-black text-neutral-400 mb-1 uppercase">તમારો ઓર્ડર નંબર:</p>
+              <div className="text-4xl font-black text-blue-900 font-mono tracking-tighter">
+                #{order.invoiceNo.replace('prisha', '')}
+              </div>
+              <p className="text-[10px] font-bold text-blue-700 mt-2">કૃપા કરીને આ નંબર સાચવી રાખો</p>
+            </div>
+
+            <div className="flex flex-col gap-3 w-full max-w-xs pt-2">
+              <button
+                onClick={onClose}
+                className="w-full bg-[#0B1E48] hover:bg-blue-900 text-white font-black py-3.5 rounded-xl text-sm flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer"
+              >
+                <ArrowRight className="w-4 h-4" />
+                <span>ખરીદી ચાલુ રાખો (Close)</span>
+              </button>
+            </div>
+
+            <div className="text-center space-y-1">
+              <p className="text-xs font-bold text-neutral-500">પ્રિષા સ્ટેશનરી તરફથી આભાર! 😊</p>
+            </div>
+          </div>
+        ) : (
+          <>
         {/* TOP STATUS & CONTROLS BAR (NO-PRINT) */}
         <div className="no-print bg-[#0B1E48] text-white p-3 sm:p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-blue-900">
           <div className="flex items-center gap-3">
@@ -1419,8 +1456,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
           </div>
         )}
 
-        {/* CONDITIONAL BILL PREVIEW: THERMAL POS SLIP OR A4 CORPORATE TAX INVOICE */}
-        {billFormat === 'thermal' ? (
+          {/* CONDITIONAL BILL PREVIEW: THERMAL POS SLIP OR A4 CORPORATE TAX INVOICE */}
+          {billFormat === 'thermal' ? (
           <div className="p-4 sm:p-6 bg-neutral-100 flex flex-col items-center">
             <div className="max-w-[340px] w-full bg-white border-2 border-dashed border-neutral-400 p-4 shadow-md font-mono text-[11px] text-black space-y-2">
               {/* Header */}
@@ -2054,6 +2091,8 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
+        </>
+        )}
 
         {/* GeM STATIONERY HSN & GST DIRECTORY GUIDE MODAL */}
         {showGemGuideModal && (
