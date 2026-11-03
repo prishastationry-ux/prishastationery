@@ -55,7 +55,7 @@ export const BankCurrentAccountModal: React.FC<BankCurrentAccountModalProps> = (
   showToast
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'deposit' | 'withdrawal'>('all');
-  const [filterPeriod, setFilterPeriod] = useState<'today' | 'this_month' | 'fy' | 'all'>('all');
+  const [filterPeriod, setFilterPeriod] = useState<'today' | 'this_month' | 'this_year' | 'fy' | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -126,6 +126,18 @@ export const BankCurrentAccountModal: React.FC<BankCurrentAccountModalProps> = (
 
     if (filterPeriod === 'today' && entry.date && !entry.date.startsWith(todayStr)) return false;
     if (filterPeriod === 'this_month' && entry.date && !entry.date.includes(thisMonthStr)) return false;
+    if (filterPeriod === 'this_year' && entry.date && !entry.date.includes(`/${yyyy}`)) return false;
+    if (filterPeriod === 'fy' && entry.date) {
+      // FY 2025-26 means April 2025 to March 2026 (or current year context)
+      const parts = entry.date.split('/');
+      if (parts.length === 3) {
+        const dYear = parseInt(parts[2], 10);
+        const dMonth = parseInt(parts[1], 10);
+        // Assuming FY 2025-26: Apr 2025 to Mar 2026
+        const isFy = (dYear === 2025 && dMonth >= 4) || (dYear === 2026 && dMonth <= 3) || dYear === yyyy;
+        if (!isFy) return false;
+      }
+    }
 
     // Search filter
     if (searchTerm.trim()) {
@@ -399,11 +411,16 @@ export const BankCurrentAccountModal: React.FC<BankCurrentAccountModalProps> = (
               <div>
                 <label className="block text-[10px] font-bold text-neutral-700 mb-0.5">તારીખ (Date):</label>
                 <input
-                  type="text"
-                  value={entryDate}
-                  onChange={e => setEntryDate(e.target.value)}
-                  placeholder="DD/MM/YYYY"
-                  className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg font-bold outline-none focus:border-amber-600"
+                  type="date"
+                  value={entryDate.includes('/') ? entryDate.split('/').reverse().join('-') : entryDate}
+                  onChange={e => {
+                    const val = e.target.value; // YYYY-MM-DD
+                    if (val) {
+                      const [y, m, d] = val.split('-');
+                      setEntryDate(`${d}/${m}/${y}`);
+                    }
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-white border border-neutral-300 rounded-lg font-bold outline-none focus:border-amber-600 cursor-pointer"
                   required
                 />
               </div>
@@ -565,9 +582,11 @@ export const BankCurrentAccountModal: React.FC<BankCurrentAccountModalProps> = (
               onChange={e => setFilterPeriod(e.target.value as any)}
               className="px-2 py-1 bg-neutral-100 border border-neutral-300 rounded-lg text-[11px] font-bold outline-none cursor-pointer"
             >
-              <option value="all">બધા સમયગાળા</option>
-              <option value="today">આજની એન્ટ્રીઓ</option>
-              <option value="this_month">આ મહિનો</option>
+              <option value="all">📅 બધા સમયગાળા (All Time)</option>
+              <option value="today">☀️ આજની એન્ટ્રીઓ (Today)</option>
+              <option value="this_month">🌙 આ મહિનો (This Month)</option>
+              <option value="this_year">📆 ચાલુ વર્ષ (This Year 2026)</option>
+              <option value="fy">🏛️ નાણાકીય વર્ષ (FY 2025-26)</option>
             </select>
           </div>
         </div>
