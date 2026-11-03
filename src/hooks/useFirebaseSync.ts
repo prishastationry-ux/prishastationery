@@ -144,9 +144,15 @@ export function getDeletedIds(localKey: string): Set<string> {
   return new Set();
 }
 
-export function saveDeletedIds(localKey: string, set: Set<string>): void {
+export function saveDeletedIds(localKey: string, input: Set<string> | string): void {
   try {
-    localStorage.setItem(localKey + '_deleted_ids', JSON.stringify(Array.from(set)));
+    const existing = getDeletedIds(localKey);
+    if (typeof input === 'string') {
+      existing.add(input);
+    } else if (input && typeof input === 'object' && 'forEach' in input) {
+      (input as Set<string>).forEach(id => existing.add(id));
+    }
+    localStorage.setItem(localKey + '_deleted_ids', JSON.stringify(Array.from(existing)));
   } catch (e) {}
 }
 

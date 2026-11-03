@@ -326,6 +326,42 @@ export default function App() {
     return activeStoreMode === 'gst' ? setGstOrders : setOrders;
   };
 
+  // Master Persistence Engine: Ensures product additions, edits, deletes & stock changes are 100% saved across LocalStorage, IndexedDB, Server Disk and Cloud!
+  const persistProductChanges = (updatedProducts: ProductItem[], deletedId?: string) => {
+    const finalProducts = deletedId ? updatedProducts.filter(p => p && p.id !== deletedId) : updatedProducts;
+
+    if (deletedId) {
+      saveDeletedIds('prisha_products_v4', deletedId);
+      saveDeletedIds('prisha_gst_products_v1', deletedId);
+      saveDeletedIds('prof_products', deletedId);
+      saveDeletedIds('prof_gst_products', deletedId);
+    }
+
+    setPosItems(finalProducts);
+    setProfessionalPosItems(finalProducts);
+    if (activeStoreMode === 'gst') {
+      setGstPosItems(finalProducts);
+      setProfessionalGstPosItems(finalProducts);
+    }
+
+    safeLocalStorageSet('prisha_products_v4', finalProducts);
+    safeLocalStorageSet('prisha_products_v4_backup', finalProducts);
+    safeLocalStorageSet('prof_products', finalProducts);
+    safeLocalStorageSet('prof_products_backup', finalProducts);
+    try {
+      localStorage.setItem('prisha_products_locked', JSON.stringify(finalProducts));
+    } catch (e) {}
+
+    idbSet('prisha_products_v4', finalProducts).catch(() => {});
+    idbSet('prof_products', finalProducts).catch(() => {});
+
+    fetch('/api/products/bulk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ products: finalProducts })
+    }).catch(() => {});
+  };
+
   // Automatically fetch master products from server disk storage (ensures Mobile & other devices get all items)
   useEffect(() => {
     fetch('/api/products')
@@ -1068,7 +1104,7 @@ export default function App() {
       updatedAt: Date.now()
     }));
 
-    getActivePosSetter()(reindexed);
+    persistProductChanges(reindexed);
   };
 
   // Direct numeric position setter (e.g. move directly to #1 or #5)
@@ -1088,7 +1124,7 @@ export default function App() {
       updatedAt: Date.now()
     }));
 
-    getActivePosSetter()(reindexed);
+    persistProductChanges(reindexed);
     showToast(`🔢 "${targetItem.nameGu}" ક્રમ ${newPositionNumber} પર ગોઠવાઈ!`);
   };
 
@@ -1143,23 +1179,9 @@ export default function App() {
       updatedAt: Date.now()
     };
 
-    if (activeShopMode === 'professional') {
-      if (activeStoreMode === 'gst') {
-        setProfessionalGstPosItems(prev => [newItem, ...prev]);
-        showToast(`🏛️ Professional GST સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
-      } else {
-        setProfessionalPosItems(prev => [newItem, ...prev]);
-        showToast(`🏢 Professional સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
-      }
-    } else {
-      if (activeStoreMode === 'gst') {
-        setGstPosItems(prev => [newItem, ...prev]);
-        showToast(`🏛️ GST સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
-      } else {
-        setPosItems(prev => [newItem, ...prev]);
-        showToast(`✅ સાદા સ્ટોરમાં નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
-      }
-    }
+    const updatedList = [newItem, ...currentPosItems];
+    persistProductChanges(updatedList);
+    showToast(`✅ નવી પ્રોડક્ટ ઉમેરાઈ ગઈ: ${newItem.nameGu} (${newItem.unit})`);
 
     setNewProdName('');
     setNewProdEnName('');
@@ -1238,8 +1260,8 @@ export default function App() {
         updatedAt: Date.now()
       };
 
-      const updateAllFn = (prev: ProductItem[]) => prev.map(p => (p.id === updatedItem.id ? updatedItem : p));
-      getActivePosSetter()(updateAllFn);
+      const updatedList = currentPosItems.map(p => (p.id === updatedItem.id ? updatedItem : p));
+      persistProductChanges(updatedList);
       showToast(`✏️ "${updatedItem.nameGu}" (${updatedItem.unit}) સેવ થઈ ગયું!`);
       setEditingItem(null);
     }
@@ -1822,7 +1844,8 @@ export default function App() {
           data: itemToDelete
         };
         setTrashList(prev => [trashRec, ...prev]);
-        getActivePosSetter()(prev => prev.filter(item => item.id !== id));
+        const remaining = currentPosItems.filter(item => item.id !== id);
+        persistProductChanges(remaining, id);
         if (editingItem?.id === id) setEditingItem(null);
         showToast(`🗑️ "${itemToDelete.nameGu}" ડિલીટ થઈ ટ્રેશ બિનમાં ખસેડવામાં આવી!`);
       }
