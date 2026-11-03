@@ -220,7 +220,7 @@ export interface StoreSettings {
   invoiceDefaultHsn?: string; // Default HSN/SAC code e.g. "4901" or "9983"
 
   // WEBSITE FRONTEND DISPLAY & POWER CUSTOMIZATION (દુકાન સેટિંગ્સ)
-  headerNameSize?: 'small' | 'medium' | 'large' | 'xl'; // હેડર નામની સાઈઝ
+  headerNameSize?: 'xs' | 'small' | 'medium' | 'large' | 'xl'; // હેડર નામની સાઈઝ
   productTextSize?: 'small' | 'medium' | 'large'; // શબ્દોની સાઈઝ
   productCardSize?: 'small' | 'medium' | 'large'; // Card size: નાની, મધ્યમ, મોટી
   productLayoutMode?: 'grid' | 'list'; // View: બોક્સ (Grid) કે લિસ્ટ (List)

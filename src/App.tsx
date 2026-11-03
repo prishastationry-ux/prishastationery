@@ -2542,21 +2542,23 @@ export default function App() {
 
   const getHeaderSizeClasses = () => {
     switch (storeSettings.headerNameSize) {
-      case 'small': return 'text-base sm:text-lg md:text-xl lg:text-2xl';
-      case 'medium': return 'text-lg sm:text-xl md:text-2xl lg:text-3xl';
-      case 'xl': return 'text-2xl sm:text-3xl md:text-4xl lg:text-5xl';
+      case 'xs': return 'text-xs sm:text-sm md:text-base lg:text-lg';
+      case 'small': return 'text-sm sm:text-base md:text-lg lg:text-xl';
+      case 'medium': return 'text-base sm:text-lg md:text-xl lg:text-2xl';
+      case 'xl': return 'text-xl sm:text-2xl md:text-3xl lg:text-4xl';
       case 'large': 
-      default: return 'text-xl sm:text-2xl md:text-3xl lg:text-4xl';
+      default: return 'text-lg sm:text-xl md:text-2xl lg:text-3xl';
     }
   };
 
   const getSubHeaderSizeClasses = () => {
     switch (storeSettings.headerNameSize) {
+      case 'xs': return 'text-[9px] sm:text-[10px] md:text-xs lg:text-sm';
       case 'small': return 'text-[10px] sm:text-xs md:text-sm lg:text-base';
       case 'medium': return 'text-xs sm:text-sm md:text-base lg:text-lg';
-      case 'xl': return 'text-sm sm:text-base md:text-lg lg:text-2xl';
+      case 'xl': return 'text-sm sm:text-base md:text-lg lg:text-xl';
       case 'large': 
-      default: return 'text-xs sm:text-sm md:text-base lg:text-xl';
+      default: return 'text-xs sm:text-sm md:text-base lg:text-lg';
     }
   };
 

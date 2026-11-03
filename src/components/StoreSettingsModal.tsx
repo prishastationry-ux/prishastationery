@@ -780,8 +780,9 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                   <label className="block text-neutral-900 font-black">
                     🅰️ દુકાનનું નામ સાઇઝ (Header Name Size):
                   </label>
-                  <div className="grid grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-5 gap-1.5">
                     {[
+                      { id: 'xs', label: 'એકદમ નાની' },
                       { id: 'small', label: 'નાની' },
                       { id: 'medium', label: 'મધ્યમ' },
                       { id: 'large', label: 'મોટી' },
@@ -792,7 +793,7 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                         type="button"
                         onClick={() => setFormData({ ...formData, headerNameSize: s.id as any })}
                         className={`py-1.5 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
-                          (formData.headerNameSize || 'large') === s.id
+                          (formData.headerNameSize || 'medium') === s.id
                             ? 'bg-amber-500 text-black border-amber-600 shadow-xs'
                             : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100'
                         }`}
