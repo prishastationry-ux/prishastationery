@@ -3230,7 +3230,7 @@ export default function App() {
 
             {/* Category Filter Chips */}
             <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar text-xs font-black">
-              {activeShopMode === 'general' && (
+              {isAdminUnlocked && activeShopMode === 'general' && (
                 <button
                   key="low_stock"
                   type="button"
