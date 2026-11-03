@@ -155,6 +155,8 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+const STORE_SETTINGS_FILE = path.join(DATA_DIR, 'store_settings.json');
+
 function readMasterProductsFromDisk(): any[] | null {
   try {
     if (fs.existsSync(MASTER_PRODUCTS_FILE)) {
@@ -179,6 +181,66 @@ function writeMasterProductsToDisk(products: any[]): void {
     console.error('Error writing master products to disk:', e);
   }
 }
+
+function readStoreSettingsFromDisk(): any | null {
+  try {
+    if (fs.existsSync(STORE_SETTINGS_FILE)) {
+      const content = fs.readFileSync(STORE_SETTINGS_FILE, 'utf8');
+      return JSON.parse(content);
+    }
+  } catch (e) {}
+  return null;
+}
+
+function writeStoreSettingsToDisk(settings: any): void {
+  try {
+    if (settings && typeof settings === 'object') {
+      fs.writeFileSync(STORE_SETTINGS_FILE, JSON.stringify(settings, null, 2), 'utf8');
+    }
+  } catch (e) {
+    console.error('Error writing store settings to disk:', e);
+  }
+}
+
+app.get('/api/settings', async (req, res) => {
+  const diskSettings = readStoreSettingsFromDisk();
+  if (diskSettings) {
+    return res.json({ success: true, settings: diskSettings, source: 'server_disk' });
+  }
+
+  const { db } = getCloudDb();
+  if (!db) {
+    return res.json({ success: false, settings: null, source: 'none' });
+  }
+
+  try {
+    const snap = await getDoc(doc(db, 'store_data', 'storeSettings'));
+    const settings = snap.exists() ? snap.data()?.data || null : null;
+    if (settings) {
+      writeStoreSettingsToDisk(settings);
+    }
+    res.json({ success: true, settings, source: 'firestore' });
+  } catch (err: any) {
+    res.json({ success: false, settings: null, error: err.message });
+  }
+});
+
+app.post('/api/settings', (req, res) => {
+  try {
+    const { settings } = req.body || {};
+    if (settings && typeof settings === 'object') {
+      writeStoreSettingsToDisk(settings);
+      const { db } = getCloudDb();
+      if (db) {
+        setDoc(doc(db, 'store_data', 'storeSettings'), { data: settings, updatedAt: Date.now() }).catch(() => {});
+      }
+      return res.json({ success: true, settings, message: 'Settings saved to server disk' });
+    }
+    res.status(400).json({ error: 'Invalid settings object' });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to save settings', details: err.message });
+  }
+});
 
 app.get('/api/products', async (req, res) => {
   // 1. Check if server disk has master products (bypasses Firestore quota limits)

@@ -17,13 +17,15 @@ interface InvoiceModalProps {
   storeSettings: StoreSettings;
   onClose: () => void;
   isSuccessView?: boolean;
+  isAdminUnlocked?: boolean;
 }
 
 export const InvoiceModal: React.FC<InvoiceModalProps> = ({
   order,
   storeSettings,
   onClose,
-  isSuccessView = false
+  isSuccessView = false,
+  isAdminUnlocked = false
 }) => {
   const [showFullBill, setShowFullBill] = useState<boolean>(!isSuccessView);
 
@@ -1327,38 +1329,42 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               </button>
             </div>
 
-            {billFormat === 'thermal' ? (
-              <button
-                type="button"
-                onClick={() => handleThermalPrint(58)}
-                className="bg-amber-400 hover:bg-amber-500 text-black px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
-                title="૫૮mm નાનું પોસ થર્મલ બિલ પ્રિન્ટ કરો"
-              >
-                <Printer className="w-4 h-4" />
-                <span>🧾 નાનું પ્રિન્ટર (58mm)</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleDirectPrint}
-                className="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
-                title="૧ પેજમાં A4 બિલ પ્રિન્ટ કરો"
-              >
-                <Printer className="w-4 h-4" />
-                <span>🖨️ A4 પ્રિન્ટ</span>
-              </button>
-            )}
+            {isAdminUnlocked && (
+              <>
+                {billFormat === 'thermal' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleThermalPrint(58)}
+                    className="bg-amber-400 hover:bg-amber-500 text-black px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
+                    title="૫૮mm નાનું પોસ થર્મલ બિલ પ્રિન્ટ કરો"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>🧾 નાનું પ્રિન્ટર (58mm)</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleDirectPrint}
+                    className="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs"
+                    title="૧ પેજમાં A4 બિલ પ્રિન્ટ કરો"
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>🖨️ A4 પ્રિન્ટ</span>
+                  </button>
+                )}
 
-            <button
-              type="button"
-              onClick={handleDownloadPdf}
-              disabled={isGeneratingPdf}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs disabled:opacity-50"
-              title="PDF ડાઉનલોડ કરો"
-            >
-              {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
-              <span className="hidden sm:inline">PDF</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={isGeneratingPdf}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-transform active:scale-95 shadow-xs disabled:opacity-50"
+                  title="PDF ડાઉનલોડ કરો"
+                >
+                  {isGeneratingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />}
+                  <span className="hidden sm:inline">PDF</span>
+                </button>
+              </>
+            )}
 
             <button
               type="button"

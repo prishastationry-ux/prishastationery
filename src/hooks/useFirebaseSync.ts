@@ -46,8 +46,8 @@ export function handleQuotaError(err: any): void {
     msg.includes('Quota exceeded') ||
     msg.includes('429')
   ) {
-    // Back off cloud writes/reads for 30 minutes when quota is exhausted
-    quotaExhaustedUntil = Date.now() + 30 * 60 * 1000;
+    // Back off cloud writes/reads for 5 minutes when quota is exhausted
+    quotaExhaustedUntil = Date.now() + 5 * 60 * 1000;
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(QUOTA_EXHAUSTED_KEY, quotaExhaustedUntil.toString());
@@ -223,8 +223,7 @@ export async function executeBatchedFirestoreWrites(onSyncStatusChange?: (docNam
     console.log('✅ Firestore sync successful for:', validWrites.map(w => w.docName).join(', '));
   } catch (err: any) {
     handleQuotaError(err);
-    console.error('❌ Firestore sync failed:', err);
-    throw err;
+    console.warn('⚡ Firestore sync deferred (data safely persisted in local storage):', err?.message || err);
   } finally {
     for (const { docName } of validWrites) {
       delete activeWriteOperations[docName];

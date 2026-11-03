@@ -158,6 +158,31 @@ export default function App() {
   // Store Settings (Full editable from Admin)
   const [storeSettings, setStoreSettings] = useFirebaseSync<StoreSettings>('storeSettings', 'prisha_store_settings_v4', DEFAULT_STORE_SETTINGS);
 
+  // Sync store settings (including Maintenance Mode) with Server Disk Storage every 10 seconds
+  useEffect(() => {
+    const fetchSettings = () => {
+      fetch('/api/settings')
+        .then(res => res.json())
+        .then(result => {
+          if (result?.success && result.settings && typeof result.settings === 'object') {
+            setStoreSettings(prev => ({ ...prev, ...result.settings }));
+          }
+        })
+        .catch(() => {});
+    };
+    fetchSettings();
+    const settingsInterval = setInterval(fetchSettings, 10000);
+    return () => clearInterval(settingsInterval);
+  }, []);
+
+  const saveSettingsToServer = (updated: StoreSettings) => {
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: updated })
+    }).catch(() => {});
+  };
+
   // Dedicated In-App Secondary Password Security Verification Modal
   const [securityModalState, setSecurityModalState] = useState<{
     isOpen: boolean;
@@ -306,19 +331,30 @@ export default function App() {
     fetch('/api/products')
       .then(res => res.json())
       .then(result => {
-        if (result?.success && Array.isArray(result.products) && result.products.length > currentPosItems.length) {
-          const prods = result.products;
-          setPosItems(prods);
-          setProfessionalPosItems(prods);
-          safeLocalStorageSet('prisha_products_v4', prods);
-          safeLocalStorageSet('prisha_products_v4_backup', prods);
-          safeLocalStorageSet('prof_products', prods);
-          safeLocalStorageSet('prof_products_backup', prods);
-          try {
-            localStorage.setItem('prisha_products_locked', JSON.stringify(prods));
-          } catch (e) {}
-          idbSet('prisha_products_v4', prods).catch(() => {});
-          idbSet('prof_products', prods).catch(() => {});
+        if (result?.success && Array.isArray(result.products) && result.products.length > 0) {
+          const serverProds: ProductItem[] = result.products;
+          // Preserve local image URLs if server item image URL is empty
+          const mergedProds = serverProds.map(sp => {
+            const local = currentPosItems.find(lp => lp.id === sp.id);
+            if (local && local.imageUrl && (!sp.imageUrl || sp.imageUrl === '')) {
+              return { ...sp, imageUrl: local.imageUrl };
+            }
+            return sp;
+          });
+
+          if (mergedProds.length >= currentPosItems.length) {
+            setPosItems(mergedProds);
+            setProfessionalPosItems(mergedProds);
+            safeLocalStorageSet('prisha_products_v4', mergedProds);
+            safeLocalStorageSet('prisha_products_v4_backup', mergedProds);
+            safeLocalStorageSet('prof_products', mergedProds);
+            safeLocalStorageSet('prof_products_backup', mergedProds);
+            try {
+              localStorage.setItem('prisha_products_locked', JSON.stringify(mergedProds));
+            } catch (e) {}
+            idbSet('prisha_products_v4', mergedProds).catch(() => {});
+            idbSet('prof_products', mergedProds).catch(() => {});
+          }
         }
       })
       .catch(() => {});
@@ -3615,7 +3651,9 @@ export default function App() {
                   type="button"
                   onClick={() => {
                     const next = !storeSettings.maintenanceEnabled;
-                    setStoreSettings(prev => ({ ...prev, maintenanceEnabled: next }));
+                    const nextSettings = { ...storeSettings, maintenanceEnabled: next };
+                    setStoreSettings(nextSettings);
+                    saveSettingsToServer(nextSettings);
                     showToast(next ? '🛠️ મેન્ટેનન્સ ચાલુ કર્યું (ગ્રાહક માટે પોર્ટલ બંધ)' : '✅ મેન્ટેનન્સ બંધ કર્યું (ગ્રાહક માટે પોર્ટલ લાઈવ ચાલુ)');
                   }}
                   className={`px-3.5 py-2 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 cursor-pointer border-2 transition-all ${
@@ -4918,6 +4956,7 @@ export default function App() {
             setIsSuccessModal(false);
           }}
           isSuccessView={isSuccessModal}
+          isAdminUnlocked={isAdminUnlocked}
         />
       )}
 
@@ -6707,7 +6746,11 @@ export default function App() {
       {isAdminUnlocked && (
         <div className="fixed top-20 right-4 z-[9999] flex flex-col gap-2 no-print">
           <button
-            onClick={() => setStoreSettings(prev => ({ ...prev, maintenanceEnabled: !prev.maintenanceEnabled }))}
+            onClick={() => {
+              const nextSettings = { ...storeSettings, maintenanceEnabled: !storeSettings.maintenanceEnabled };
+              setStoreSettings(nextSettings);
+              saveSettingsToServer(nextSettings);
+            }}
             className={`px-4 py-3 rounded-2xl font-black text-xs shadow-2xl flex items-center gap-2 transition-all cursor-pointer ${
               storeSettings.maintenanceEnabled ? 'bg-rose-600 text-white animate-pulse' : 'bg-emerald-600 text-white'
             }`}
