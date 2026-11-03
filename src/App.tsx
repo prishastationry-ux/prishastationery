@@ -362,35 +362,32 @@ export default function App() {
     }).catch(() => {});
   };
 
-  // Automatically fetch master products from server disk storage (ensures Mobile & other devices get all items)
+  // Automatically fetch master products from server disk storage once on mount
   useEffect(() => {
     fetch('/api/products')
       .then(res => res.json())
       .then(result => {
         if (result?.success && Array.isArray(result.products) && result.products.length > 0) {
           const serverProds: ProductItem[] = result.products;
-          // Preserve local image URLs if server item image URL is empty
-          const mergedProds = serverProds.map(sp => {
-            const local = currentPosItems.find(lp => lp.id === sp.id);
-            if (local) {
-              return {
-                ...sp,
-                imageUrl: local.imageUrl || sp.imageUrl,
-                stock: local.stock !== undefined ? local.stock : sp.stock,
-                price: local.price || sp.price
-              };
-            }
-            return sp;
-          });
+          
+          setPosItems(prev => {
+            const localMap = new Map(prev.map(p => [p.id, p]));
+            const merged = serverProds.map(sp => {
+              const local = localMap.get(sp.id);
+              if (local) {
+                return {
+                  ...sp,
+                  imageUrl: local.imageUrl || sp.imageUrl,
+                  stock: local.stock !== undefined ? local.stock : sp.stock,
+                  price: local.price || sp.price
+                };
+              }
+              return sp;
+            });
+            const serverIds = new Set(serverProds.map(s => s.id));
+            const localOnly = prev.filter(lp => lp && lp.id && !serverIds.has(lp.id));
+            const finalCombined = [...merged, ...localOnly];
 
-          // Also include any new local items that are not yet in serverProds
-          const serverIds = new Set(serverProds.map(s => s.id));
-          const localOnly = currentPosItems.filter(lp => lp && lp.id && !serverIds.has(lp.id));
-          const finalCombined = [...mergedProds, ...localOnly];
-
-          if (finalCombined.length > 0) {
-            setPosItems(finalCombined);
-            setProfessionalPosItems(finalCombined);
             safeLocalStorageSet('prisha_products_v4', finalCombined);
             safeLocalStorageSet('prisha_products_v4_backup', finalCombined);
             safeLocalStorageSet('prof_products', finalCombined);
@@ -400,11 +397,31 @@ export default function App() {
             } catch (e) {}
             idbSet('prisha_products_v4', finalCombined).catch(() => {});
             idbSet('prof_products', finalCombined).catch(() => {});
-          }
+            return finalCombined;
+          });
+
+          setProfessionalPosItems(prev => {
+            const localMap = new Map(prev.map(p => [p.id, p]));
+            const merged = serverProds.map(sp => {
+              const local = localMap.get(sp.id);
+              if (local) {
+                return {
+                  ...sp,
+                  imageUrl: local.imageUrl || sp.imageUrl,
+                  stock: local.stock !== undefined ? local.stock : sp.stock,
+                  price: local.price || sp.price
+                };
+              }
+              return sp;
+            });
+            const serverIds = new Set(serverProds.map(s => s.id));
+            const localOnly = prev.filter(lp => lp && lp.id && !serverIds.has(lp.id));
+            return [...merged, ...localOnly];
+          });
         }
       })
       .catch(() => {});
-  }, [currentPosItems.length]);
+  }, []);
 
   // Online Print Jobs & Customer Uploaded Documents
   const [printJobs, setPrintJobs] = useFirebaseSync<PrintJobRecord[]>('printJobs', 'prisha_print_jobs_v1', INITIAL_PRINT_JOBS);
@@ -4714,7 +4731,8 @@ export default function App() {
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-neutral-100 text-neutral-700 border-b font-black">
-                    <th className="p-2 text-center w-28">ક્રમ (ઉપર/નીચે)</th>
+                    <th className="p-2 text-center w-16" title="ગ્રાહકને દેખાડો (ચાલુ) / છુપાવો (બંધ)">દુકાને દેખાડો</th>
+                    <th className="p-2 text-center w-28">ક્રમ (ઉપર/નીచే)</th>
                     <th className="p-2">પ્રોડક્ટ</th>
                     <th className="p-2">કેટેગરી</th>
                     <th className="p-2">વેચાણ ભાવ</th>
@@ -4732,6 +4750,20 @@ export default function App() {
                     .sort((a, b) => (a.orderIdx ?? 9999) - (b.orderIdx ?? 9999))
                     .map((item, posIndex, sortedArr) => (
                     <tr key={item.id} className="hover:bg-neutral-50 transition-colors">
+                      <td className="p-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={!item.isHidden}
+                          onChange={e => {
+                            const show = e.target.checked;
+                            const updatedList = currentPosItems.map(p => p.id === item.id ? { ...p, isHidden: !show, updatedAt: Date.now() } : p);
+                            persistProductChanges(updatedList);
+                            showToast(show ? `✅ "${item.nameGu}" ગ્રાહકને દેખાશે.` : `👁️‍🗨️ "${item.nameGu}" ગ્રાહકથી છુપાવવામાં આવી.`);
+                          }}
+                          className="w-4 h-4 accent-emerald-600 cursor-pointer rounded"
+                          title="ટીક કરો = ગ્રાહકને દેખાડો | અનટીક કરો = ગ્રાહકથી છુપાવો"
+                        />
+                      </td>
                       {/* ORDER / UP-DOWN BUTTONS */}
                       <td className="p-2 text-center">
                         <div className="flex items-center justify-center gap-1 bg-white/80 p-1 rounded-lg border border-neutral-200 shadow-2xs">

@@ -272,17 +272,18 @@ app.post('/api/products/bulk', (req, res) => {
   try {
     const { products } = req.body || {};
     if (Array.isArray(products) && products.length > 0) {
+      // 1. Save FULL products WITH images to server disk
       writeMasterProductsToDisk(products);
       console.log(`✅ Saved ${products.length} master products to server disk (${MASTER_PRODUCTS_FILE})`);
       
-      // Also try writing to Firestore in background without blocking, respecting 1MB limit
+      // 2. Try writing to Firestore in background with cleaned images if needed
       const { db } = getCloudDb();
       if (db) {
         const firestoreCleanProducts = products.map((p: any) => {
           if (!p || typeof p !== 'object') return p;
           const copy = { ...p };
-          if (typeof copy.imageUrl === 'string' && copy.imageUrl.startsWith('data:')) {
-            copy.imageUrl = '';
+          if (typeof copy.imageUrl === 'string' && copy.imageUrl.startsWith('data:') && copy.imageUrl.length > 500000) {
+            copy.imageUrl = ''; // only strip if extremely huge base64
           }
           return copy;
         });
