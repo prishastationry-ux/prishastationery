@@ -372,24 +372,34 @@ export default function App() {
           // Preserve local image URLs if server item image URL is empty
           const mergedProds = serverProds.map(sp => {
             const local = currentPosItems.find(lp => lp.id === sp.id);
-            if (local && local.imageUrl && (!sp.imageUrl || sp.imageUrl === '')) {
-              return { ...sp, imageUrl: local.imageUrl };
+            if (local) {
+              return {
+                ...sp,
+                imageUrl: local.imageUrl || sp.imageUrl,
+                stock: local.stock !== undefined ? local.stock : sp.stock,
+                price: local.price || sp.price
+              };
             }
             return sp;
           });
 
-          if (mergedProds.length >= currentPosItems.length) {
-            setPosItems(mergedProds);
-            setProfessionalPosItems(mergedProds);
-            safeLocalStorageSet('prisha_products_v4', mergedProds);
-            safeLocalStorageSet('prisha_products_v4_backup', mergedProds);
-            safeLocalStorageSet('prof_products', mergedProds);
-            safeLocalStorageSet('prof_products_backup', mergedProds);
+          // Also include any new local items that are not yet in serverProds
+          const serverIds = new Set(serverProds.map(s => s.id));
+          const localOnly = currentPosItems.filter(lp => lp && lp.id && !serverIds.has(lp.id));
+          const finalCombined = [...mergedProds, ...localOnly];
+
+          if (finalCombined.length > 0) {
+            setPosItems(finalCombined);
+            setProfessionalPosItems(finalCombined);
+            safeLocalStorageSet('prisha_products_v4', finalCombined);
+            safeLocalStorageSet('prisha_products_v4_backup', finalCombined);
+            safeLocalStorageSet('prof_products', finalCombined);
+            safeLocalStorageSet('prof_products_backup', finalCombined);
             try {
-              localStorage.setItem('prisha_products_locked', JSON.stringify(mergedProds));
+              localStorage.setItem('prisha_products_locked', JSON.stringify(finalCombined));
             } catch (e) {}
-            idbSet('prisha_products_v4', mergedProds).catch(() => {});
-            idbSet('prof_products', mergedProds).catch(() => {});
+            idbSet('prisha_products_v4', finalCombined).catch(() => {});
+            idbSet('prof_products', finalCombined).catch(() => {});
           }
         }
       })
