@@ -158,14 +158,39 @@ export default function App() {
   // Store Settings (Full editable from Admin)
   const [storeSettings, setStoreSettings] = useFirebaseSync<StoreSettings>('storeSettings', 'prisha_store_settings_v4', DEFAULT_STORE_SETTINGS);
 
-  // Sync store settings (including Maintenance Mode) with Server Disk Storage every 10 seconds
+  const saveSettingsToServer = (updated: StoreSettings) => {
+    fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: updated })
+    }).catch(() => {});
+  };
+
+  const updateStoreSettings = (updater: Partial<StoreSettings> | ((prev: StoreSettings) => StoreSettings)) => {
+    setStoreSettings(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : { ...prev, ...updater };
+      saveSettingsToServer(next);
+      return next;
+    });
+  };
+
+  // Sync store settings with Server Disk Storage every 10 seconds (preserve custom uploaded logos)
   useEffect(() => {
     const fetchSettings = () => {
       fetch('/api/settings')
         .then(res => res.json())
         .then(result => {
           if (result?.success && result.settings && typeof result.settings === 'object') {
-            setStoreSettings(prev => ({ ...prev, ...result.settings }));
+            setStoreSettings(prev => {
+              const merged = { ...prev, ...result.settings };
+              if (prev.leftLogoUrl && (!result.settings.leftLogoUrl || result.settings.leftLogoUrl === '')) {
+                merged.leftLogoUrl = prev.leftLogoUrl;
+              }
+              if (prev.rightLogoUrl && (!result.settings.rightLogoUrl || result.settings.rightLogoUrl === '')) {
+                merged.rightLogoUrl = prev.rightLogoUrl;
+              }
+              return merged;
+            });
           }
         })
         .catch(() => {});
@@ -174,14 +199,6 @@ export default function App() {
     const settingsInterval = setInterval(fetchSettings, 10000);
     return () => clearInterval(settingsInterval);
   }, []);
-
-  const saveSettingsToServer = (updated: StoreSettings) => {
-    fetch('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: updated })
-    }).catch(() => {});
-  };
 
   // Dedicated In-App Secondary Password Security Verification Modal
   const [securityModalState, setSecurityModalState] = useState<{
@@ -1334,19 +1351,19 @@ export default function App() {
     if (!target) return;
 
     if (target === 'leftLogo') {
-      setStoreSettings(prev => ({ ...prev, leftLogoUrl: croppedBase64 }));
-      showToast('✅ ડાબો લોગો ફોટો અપડેટ થયો!');
+      updateStoreSettings({ leftLogoUrl: croppedBase64 });
+      showToast('✅ ડાબો લોગો ફોટો અપડેટ અને કાયમી સેવ થયો!');
     } else if (target === 'rightLogo') {
-      setStoreSettings(prev => ({ ...prev, rightLogoUrl: croppedBase64 }));
-      showToast('✅ જમણો લોગો ફોટો અપડેટ થયો!');
+      updateStoreSettings({ rightLogoUrl: croppedBase64 });
+      showToast('✅ જમણો લોગો ફોટો અપડેટ અને કાયમી સેવ થયો!');
     } else if (target === 'bannerImage') {
-      setStoreSettings(prev => ({ ...prev, bannerImageUrl: croppedBase64 }));
+      updateStoreSettings({ bannerImageUrl: croppedBase64 });
       showToast('✅ જાહેરાત બેનર ફોટો અપડેટ થયો!');
     } else if (target === 'customQr') {
-      setStoreSettings(prev => ({ ...prev, customQrUrl: croppedBase64 }));
+      updateStoreSettings({ customQrUrl: croppedBase64 });
       showToast('✅ કસ્ટમ UPI QR કોડ અપડેટ થયો!');
     } else if (target === 'signature') {
-      setStoreSettings(prev => ({ ...prev, signatureUrl: croppedBase64 }));
+      updateStoreSettings({ signatureUrl: croppedBase64 });
       showToast('✅ અધિકૃત સહી / સ્ટેમ્પ અપડેટ થયો!');
     } else if (target === 'editingProduct' && editingItem) {
       setEditingItem({ ...editingItem, imageUrl: croppedBase64 });
@@ -2545,9 +2562,10 @@ export default function App() {
       case 'xs': return 'text-xs sm:text-sm md:text-base lg:text-lg';
       case 'small': return 'text-sm sm:text-base md:text-lg lg:text-xl';
       case 'medium': return 'text-base sm:text-lg md:text-xl lg:text-2xl';
+      case 'large': return 'text-lg sm:text-xl md:text-2xl lg:text-3xl';
       case 'xl': return 'text-xl sm:text-2xl md:text-3xl lg:text-4xl';
-      case 'large': 
-      default: return 'text-lg sm:text-xl md:text-2xl lg:text-3xl';
+      case 'xxl': return 'text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black';
+      default: return 'text-xl sm:text-2xl md:text-3xl lg:text-4xl';
     }
   };
 
@@ -2640,7 +2658,7 @@ export default function App() {
           onClose={() => setShowStoreSettingsModal(false)}
           settings={storeSettings}
           onSave={(updated) => {
-            setStoreSettings(prev => ({ ...prev, ...updated }));
+            updateStoreSettings(updated);
           }}
           onRescueData={clearAllDeletedIds}
           showToast={showToast}
@@ -2688,24 +2706,58 @@ export default function App() {
 
           {/* CENTER STORE TITLE (NON-OVERLAPPING RESPONSIVE TYPOGRAPHY) */}
           <div className="flex-1 min-w-0 px-1 sm:px-2 flex flex-col items-center justify-center text-center overflow-hidden">
-            <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full overflow-hidden leading-tight">
-              <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight uppercase drop-shadow-xs shrink-0 whitespace-nowrap`}>
-                {storeSettings.storeNameEn.split(' ')[0] || 'PRISHA'}
-              </span>
-              <span className={`${getSubHeaderSizeClasses()} font-black text-[#1E40AF] tracking-tight uppercase truncate drop-shadow-xs`}>
-                {storeSettings.storeNameEn.substring(storeSettings.storeNameEn.indexOf(' ') + 1) || 'STATIONERY & ONLINE SERVICES'}
-              </span>
-            </div>
-            
-            {/* Gujarati Subtitle & Badges */}
-            <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 max-w-full overflow-hidden justify-center">
-              <span className="text-orange-900 bg-orange-100/90 px-2 py-0.5 rounded-md border border-orange-300 font-black text-[11px] sm:text-xs truncate">
-                {storeSettings.storeNameGu}
-              </span>
-              <span className="hidden md:inline text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 text-[10px] sm:text-xs font-bold truncate">
-                {storeSettings.tagline}
-              </span>
-            </div>
+            {(!storeSettings.headerLanguageMode || storeSettings.headerLanguageMode === 'gu_first') ? (
+              <>
+                <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full overflow-hidden leading-tight">
+                  <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight drop-shadow-xs shrink-0 whitespace-nowrap`}>
+                    {storeSettings.storeNameGu || 'પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 max-w-full overflow-hidden justify-center">
+                  <span className="text-[#1E40AF] font-extrabold text-[11px] sm:text-xs md:text-sm tracking-tight truncate">
+                    {storeSettings.storeNameEn}
+                  </span>
+                  <span className="hidden md:inline text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 text-[10px] sm:text-xs font-bold truncate">
+                    {storeSettings.tagline}
+                  </span>
+                </div>
+              </>
+            ) : storeSettings.headerLanguageMode === 'both' ? (
+              <>
+                <div className="flex flex-wrap items-center justify-center gap-1 sm:gap-2 max-w-full overflow-hidden leading-tight">
+                  <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight shrink-0 whitespace-nowrap`}>
+                    {storeSettings.storeNameGu}
+                  </span>
+                  <span className={`${getHeaderSizeClasses()} font-black text-[#1E40AF] tracking-tight shrink-0 whitespace-nowrap`}>
+                    ({storeSettings.storeNameEn.split(' ')[0]})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 max-w-full overflow-hidden justify-center">
+                  <span className="text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 text-[10px] sm:text-xs font-bold truncate">
+                    {storeSettings.tagline}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full overflow-hidden leading-tight">
+                  <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight uppercase drop-shadow-xs shrink-0 whitespace-nowrap`}>
+                    {storeSettings.storeNameEn.split(' ')[0] || 'PRISHA'}
+                  </span>
+                  <span className={`${getSubHeaderSizeClasses()} font-black text-[#1E40AF] tracking-tight uppercase truncate drop-shadow-xs`}>
+                    {storeSettings.storeNameEn.substring(storeSettings.storeNameEn.indexOf(' ') + 1) || 'STATIONERY & ONLINE SERVICES'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 sm:gap-2 mt-0.5 max-w-full overflow-hidden justify-center">
+                  <span className="text-orange-900 bg-orange-100/90 px-2 py-0.5 rounded-md border border-orange-300 font-black text-[11px] sm:text-xs truncate">
+                    {storeSettings.storeNameGu}
+                  </span>
+                  <span className="hidden md:inline text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-300 text-[10px] sm:text-xs font-bold truncate">
+                    {storeSettings.tagline}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* RIGHT SIDE: RIGHT LOGO + CART + LOGIN/LOGOUT */}

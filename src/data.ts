@@ -92,7 +92,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   autoMaintenanceEnabled: false,
   maintenanceMessage: '🛠️ પ્રિષા સ્ટેશનરી & ઓનલાઇન પોર્ટલ હાલ મેન્ટેનન્સ અર્થે બંધ છે.',
   maintenanceReopenTime: 'ટૂંક સમયમાં શરૂ થશે',
-  headerNameSize: 'medium'
+  headerNameSize: 'large',
+  headerLanguageMode: 'gu_first'
 };
 
 export const INITIAL_PRODUCTS: ProductItem[] = [

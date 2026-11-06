@@ -775,26 +775,54 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                     ))}
                   </div>
                 </div>
+                {/* 4.B Header Title Display Mode (Gujarati / English Main) */}
+                <div className="bg-amber-50/80 p-3.5 rounded-xl border border-amber-300 space-y-2">
+                  <label className="block text-amber-950 font-black text-xs">
+                    🌐 હેડર નામ દર્શાવવાની રીત (Header Display Language):
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {[
+                      { id: 'gu_first', label: '🟧 ગુજરાતી નામ મોટું (પ્રિષા સ્ટેશનરી)' },
+                      { id: 'en_first', label: '🔷 અંગ્રેજી નામ મોટું (PRISHA)' },
+                      { id: 'both', label: '🌟 બંને નામ મોટા દર્શાવો' }
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, headerLanguageMode: m.id as any })}
+                        className={`py-2 px-2.5 rounded-xl border text-center font-black text-xs transition-all cursor-pointer ${
+                          (formData.headerLanguageMode || 'gu_first') === m.id
+                            ? 'bg-amber-600 text-white border-amber-700 shadow-xs'
+                            : 'bg-white text-neutral-800 border-neutral-300 hover:bg-amber-100/50'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* 5. Header Title Size */}
                 <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-2">
                   <label className="block text-neutral-900 font-black">
-                    🅰️ દુકાનનું નામ સાઇઝ (Header Name Size):
+                    🅰️ હેડર અક્ષરોની સાઇઝ (Header Font Size):
                   </label>
-                  <div className="grid grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {[
                       { id: 'xs', label: 'એકદમ નાની' },
                       { id: 'small', label: 'નાની' },
                       { id: 'medium', label: 'મધ્યમ' },
                       { id: 'large', label: 'મોટી' },
-                      { id: 'xl', label: 'બહુ મોટી' }
+                      { id: 'xl', label: 'બહુ મોટી' },
+                      { id: 'xxl', label: '💥 સૌથી મોટી (XXL)' }
                     ].map(s => (
                       <button
                         key={s.id}
                         type="button"
                         onClick={() => setFormData({ ...formData, headerNameSize: s.id as any })}
-                        className={`py-1.5 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
-                          (formData.headerNameSize || 'medium') === s.id
-                            ? 'bg-amber-500 text-black border-amber-600 shadow-xs'
+                        className={`py-2 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
+                          (formData.headerNameSize || 'large') === s.id
+                            ? 'bg-amber-500 text-black border-amber-600 shadow-xs font-black'
                             : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100'
                         }`}
                       >
