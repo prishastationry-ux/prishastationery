@@ -2580,6 +2580,26 @@ export default function App() {
     }
   };
 
+  const getMarqueeSpeedDuration = () => {
+    switch (storeSettings.marqueeSpeed) {
+      case 'very_slow': return '45s';
+      case 'fast': return '14s';
+      case 'medium': return '22s';
+      case 'slow':
+      default: return '32s';
+    }
+  };
+
+  const getMarqueeBarPaddingClass = () => {
+    switch (storeSettings.marqueeBarSize) {
+      case 'small': return 'py-1 text-[10px] sm:text-[11px]';
+      case 'large': return 'py-2.5 text-xs sm:text-sm font-extrabold';
+      case 'xl': return 'py-3.5 text-xs sm:text-base font-black';
+      case 'medium':
+      default: return 'py-1.5 text-xs font-bold';
+    }
+  };
+
   const getProductTextSizeClasses = () => {
     switch (storeSettings.productTextSize) {
       case 'small': return 'text-[10px] sm:text-[11px]';
@@ -2670,7 +2690,7 @@ export default function App() {
       {/* ========================================================================= */}
       {activeTab !== 'portal' && (
       <header className="bg-white border-b border-neutral-300 shadow-xs no-print sticky top-0 z-40">
-        <div className="max-w-[1550px] mx-auto px-2 sm:px-4 py-1.5 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-3">
+        <div className="max-w-[1550px] mx-auto px-2 sm:px-4 py-2 sm:py-3 flex items-center justify-between gap-1.5 sm:gap-3">
           
           {/* LEFT LOGO (Admin Upload Triggerable - Clean Fixed Ratio) */}
           <div className="flex items-center shrink-0">
@@ -2705,10 +2725,10 @@ export default function App() {
           </div>
 
           {/* CENTER STORE TITLE (NON-OVERLAPPING RESPONSIVE TYPOGRAPHY) */}
-          <div className="flex-1 min-w-0 px-1 sm:px-2 flex flex-col items-center justify-center text-center overflow-hidden">
+          <div className="flex-1 min-w-0 px-1 sm:px-2 flex flex-col items-center justify-center text-center overflow-visible pt-1 pb-0.5">
             {(!storeSettings.headerLanguageMode || storeSettings.headerLanguageMode === 'gu_first') ? (
               <>
-                <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full overflow-hidden leading-tight">
+                <div className="flex items-center justify-center gap-1 sm:gap-2 max-w-full leading-relaxed py-0.5 overflow-visible">
                   <span className={`${getHeaderSizeClasses()} font-black text-[#EA580C] tracking-tight drop-shadow-xs shrink-0 whitespace-nowrap`}>
                     {storeSettings.storeNameGu || 'પ્રિષા સ્ટેશનરી & ઓનલાઇન સર્વિસ'}
                   </span>
@@ -2869,7 +2889,7 @@ export default function App() {
         </div>
 
         {/* SUB RUNNING INFO STRIP WITH CLEAN "HOME" & "TRACK ORDER" BUTTONS */}
-        <div className="bg-[#0B1E48] text-white px-3 sm:px-5 py-1.5 flex items-center justify-between text-xs font-bold border-t border-blue-900">
+        <div className={`bg-[#0B1E48] text-white px-3 sm:px-5 flex items-center justify-between font-bold border-t border-blue-900 transition-all ${getMarqueeBarPaddingClass()}`}>
           <div className="flex items-center gap-2 shrink-0">
             {/* CLEAN SINGLE "HOME" BUTTON */}
             <button
@@ -2880,8 +2900,6 @@ export default function App() {
             >
               Home
             </button>
-
-
 
             {/* CUSTOMER LIVE ORDER TRACKING BUTTON */}
             <button
@@ -2903,8 +2921,6 @@ export default function App() {
                 <span>ઓનલાઇન સેવા પોર્ટલ</span>
               </button>
             )}
-
-
 
             {/* STORE SHARE LINK BUTTON (ADMIN PANEL ONLY) */}
             {activeTab !== 'customer' && (
@@ -2945,8 +2961,11 @@ export default function App() {
             <PWAInstallButton />
           </div>
 
-          <div className="flex-1 overflow-hidden mx-3 text-[11px] sm:text-xs">
-            <div className="animate-marquee font-extrabold text-white flex items-center gap-4">
+          <div className="flex-1 overflow-hidden mx-3">
+            <div
+              className="animate-marquee font-extrabold text-white flex items-center gap-4"
+              style={{ animationDuration: getMarqueeSpeedDuration() }}
+            >
               <span>
                 <strong className="text-orange-400">માહિતી:</strong> {storeSettings.marqueeText}
               </span>

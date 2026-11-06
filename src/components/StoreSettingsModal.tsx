@@ -832,6 +832,62 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                   </div>
                 </div>
 
+                {/* 5.B Marquee Scroll Speed Control */}
+                <div className="bg-blue-50/80 p-3.5 rounded-xl border border-blue-300 space-y-2">
+                  <label className="block text-blue-950 font-black text-xs">
+                    🏃 માહિતી લાઈનની સ્પીડ (Scrolling Text Speed):
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'very_slow', label: '🐌 એકદમ ધીમી (45s)' },
+                      { id: 'slow', label: '🐢 ધીમી - વંચાય તેવી (32s)' },
+                      { id: 'medium', label: '⚡ મધ્યમ (22s)' },
+                      { id: 'fast', label: '🚀 ઝડપી (14s)' }
+                    ].map(sp => (
+                      <button
+                        key={sp.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, marqueeSpeed: sp.id as any })}
+                        className={`py-2 px-2 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
+                          (formData.marqueeSpeed || 'slow') === sp.id
+                            ? 'bg-blue-800 text-white border-blue-900 shadow-xs'
+                            : 'bg-white text-neutral-800 border-neutral-300 hover:bg-blue-100/50'
+                        }`}
+                      >
+                        {sp.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 5.C Marquee Bar Size/Height Control */}
+                <div className="bg-indigo-50/80 p-3.5 rounded-xl border border-indigo-300 space-y-2">
+                  <label className="block text-indigo-950 font-black text-xs">
+                    📏 માહિતી પટ્ટીની સાઇઝ / પહોળાઈ (Marquee Bar Size):
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { id: 'small', label: '▫️ નાની પટ્ટી' },
+                      { id: 'medium', label: '⚡ મધ્યમ (પ્રમાણસર)' },
+                      { id: 'large', label: '🟦 મોટી પટ્ટી' },
+                      { id: 'xl', label: '💥 બહુ મોટી પટ્ટી (XL)' }
+                    ].map(bs => (
+                      <button
+                        key={bs.id}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, marqueeBarSize: bs.id as any })}
+                        className={`py-2 px-2 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
+                          (formData.marqueeBarSize || 'medium') === bs.id
+                            ? 'bg-indigo-800 text-white border-indigo-900 shadow-xs'
+                            : 'bg-white text-neutral-800 border-neutral-300 hover:bg-indigo-100/50'
+                        }`}
+                      >
+                        {bs.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* 6. Product Text Size */}
                 <div className="bg-white p-3.5 rounded-xl border border-neutral-300 space-y-2">
                   <label className="block text-neutral-900 font-black">

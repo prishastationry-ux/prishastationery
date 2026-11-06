@@ -222,6 +222,8 @@ export interface StoreSettings {
   // WEBSITE FRONTEND DISPLAY & POWER CUSTOMIZATION (દુકાન સેટિંગ્સ)
   headerNameSize?: 'xs' | 'small' | 'medium' | 'large' | 'xl' | 'xxl'; // હેડર નામની સાઈઝ
   headerLanguageMode?: 'gu_first' | 'en_first' | 'both'; // હેડર નામ ભાષા (ગુજરાતી મોટું કે અંગ્રેજી મોટું)
+  marqueeSpeed?: 'very_slow' | 'slow' | 'medium' | 'fast'; // સ્ક્રોલિંગ પટ્ટીની સ્પીડ
+  marqueeBarSize?: 'small' | 'medium' | 'large' | 'xl'; // સ્ક્રોલિંગ પટ્ટીની સાઈઝ/ઊંચાઈ
   productTextSize?: 'small' | 'medium' | 'large'; // શબ્દોની સાઈઝ
   productCardSize?: 'small' | 'medium' | 'large'; // Card size: નાની, મધ્યમ, મોટી
   productLayoutMode?: 'grid' | 'list'; // View: બોક્સ (Grid) કે લિસ્ટ (List)
