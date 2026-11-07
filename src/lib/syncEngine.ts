@@ -266,7 +266,7 @@ export async function pushOfflineSync(): Promise<SyncPushResponse> {
         }
       }
 
-      batch.set(docRef, { data: sanitizeForFirestore(currentList) });
+      batch.set(docRef, { data: sanitizeForFirestore(currentList, true) });
     }
 
     await batch.commit();

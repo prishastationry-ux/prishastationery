@@ -61,7 +61,7 @@ export function handleQuotaError(err: any): void {
 export function sanitizeForFirestore(val: any, stripDataUris = false): any {
   if (val === undefined) return null;
   if (typeof val === 'string') {
-    if (val.startsWith('data:') && (stripDataUris || val.length > 500000)) {
+    if (val.startsWith('data:') && (stripDataUris || val.length > 500)) {
       return '';
     }
     return val;
@@ -71,7 +71,7 @@ export function sanitizeForFirestore(val: any, stripDataUris = false): any {
   const result: Record<string, any> = {};
   for (const [k, v] of Object.entries(val)) {
     if (v !== undefined) {
-      if (typeof v === 'string' && v.startsWith('data:') && (stripDataUris || v.length > 500000)) {
+      if (typeof v === 'string' && v.startsWith('data:') && (stripDataUris || v.length > 500)) {
         result[k] = '';
       } else {
         result[k] = sanitizeForFirestore(v, stripDataUris);
@@ -180,20 +180,31 @@ export async function executeBatchedFirestoreWrites(onSyncStatusChange?: (docNam
   for (const [docName, item] of docsToCommit) {
     delete pendingWrites[docName];
     try {
-      const sanitized = sanitizeForFirestore(compressForStorage(item.data));
-      const payloadStr = JSON.stringify(sanitized);
+      let sanitized = sanitizeForFirestore(compressForStorage(item.data), true);
+      let payloadStr = JSON.stringify(sanitized);
 
       // Strict Firestore 1MB (1,048,576 bytes) document size guard
-      if (payloadStr.length > 900000) {
-        console.warn(`[Firestore Safe Guard] Payload for ${docName} is ${payloadStr.length} bytes, stripping large fields`);
-        const aggressiveSanitized = sanitizeForFirestore(sanitized, true);
-        const aggPayloadStr = JSON.stringify(aggressiveSanitized);
-        if (lastWrittenPayloads[docName] === aggPayloadStr) continue;
-        validWrites.push({ docName, payload: aggressiveSanitized, deletedIds: item.deletedIds, payloadStr: aggPayloadStr });
-      } else {
-        if (lastWrittenPayloads[docName] === payloadStr) continue;
-        validWrites.push({ docName, payload: sanitized, deletedIds: item.deletedIds, payloadStr });
+      if (payloadStr.length > 800000) {
+        console.warn(`[Firestore Safe Guard] Payload for ${docName} is ${payloadStr.length} bytes, pruning extra fields`);
+        if (Array.isArray(sanitized)) {
+          sanitized = sanitized.map((elem: any) => {
+            if (typeof elem === 'object' && elem !== null) {
+              const { galleryImages, details, extraFields, ...rest } = elem;
+              return rest;
+            }
+            return elem;
+          });
+          payloadStr = JSON.stringify(sanitized);
+        }
       }
+
+      if (payloadStr.length > 950000) {
+        console.warn(`[Firestore Safe Guard] Payload for ${docName} still exceeds 950KB (${payloadStr.length} bytes). Skipping Firestore doc write to avoid 1MB error.`);
+        continue;
+      }
+
+      if (lastWrittenPayloads[docName] === payloadStr) continue;
+      validWrites.push({ docName, payload: sanitized, deletedIds: item.deletedIds, payloadStr });
       
       // Start tracking write
       activeWriteOperations[docName] = true;
@@ -354,17 +365,35 @@ export function useFirebaseSync<T>(docName: string, localKey: string, initialDat
         if (Array.isArray(idbVal)) {
           const cleanedIdb = filterMockData(idbVal, docName);
           setData((prev) => {
-            if (Array.isArray(prev)) {
-              // If IndexedDB has MORE products than current state, restore from IndexedDB immediately!
-              if (cleanedIdb.length > prev.length) {
-                console.log(`📦 Restored ${cleanedIdb.length} master items from IndexedDB for ${localKey}`);
-                safeLocalStorageSet(localKey, cleanedIdb);
+            if (Array.isArray(prev) && cleanedIdb.length > 0) {
+              const prevIdMap = new Map();
+              prev.forEach((p: any) => { if (p && p.id) prevIdMap.set(p.id, p); });
+
+              let updated = false;
+              const restored = cleanedIdb.map((idbItem: any) => {
+                if (!idbItem || !idbItem.id) return idbItem;
+                const currentItem = prevIdMap.get(idbItem.id);
+                if (!currentItem) return idbItem;
+
+                const curImg = currentItem.imageUrl || '';
+                const idbImg = idbItem.imageUrl || '';
+
+                if ((curImg.includes('[IDB_STORED]') || !curImg) && idbImg && !idbImg.includes('[IDB_STORED]')) {
+                  updated = true;
+                  return { ...currentItem, imageUrl: idbImg, galleryImages: (idbItem.galleryImages && idbItem.galleryImages.length > 0) ? idbItem.galleryImages : currentItem.galleryImages };
+                }
+                return currentItem;
+              });
+
+              if (updated || cleanedIdb.length > prev.length) {
+                console.log(`📦 Restored master photos from IndexedDB for ${localKey}`);
+                safeLocalStorageSet(localKey, restored);
                 if (isProducts) {
                   try {
-                    localStorage.setItem('prisha_products_locked', JSON.stringify(compressForStorage(cleanedIdb)));
+                    localStorage.setItem('prisha_products_locked', JSON.stringify(compressForStorage(restored)));
                   } catch (e) {}
                 }
-                return cleanedIdb as unknown as T;
+                return restored as unknown as T;
               }
             }
             return prev;
