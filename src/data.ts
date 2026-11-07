@@ -94,6 +94,8 @@ export const DEFAULT_STORE_SETTINGS: StoreSettings = {
   maintenanceReopenTime: 'ટૂંક સમયમાં શરૂ થશે',
   headerNameSize: 'large',
   headerLanguageMode: 'gu_first',
+  leftLogoHeight: 64,
+  rightLogoHeight: 64,
   marqueeSpeed: 'slow',
   marqueeBarSize: 'medium'
 };

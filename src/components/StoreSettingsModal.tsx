@@ -807,14 +807,15 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                   <label className="block text-neutral-900 font-black">
                     🅰️ હેડર અક્ષરોની સાઇઝ (Header Font Size):
                   </label>
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-1.5">
                     {[
                       { id: 'xs', label: 'એકદમ નાની' },
                       { id: 'small', label: 'નાની' },
                       { id: 'medium', label: 'મધ્યમ' },
                       { id: 'large', label: 'મોટી' },
                       { id: 'xl', label: 'બહુ મોટી' },
-                      { id: 'xxl', label: '💥 સૌથી મોટી (XXL)' }
+                      { id: 'xxl', label: '💥 XXL મોટી' },
+                      { id: 'giant', label: '👑 મહાકાય (GIANT)' }
                     ].map(s => (
                       <button
                         key={s.id}
@@ -822,13 +823,97 @@ export const StoreSettingsModal: React.FC<StoreSettingsModalProps> = ({
                         onClick={() => setFormData({ ...formData, headerNameSize: s.id as any })}
                         className={`py-2 rounded-lg border text-center font-black text-xs transition-all cursor-pointer ${
                           (formData.headerNameSize || 'large') === s.id
-                            ? 'bg-amber-500 text-black border-amber-600 shadow-xs font-black'
+                            ? 'bg-amber-500 text-black border-amber-600 shadow-xs font-black ring-2 ring-amber-400'
                             : 'bg-neutral-50 text-neutral-700 border-neutral-300 hover:bg-neutral-100'
                         }`}
                       >
                         {s.label}
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* 5.A LOGO SIZE / HEIGHT ADJUSTMENT SLIDERS */}
+                <div className="bg-orange-50/90 p-4 rounded-xl border-2 border-orange-300 space-y-3">
+                  <h4 className="text-xs font-black text-orange-950 flex items-center gap-1.5">
+                    🖼️ લોગો સાઇઝ એડજસ્ટમેન્ટ (Mouse Slider & Height Controls):
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Left Logo Size */}
+                    <div className="bg-white p-3 rounded-lg border border-orange-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-neutral-800">👈 ડાબો લોગો (Left Logo Height):</span>
+                        <span className="text-xs font-mono font-black text-orange-600 bg-orange-100 px-2 py-0.5 rounded">
+                          {formData.leftLogoHeight || 64}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="40"
+                        max="140"
+                        step="4"
+                        value={formData.leftLogoHeight || 64}
+                        onChange={e => setFormData({ ...formData, leftLogoHeight: parseInt(e.target.value, 10) })}
+                        className="w-full accent-orange-600 cursor-pointer"
+                      />
+                      <div className="flex items-center gap-1">
+                        {[
+                          { px: 48, label: 'નાનો (48px)' },
+                          { px: 64, label: 'મધ્યમ (64px)' },
+                          { px: 85, label: 'મોટો (85px)' },
+                          { px: 110, label: 'બહુ મોટો (110px)' }
+                        ].map(b => (
+                          <button
+                            key={b.px}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, leftLogoHeight: b.px })}
+                            className={`flex-1 py-1 text-[10px] font-bold rounded border transition-colors ${
+                              (formData.leftLogoHeight || 64) === b.px ? 'bg-orange-500 text-white border-orange-600 font-black' : 'bg-neutral-100 text-neutral-700 border-neutral-200'
+                            }`}
+                          >
+                            {b.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Right Logo Size */}
+                    <div className="bg-white p-3 rounded-lg border border-blue-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-neutral-800">👉 જમણો લોગો (Right Logo Height):</span>
+                        <span className="text-xs font-mono font-black text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                          {formData.rightLogoHeight || 64}px
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="40"
+                        max="140"
+                        step="4"
+                        value={formData.rightLogoHeight || 64}
+                        onChange={e => setFormData({ ...formData, rightLogoHeight: parseInt(e.target.value, 10) })}
+                        className="w-full accent-blue-600 cursor-pointer"
+                      />
+                      <div className="flex items-center gap-1">
+                        {[
+                          { px: 48, label: 'નાનો (48px)' },
+                          { px: 64, label: 'મધ્યમ (64px)' },
+                          { px: 85, label: 'મોટો (85px)' },
+                          { px: 110, label: 'બહુ મોટો (110px)' }
+                        ].map(b => (
+                          <button
+                            key={b.px}
+                            type="button"
+                            onClick={() => setFormData({ ...formData, rightLogoHeight: b.px })}
+                            className={`flex-1 py-1 text-[10px] font-bold rounded border transition-colors ${
+                              (formData.rightLogoHeight || 64) === b.px ? 'bg-blue-600 text-white border-blue-700 font-black' : 'bg-neutral-100 text-neutral-700 border-neutral-200'
+                            }`}
+                          >
+                            {b.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
 

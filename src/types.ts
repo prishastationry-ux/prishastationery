@@ -220,8 +220,10 @@ export interface StoreSettings {
   invoiceDefaultHsn?: string; // Default HSN/SAC code e.g. "4901" or "9983"
 
   // WEBSITE FRONTEND DISPLAY & POWER CUSTOMIZATION (દુકાન સેટિંગ્સ)
-  headerNameSize?: 'xs' | 'small' | 'medium' | 'large' | 'xl' | 'xxl'; // હેડર નામની સાઈઝ
+  headerNameSize?: 'xs' | 'small' | 'medium' | 'large' | 'xl' | 'xxl' | 'xxxl' | 'giant'; // હેડર નામની સાઈઝ
   headerLanguageMode?: 'gu_first' | 'en_first' | 'both'; // હેડર નામ ભાષા (ગુજરાતી મોટું કે અંગ્રેજી મોટું)
+  leftLogoHeight?: number; // ડાબા લોગોની ઊંચાઈ/સાઇઝ (px માં, e.g. 64)
+  rightLogoHeight?: number; // જમણા લોગોની ઊંચાઈ/સાઇઝ (px માં, e.g. 64)
   marqueeSpeed?: 'very_slow' | 'slow' | 'medium' | 'fast'; // સ્ક્રોલિંગ પટ્ટીની સ્પીડ
   marqueeBarSize?: 'small' | 'medium' | 'large' | 'xl'; // સ્ક્રોલિંગ પટ્ટીની સાઈઝ/ઊંચાઈ
   productTextSize?: 'small' | 'medium' | 'large'; // શબ્દોની સાઈઝ

@@ -2565,6 +2565,8 @@ export default function App() {
       case 'large': return 'text-lg sm:text-xl md:text-2xl lg:text-3xl';
       case 'xl': return 'text-xl sm:text-2xl md:text-3xl lg:text-4xl';
       case 'xxl': return 'text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-black';
+      case 'xxxl':
+      case 'giant': return 'text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black drop-shadow-md';
       default: return 'text-xl sm:text-2xl md:text-3xl lg:text-4xl';
     }
   };
@@ -2702,7 +2704,10 @@ export default function App() {
                   className="hidden"
                   onChange={e => handleImageFileUpload(e, 'leftLogo')}
                 />
-                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-orange-50 border-2 border-orange-500 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative">
+                <div
+                  style={{ height: `${storeSettings.leftLogoHeight || 64}px`, width: `${storeSettings.leftLogoHeight || 64}px` }}
+                  className="rounded-xl sm:rounded-2xl bg-orange-50 border-2 border-orange-500 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative shrink-0"
+                >
                   <img
                     src={storeSettings.leftLogoUrl || getDefaultLeftLogoSvg()}
                     alt="Prisha Stationery Logo"
@@ -2714,7 +2719,10 @@ export default function App() {
                 </div>
               </label>
             ) : (
-              <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-orange-50 border-2 border-orange-500 flex items-center justify-center p-1 shadow-2xs overflow-hidden">
+              <div
+                style={{ height: `${storeSettings.leftLogoHeight || 64}px`, width: `${storeSettings.leftLogoHeight || 64}px` }}
+                className="rounded-xl sm:rounded-2xl bg-orange-50 border-2 border-orange-500 flex items-center justify-center p-1 shadow-2xs overflow-hidden shrink-0"
+              >
                 <img
                   src={storeSettings.leftLogoUrl || getDefaultLeftLogoSvg()}
                   alt="Prisha Stationery Logo"
@@ -2792,7 +2800,10 @@ export default function App() {
                   className="hidden"
                   onChange={e => handleImageFileUpload(e, 'rightLogo')}
                 />
-                <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-blue-50 border-2 border-blue-600 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative">
+                <div
+                  style={{ height: `${storeSettings.rightLogoHeight || 64}px`, width: `${storeSettings.rightLogoHeight || 64}px` }}
+                  className="rounded-xl sm:rounded-2xl bg-blue-50 border-2 border-blue-600 flex items-center justify-center p-1 shadow-xs group-hover:scale-105 transition-transform overflow-hidden relative shrink-0"
+                >
                   <img
                     src={storeSettings.rightLogoUrl || getDefaultRightLogoSvg()}
                     alt="CSC Digital Seva Emblem"
@@ -2804,7 +2815,10 @@ export default function App() {
                 </div>
               </label>
             ) : (
-              <div className="w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-blue-50 border-2 border-blue-600 flex items-center justify-center p-1 shadow-2xs overflow-hidden">
+              <div
+                style={{ height: `${storeSettings.rightLogoHeight || 64}px`, width: `${storeSettings.rightLogoHeight || 64}px` }}
+                className="rounded-xl sm:rounded-2xl bg-blue-50 border-2 border-blue-600 flex items-center justify-center p-1 shadow-2xs overflow-hidden shrink-0"
+              >
                 <img
                   src={storeSettings.rightLogoUrl || getDefaultRightLogoSvg()}
                   alt="CSC Digital Seva Emblem"
